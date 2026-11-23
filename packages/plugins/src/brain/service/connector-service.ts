@@ -752,10 +752,15 @@ export class ConnectorService {
       for (let cursor: string | undefined; ; ) {
         const page = this.deps.connectors.list({ cursor, limit: 100 });
         for (const connector of page.items) {
+          const awaitingKeyring =
+            connector.kind === "mcp_stdio" &&
+            connector.outsideSandbox &&
+            connector.status === "error" &&
+            connector.statusDetailCode === "secure_storage_unavailable";
           if (
             recovered.has(connector.id) ||
             !connector.enabled ||
-            !["ready", "idle"].includes(connector.status)
+            (!["ready", "idle"].includes(connector.status) && !awaitingKeyring)
           )
             continue;
           const operation = this.deps.operations.request(
