@@ -43,7 +43,7 @@ export function discoverToolsForBotStep(
         JSON.parse(Buffer.from(input.cursor, "base64url").toString("utf8")),
       );
     } catch {
-      throw new ConnectorToolError("connector_catalog_changed");
+      throw new ConnectorToolError("connector_cursor_invalid");
     }
   }
   const page = this.deps.connectors.discover(botId, groupId, {
