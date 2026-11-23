@@ -8,13 +8,14 @@
   <a href="https://github.com/w01fb0ss/PiBot/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/w01fb0ss/PiBot?include_prereleases"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Android-lightgrey">
   <a href="https://pibot.space"><img alt="Website" src="https://img.shields.io/badge/website-pibot.space-8b5cf6"></a>
+  <a href="https://pibot.space/cn/guides/"><img alt="文档" src="https://img.shields.io/badge/docs-pibot.space%2Fcn%2Fguides-0ea5e9"></a>
 </p>
 
 <p align="center">
   <a href="docs/assets/pibot-intro-60s.mp4"><img src="docs/assets/pibot-intro-15s.gif" width="800" alt="15 秒看 Pi Bot（点开看 60 秒有声完整版）"></a>
 </p>
 
-<p align="center">▶ <a href="docs/assets/pibot-intro-60s.mp4">看 60 秒视频</a> · <a href="https://pibot.space">下载</a> · <a href="docs/guide/README.md">使用指南</a></p>
+<p align="center">▶ <a href="docs/assets/pibot-intro-60s.mp4">看 60 秒视频</a> · <a href="https://pibot.space">下载</a> · <a href="docs/guide/README.md">使用指南</a> · <a href="https://pibot.space/cn/guides/">在线文档</a></p>
 
 [English](README.md) · [中文](README.zh-CN.md) · [日本語](README.ja.md)
 
@@ -22,7 +23,7 @@ Pi Bot 是一个桌面应用：一群有名字的 Bot 在你自己的电脑上�
 拉进群聊；给它们一个工作文件夹，它们会做计划、跑命令、改文件、互相交接，有风险的步骤都等你批准。
 「大脑」也运行在你的电脑上：聊天、文件、记忆和密钥都留在本机，只有你选的模型服务商会看到你发出的提示。
 
-官网与下载：<https://pibot.space> · 使用指南：[docs/guide](docs/guide/README.md)
+官网与下载：<https://pibot.space> · 使用指南：[docs/guide](docs/guide/README.md) · 在线文档：<https://pibot.space/cn/guides/>
 
 ## 能做什么
 
@@ -85,6 +86,16 @@ agent 内核是 [pi](https://github.com/earendil-works/pi)，作为锁定版本�
 
 欢迎提 Issue 和 PR。请先读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [AGENTS.md](AGENTS.md) 里的规则；
 安全问题请按 [SECURITY.md](SECURITY.md) 私下报告，不要发公开 Issue。
+
+## Star 趋势
+
+<a href="https://www.star-history.com/#w01fb0ss/PiBot&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=w01fb0ss/PiBot&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=w01fb0ss/PiBot&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=w01fb0ss/PiBot&type=Date" />
+  </picture>
+</a>
 
 ## 许可
 

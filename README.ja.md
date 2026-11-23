@@ -7,19 +7,20 @@
   <a href="https://github.com/w01fb0ss/PiBot/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/w01fb0ss/PiBot?include_prereleases"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux%20%7C%20Android-lightgrey">
   <a href="https://pibot.space"><img alt="Website" src="https://img.shields.io/badge/website-pibot.space-8b5cf6"></a>
+  <a href="https://pibot.space/en/guides/"><img alt="Docs" src="https://img.shields.io/badge/docs-pibot.space%2Fen%2Fguides-0ea5e9"></a>
 </p>
 
 <p align="center">
   <a href="docs/assets/pibot-intro-60s.mp4"><img src="docs/assets/pibot-intro-15s.gif" width="800" alt="15 秒でわかる Pi Bot (クリックすると音声付きの 60 秒の動画を再生します)"></a>
 </p>
 
-<p align="center">▶ <a href="docs/assets/pibot-intro-60s.mp4">60 秒の動画を見る</a> · <a href="https://pibot.space">ダウンロード</a> · <a href="docs/guide/README.md">ユーザーガイド</a></p>
+<p align="center">▶ <a href="docs/assets/pibot-intro-60s.mp4">60 秒の動画を見る</a> · <a href="https://pibot.space">ダウンロード</a> · <a href="docs/guide/README.md">ユーザーガイド</a> · <a href="https://pibot.space/en/guides/">オンラインドキュメント</a></p>
 
 [English](README.md) · [中文](README.zh-CN.md) · [日本語](README.ja.md)
 
 Pi Bot は、名前を持つ Bot のチームがあなた自身のコンピューター上で作業するデスクトップアプリです。Bot と直接チャットしたり、複数の Bot をグループチャットに入れたりして作業フォルダーを渡すと、Bot は計画を立て、コマンドを実行し、ファイルを編集し、互いに作業を引き継ぎます。リスクのある手順はすべてあなたの承認を待ちます。「頭脳」もあなたのマシン上で動作します。チャット、ファイル、メモリ、キーはローカルに保存され、あなたが送信したプロンプトを見るのは、あなたが選んだモデルプロバイダーだけです。
 
-Web サイトとダウンロード: <https://pibot.space> · ユーザーガイド: [docs/guide](docs/guide/README.md)
+Web サイトとダウンロード: <https://pibot.space> · ユーザーガイド: [docs/guide](docs/guide/README.md) · オンラインドキュメント（英語）: <https://pibot.space/en/guides/>
 
 ## できること
 
@@ -78,6 +79,16 @@ pnpm dev        # start the desktop app in development
 ## コントリビューション
 
 Issue とプルリクエストを歓迎します。まず [CONTRIBUTING.md](CONTRIBUTING.md) と [AGENTS.md](AGENTS.md) のルールをお読みください。セキュリティの問題は公開の Issue ではなく、[SECURITY.md](SECURITY.md) に記載の方法で報告してください。
+
+## Star 履歴
+
+<a href="https://www.star-history.com/#w01fb0ss/PiBot&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=w01fb0ss/PiBot&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=w01fb0ss/PiBot&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=w01fb0ss/PiBot&type=Date" />
+  </picture>
+</a>
 
 ## ライセンス
 
