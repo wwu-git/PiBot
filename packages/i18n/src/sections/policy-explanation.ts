@@ -187,6 +187,7 @@ export const policyExplanationZh = {
   "policy.reason.patch_batch_consent": "补丁每个目标都需核验，不扩大单文件授权",
   "policy.reason.managed_image_consent": "仅授权本次受管图片操作",
   "policy.reason.image_single_file_consent": "仅授权保存这一张图片，不记住目录权限",
+  "policy.reason.connector_direct_write": "此 MCP 连接允许在聊天中直接写入",
   "policy.reason.draft_automatic_authorized": "当前草稿的自动发送授权仍有效",
   "policy.reason.draft_confirmation_required": "发送草稿还需要独立确认",
   "policy.reason.derived_consent_required": "派生操作需要单独确认",
@@ -521,6 +522,7 @@ export const policyExplanationEn: Record<keyof typeof policyExplanationZh, strin
   "policy.reason.managed_image_consent": "Permission covers only this managed image operation",
   "policy.reason.image_single_file_consent":
     "Permission covers this image save without remembering folder access",
+  "policy.reason.connector_direct_write": "This MCP connection allows direct writes in chats",
   "policy.reason.draft_automatic_authorized":
     "Automatic sending permission for this draft remains valid",
   "policy.reason.draft_confirmation_required": "Sending this draft requires separate approval",

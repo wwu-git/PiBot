@@ -95,6 +95,7 @@ import { recordSessionTail } from "./session-tail.ts";
 
 export interface ChatRun {
   projectBackground?: boolean;
+  interactiveChat?: true;
   backgroundResults?: string;
   worktreeReview?: import("../workspaces/types.ts").WorktreeReceipt;
   parentFollowThrough?: { planVersion: number };
@@ -333,6 +334,7 @@ export async function generateRun(
   let delivery: DeliveryRun | undefined;
   let resourceGroupId: string | undefined;
   const toolContext: ToolRunContext = {
+    ...(run.interactiveChat ? { interactiveChat: true } : {}),
     currentReplyText: () => replies.runContent,
     memoryQuery,
     untrustedContent: {

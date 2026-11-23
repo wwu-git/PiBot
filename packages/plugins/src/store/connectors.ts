@@ -10,6 +10,7 @@ import {
   IdSchema,
   RpcError,
   RpcErrorCodes,
+  supportsDirectConnectionWrites,
 } from "@pibot/plugins-contract/full";
 import type { AuditRepo } from "@pibot/storage";
 import { readPage, transaction } from "@pibot/storage";
@@ -194,6 +195,14 @@ export class ConnectorsRepo {
       if (!current) connectorMissing();
       if (current.revision !== patch.expectedRevision) connectorConflict();
       this.assertNoOperation(current.id);
+      if (
+        patch.confirmationMode === "direct_read_write" &&
+        !supportsDirectConnectionWrites(current.kind)
+      )
+        throw new RpcError(
+          RpcErrorCodes.invalidParams,
+          "Direct read and write requires an MCP connection",
+        );
       if (patch.networkDomains !== undefined) {
         const installation = this.db
           .prepare("SELECT source_kind FROM plugin_installations WHERE id=?")

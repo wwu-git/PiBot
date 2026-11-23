@@ -278,6 +278,7 @@ export class DraftService {
       );
     }
     const automatic = result.decision === "allow";
+    const directWrite = result.explanation.some((step) => step.code === "connector_direct_write");
     const lifecycle =
       !automatic && gate
         ? this.local.unattended?.approvalLifecycle(context, call, gate, { available: true })
@@ -329,12 +330,17 @@ export class DraftService {
     });
     if (created) {
       this.waiting.track(approval.id, lifecycle);
-      this.local.deps.peer.emit("approval.requested", approval);
+      if (!directWrite) this.local.deps.peer.emit("approval.requested", approval);
       this.changed(approval.id);
     }
     if (created && automatic) {
       try {
-        await this.resolve({ approvalId: approval.id, action: "send" }, "automatic", confirmedNow);
+        await this.resolve(
+          { approvalId: approval.id, action: "send" },
+          "automatic",
+          confirmedNow,
+          context,
+        );
       } catch (error) {
         const outcome = this.repo.get(approval.id)?.view.status;
         // A durable failed/uncertain receipt is a tool result, not an invitation to retry.
@@ -538,12 +544,22 @@ export class DraftService {
       before = page.at(-1)?.approvalId;
     }
   }
-  resolve(input: DraftResolve, actor: "user" | "automatic" = "user", confirmedNow = false) {
+  resolve(
+    input: DraftResolve,
+    actor: "user" | "automatic" = "user",
+    confirmedNow = false,
+    liveCall?: ToolRunContext,
+  ) {
     const job = resolveDraft(
       {
         local: this.local,
         repo: this.repo,
-        context: (view, payload) => this.context(view, payload),
+        context: (view, payload) => {
+          const current = this.context(view, payload);
+          return liveCall?.interactiveChat && !liveCall.auditSource
+            ? { ...current, interactiveChat: true, signal: liveCall.signal }
+            : current;
+        },
         expire: (id) => this.expire(id),
         cancel: (id) => this.cancel(id),
         changed: (id) => this.changed(id),
@@ -579,6 +595,7 @@ export class DraftService {
         approvalId: id,
         policySteps: (approval.explanation ?? []).map((step) => step.code),
         connectorId: row.view.draft.connectorId,
+        toolName: row.view.draft.tool,
         ...(row.payload.capabilityId
           ? {
               capabilityId: row.payload.capabilityId,

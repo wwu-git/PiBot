@@ -303,6 +303,52 @@ export async function runToolJournalProbe(root: string) {
     assert.equal(replays, 3, "模型收到三次「已执行过」");
     assert.equal(observed.peak(), 4, "四个只读调用并行");
 
+    const connector = (await f.client.call("connectors.get", { id: echo.id })).connector;
+    assert.equal(connector.identity, "user");
+    const direct = await f.client.call("connectors.update", {
+      id: echo.id,
+      expectedRevision: connector.revision,
+      confirmationMode: "direct_read_write",
+    });
+    assert.equal(direct.confirmationMode, "direct_read_write");
+    const directContent = "JOURNAL-DIRECT-WRITE";
+    scenario.routes.researcher?.push(
+      ...withToolDiscovery(
+        [
+          { toolCalls: [send(directContent)] },
+          { toolCalls: [send(directContent)] },
+          { text: "direct write complete" },
+        ],
+        toolLoadGroup,
+      ),
+    );
+    const directRun = await f.client.call("chat.send", {
+      botId: f.researcher.id,
+      text: "验证连接级直接写入",
+      newTopic: true,
+    });
+    await until(
+      "直接写入无需确认即可完成",
+      async () => {
+        const audit = await f.client.call("audit.list", { botId: f.researcher.id, limit: 200 });
+        const entries = audit.filter((entry) => entry.runId === directRun.runId);
+        return {
+          writes: entries.filter((entry) => entry.detail.reasonCode === "draft_sent"),
+          replayed: entries.some((entry) => entry.detail.reasonCode === "journal_replay_done"),
+        };
+      },
+      ({ writes, replayed }) => {
+        assert(writes.length <= 1);
+        return (
+          replayed &&
+          writes.length === 1 &&
+          writes[0]?.detail.toolName === "echo_write" &&
+          writes[0].detail.policySteps?.includes("connector_direct_write") === true
+        );
+      },
+      20_000,
+    );
+
     return {
       scenario: "执行登记与防重放",
       status: "脚本化通过",

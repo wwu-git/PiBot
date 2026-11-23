@@ -147,6 +147,7 @@ const reasonKeys: Record<string, TranslationKey> = {
   patch_batch_consent: "policy.reason.patch_batch_consent",
   managed_image_consent: "policy.reason.managed_image_consent",
   image_single_file_consent: "policy.reason.image_single_file_consent",
+  connector_direct_write: "policy.reason.connector_direct_write",
   draft_automatic_authorized: "policy.reason.draft_automatic_authorized",
   draft_confirmation_required: "policy.reason.draft_confirmation_required",
   derived_consent_required: "policy.reason.derived_consent_required",

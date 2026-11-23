@@ -7,6 +7,7 @@ import {
   ConnectorFailureCodeSchema,
   type ConnectorSourceDetails,
   type ConnectorTool,
+  supportsDirectConnectionWrites,
 } from "@pibot/plugins-contract/full";
 import { connectorsZh } from "@pibot/plugins-contract/i18n";
 import { hostPlatform, type Peer, useRpc, useSettings } from "@pibot/renderer-kit";
@@ -502,7 +503,16 @@ export function ConnectorDetails({
             <h3>{t("connectors.confirmation")}</h3>
             <fieldset className={styles.optCards} disabled={disabled}>
               <legend className={styles.visuallyHidden}>{t("connectors.confirmation")}</legend>
-              {(["read_write", "always_ask", "read_only"] as const).map((mode) => (
+              {(
+                [
+                  "read_write",
+                  "always_ask",
+                  "read_only",
+                  ...(supportsDirectConnectionWrites(connector.kind)
+                    ? (["direct_read_write"] as const)
+                    : []),
+                ] as const
+              ).map((mode) => (
                 <label className={styles.optCard} key={mode}>
                   <input
                     type="radio"
@@ -511,7 +521,14 @@ export function ConnectorDetails({
                     checked={connector.confirmationMode === mode}
                     onChange={() => update({ confirmationMode: mode })}
                   />
-                  {t(`connectors.confirmation.${mode}`)}
+                  <span>
+                    {t(`connectors.confirmation.${mode}`)}
+                    {mode === "direct_read_write" && (
+                      <span className={styles.note} style={{ display: "block" }}>
+                        {t("connectors.directReadWriteNote")}
+                      </span>
+                    )}
+                  </span>
                 </label>
               ))}
             </fieldset>

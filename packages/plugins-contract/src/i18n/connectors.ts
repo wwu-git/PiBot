@@ -98,6 +98,9 @@ export const connectorsZh = {
   "connectors.confirmation.read_write": "读取直接做，写操作先问我（默认）",
   "connectors.confirmation.always_ask": "每次都先问我",
   "connectors.confirmation.read_only": "只读（写操作全部停用）",
+  "connectors.confirmation.direct_read_write": "读取和写入都直接执行",
+  "connectors.directReadWriteNote":
+    "聊天中，获准使用此连接的 Bot 可直接调用已启用的工具，包括以后新增并启用的工具。操作可能发送、修改或删除数据。例行任务遵循各自的授权设置。",
 
   "connectors.audit.intent": "准备变更连接",
   "connectors.audit.catalog": "连接的工具列表已更新",
@@ -488,6 +491,9 @@ export const connectorsEn: Record<keyof typeof connectorsZh, string> = {
   "connectors.confirmation.read_write": "Read directly, ask before writes (default)",
   "connectors.confirmation.always_ask": "Ask before every operation",
   "connectors.confirmation.read_only": "Read-only (disable all writes)",
+  "connectors.confirmation.direct_read_write": "Read and write directly",
+  "connectors.directReadWriteNote":
+    "In chats, Bots with access can call enabled tools directly, including tools added and enabled later. Calls may send, modify, or delete data. Routines follow their own authorization settings.",
   "connectors.audit.intent": "Connection change prepared",
   "connectors.audit.catalog": "Connection tool list updated",
   "connectors.audit.drained": "Previous connection closed",

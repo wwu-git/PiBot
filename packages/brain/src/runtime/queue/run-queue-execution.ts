@@ -113,6 +113,15 @@ export function pumpStep(this: RunQueueOperations): void {
       references: [],
     };
     run.projectBackground = !!input.userInitiated && !input.routine;
+    if (
+      input.userInitiated &&
+      !input.routine &&
+      !input.executionTaskId &&
+      (record.kind === "chat" || (record.kind === "group_task" && record.groupId)) &&
+      source?.role === "user" &&
+      source.conversationId === record.conversationId
+    )
+      run.interactiveChat = true;
     run.finished = generateRun(
       { ...this.deps, finished: () => {} },
       run,

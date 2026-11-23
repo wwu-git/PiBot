@@ -141,6 +141,7 @@ export interface ToolRunContext {
   };
   // Cards the user declined or let time out in this run (computer-handoff.ts declinedKey).
   computerHandoffDeclined?: Set<string>;
+  interactiveChat?: true;
   routineRunId?: string;
   /**
    * The interrupted run this one resumes. Replay detection then pairs the n-th identical

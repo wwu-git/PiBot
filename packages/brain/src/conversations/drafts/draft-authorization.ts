@@ -7,7 +7,7 @@ import {
   type PolicyResult,
   recordPolicyStep,
 } from "@pibot/policy";
-import type { DraftMetadata } from "@pibot/protocol-base";
+import { type DraftMetadata, supportsDirectConnectionWrites } from "@pibot/protocol-base";
 import type { DraftPayload } from "@pibot/storage";
 import type { ToolRunContext } from "../../core/local-types.ts";
 import { runPermissionSources, runPermissions } from "../../core/run-permissions.ts";
@@ -56,15 +56,26 @@ export function automaticDraftAllowed(
   if (!local.connectors) return false;
   const connector = local.connectors.get(draft.connectorId);
   if (!connector) return false;
-  const confirmation = connectionConfirmation(
-    effectiveConfirmationMode({ connector, access: local.connectors.access(draft.connectorId) }),
-    true,
-  );
+  const mode = effectiveConfirmationMode({
+    connector,
+    access: local.connectors.access(draft.connectorId),
+  });
+  const confirmation = connectionConfirmation(mode, true);
   if (confirmation === "blocked") return false;
   // Nothing remembered, no YOLO and no pre-authorization stands in for "ask every time"; only
   // the person's answer to this very call does.
   if (confirmation === "ask_now") return confirmedNow;
-  // Acting as the user requires a fresh human decision even with remembered tool consent.
+  if (
+    mode === "direct_read_write" &&
+    supportsDirectConnectionWrites(connector.kind) &&
+    context.interactiveChat &&
+    !context.routineRunId &&
+    !context.routineSource &&
+    !context.executionTaskId &&
+    !context.auditSource
+  )
+    return "connector_direct_write" as const;
+  // Outside direct writes, user identity still needs consent for this call.
   if (draft.identity === "user") return confirmedNow;
   const tool = local.connectors.tool(draft.connectorId, connector.catalogVersion, draft.tool);
   if (
@@ -123,19 +134,19 @@ export async function evaluateDraft(
   });
   if (!local.connectors?.get(draft.connectorId)?.enabled)
     return fail("draftChanged", "draft_connector_changed");
-  if (
+  const authorization =
     result.decision !== "deny" &&
-    automaticDraftAllowed(local, context, draft, result, confirmedNow)
-  )
-    result.decision = "allow";
-  else if (result.decision !== "deny") result.decision = "ask";
+    automaticDraftAllowed(local, context, draft, result, confirmedNow);
+  if (result.decision !== "deny") result.decision = authorization ? "allow" : "ask";
   recordPolicyStep(
     result,
     "connector",
     result.decision === "deny"
       ? result.reason
       : result.decision === "allow"
-        ? "draft_automatic_authorized"
+        ? typeof authorization === "string"
+          ? authorization
+          : "draft_automatic_authorized"
         : "draft_confirmation_required",
   );
   return result;

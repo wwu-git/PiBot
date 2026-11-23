@@ -120,7 +120,7 @@ function userEditedSinceMigration(db: DatabaseSync, connectorId: string, install
         AND (
           (json_extract(a.detail,'$.connectorId')=?
             AND json_extract(a.detail,'$.reasonCode') IN
-              ('confirmation_read_write','confirmation_always_ask','confirmation_read_only'))
+              ('confirmation_read_write','confirmation_always_ask','confirmation_read_only','confirmation_direct_read_write'))
           OR (json_extract(a.detail,'$.connectorId')=?
             AND json_extract(a.detail,'$.reasonCode') IS NULL
             AND EXISTS(SELECT 1 FROM connector_tool_overrides o WHERE o.connector_id=?))

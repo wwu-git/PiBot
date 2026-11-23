@@ -119,7 +119,12 @@ export const ConnectorStatusSchema = z.enum([
   "stopping",
 ]);
 export const ConnectorIdentitySchema = z.enum(["user", "bot"]);
-export const ConnectorConfirmationModeSchema = z.enum(["read_write", "always_ask", "read_only"]);
+export const ConnectorConfirmationModeSchema = z.enum([
+  "read_write",
+  "always_ask",
+  "read_only",
+  "direct_read_write",
+]);
 export type ConnectorConfirmationMode = z.infer<typeof ConnectorConfirmationModeSchema>;
 
 /**
@@ -138,6 +143,10 @@ export function connectionConfirmation(
 ): "blocked" | "ask_now" | "normal" {
   if (mode === "read_only") return write ? "blocked" : "normal";
   return mode === "always_ask" ? "ask_now" : "normal";
+}
+
+export function supportsDirectConnectionWrites(kind: Connector["kind"]): boolean {
+  return kind === "mcp_remote" || kind === "mcp_stdio";
 }
 
 /** Whether anything other than the person's answer to this call may authorize a write here. */
