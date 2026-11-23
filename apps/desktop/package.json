@@ -1,6 +1,6 @@
 {
   "name": "@pibot/desktop",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "pibot": {
     "layer": "L5"
