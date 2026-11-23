@@ -30,6 +30,11 @@ const keywords = new Set([
   "oneOf",
   "not",
 ]);
+const unsignedFormats = new Map([
+  ["uint16", 65_535],
+  ["uint64", Number.MAX_SAFE_INTEGER],
+  ["uint", Number.MAX_SAFE_INTEGER],
+]);
 const types = new Set(["object", "array", "string", "number", "integer", "boolean", "null"]);
 function unsupported(): never {
   throw new ConnectorSchemaError("connector_schema_unsupported");
@@ -39,6 +44,13 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 
 export function validateConnectorArgs(schema: unknown, args: Record<string, unknown>): void {
+  const definitions = object(schema) && object(schema.$defs) ? schema.$defs : {};
+  function resolveRef(ref: unknown): unknown {
+    if (typeof ref !== "string" || !/^#\/\$defs\/[A-Za-z0-9_-]+$/u.test(ref)) unsupported();
+    const name = ref.slice("#/$defs/".length);
+    if (!Object.hasOwn(definitions, name)) unsupported();
+    return definitions[name];
+  }
   let nodes = 0;
   function check(value: unknown, depth = 0): asserts value is Schema {
     if (++nodes > 2000 || depth > 24) unsupported();
@@ -56,6 +68,27 @@ export function validateConnectorArgs(schema: unknown, args: Record<string, unkn
             "http://json-schema.org/draft-07/schema#",
             "https://json-schema.org/draft/2020-12/schema",
           ].includes(String(entry))
+        )
+          unsupported();
+        continue;
+      }
+      if (key === "$defs") {
+        if (depth !== 0 || !object(entry)) unsupported();
+        for (const child of Object.values(entry)) check(child, depth + 1);
+        continue;
+      }
+      if (key === "$ref") {
+        if (Object.keys(value).length !== 1) unsupported();
+        check(resolveRef(entry), depth + 1);
+        continue;
+      }
+      if (key === "format") {
+        const kinds = Array.isArray(value.type) ? value.type : [value.type];
+        if (
+          typeof entry !== "string" ||
+          !unsignedFormats.has(entry) ||
+          !kinds.includes("integer") ||
+          kinds.some((kind) => kind !== "integer" && kind !== "null")
         )
           unsupported();
         continue;
@@ -105,6 +138,7 @@ export function validateConnectorArgs(schema: unknown, args: Record<string, unkn
   function matches(s: Schema, value: unknown, depth = 0): boolean {
     if (++steps > 20_000 || depth > 40) throw new ConnectorSchemaError("connector_args_invalid");
     if (typeof s === "boolean") return s;
+    if (s.$ref !== undefined) return matches(resolveRef(s.$ref) as Schema, value, depth + 1);
     const isType = (type: string) => {
       if (type === "null") return value === null;
       if (type === "object") return object(value);
@@ -131,6 +165,8 @@ export function validateConnectorArgs(schema: unknown, args: Record<string, unkn
     }
     if (typeof value === "number") {
       if (!Number.isFinite(value)) return false;
+      const unsignedMax = typeof s.format === "string" ? unsignedFormats.get(s.format) : undefined;
+      if (unsignedMax !== undefined && (value < 0 || value > unsignedMax)) return false;
       if (s.minimum !== undefined && value < Number(s.minimum)) return false;
       if (s.maximum !== undefined && value > Number(s.maximum)) return false;
       if (s.exclusiveMinimum !== undefined && value <= Number(s.exclusiveMinimum)) return false;
