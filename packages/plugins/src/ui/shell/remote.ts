@@ -46,6 +46,13 @@ export function connectorError(error: unknown) {
     )
       return "connectors.invalid" as const;
     if (error.code === RpcErrorCodes.connectorUnavailable) return "connectors.unavailable" as const;
+    if (error.code === RpcErrorCodes.secretsUnavailable) {
+      return error.message === "secure_storage_busy" ||
+        error.message === "secure_storage_timeout" ||
+        error.message === "secure_storage_session_pending"
+        ? ("connectors.secureStorageBusy" as const)
+        : ("connectors.secureStorageUnavailable" as const);
+    }
     if (error.code === RpcErrorCodes.closed) return "connectors.offline" as const;
     if (error.code === RpcErrorCodes.busy) return "connectors.busy" as const;
     if (error.code === RpcErrorCodes.timeout) return "connectors.timeout" as const;

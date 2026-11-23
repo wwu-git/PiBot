@@ -162,7 +162,7 @@ export function buildTargetStep(
         row.outsideSandbox &&
         outsideSandboxAvailability(this, row, server) === "available" &&
         server.transport === "stdio";
-      if (outsideSandbox && !(await outsideSandboxConfirmed(this, row, server))) {
+      if (outsideSandbox && !(await outsideSandboxConfirmed(this, row, server, signal))) {
         recordStartFailure(
           this,
           row.id,

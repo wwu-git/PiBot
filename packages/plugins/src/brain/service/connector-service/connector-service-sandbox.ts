@@ -2,6 +2,7 @@
 // detail panel reads. Turning it on needs the person's click in the native host dialog; nothing
 // else (a Bot, YOLO, a remembered grant, the phone) reaches this path.
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { connectorDigest } from "@pibot/brain/kit";
 import { aiConfigReadBoundary } from "@pibot/execution";
 import type {
@@ -37,8 +38,10 @@ export async function outsideSandboxConfirmed(
   ops: ConnectorServiceOperations,
   connector: Connector,
   server: ConnectorServer,
+  signal?: AbortSignal,
 ): Promise<boolean> {
-  const raw = await ops.deps.secrets.get(`connector:${connector.id}`, OUTSIDE_SANDBOX_ACK);
+  const read = () => ops.deps.secrets.get(`connector:${connector.id}`, OUTSIDE_SANDBOX_ACK);
+  const raw = await (signal ? retryReceiptStorage(read, signal) : read());
   if (!raw) return false;
   try {
     const accepted = JSON.parse(raw) as {
@@ -102,6 +105,26 @@ export async function diagnosticsStep(
   return { outsideSandbox: availability, needsReconfirm, suggestion, lastFailure };
 }
 
+async function retryReceiptStorage<T>(operation: () => Promise<T>, signal?: AbortSignal) {
+  const waits = [600, 1200, 2400];
+  for (let attempt = 0; ; attempt++) {
+    signal?.throwIfAborted();
+    try {
+      return await operation();
+    } catch (error) {
+      const wait = waits[attempt];
+      if (
+        wait === undefined ||
+        !(error instanceof RpcError) ||
+        error.code !== RpcErrorCodes.secretsUnavailable ||
+        (error.message !== "secure_storage_busy" && error.message !== "secure_storage_timeout")
+      )
+        throw error;
+      await delay(wait, undefined, { signal });
+    }
+  }
+}
+
 export async function setOutsideSandboxStep(
   this: ConnectorServiceOperations,
   input: { id: string; expectedRevision: number; enabled: boolean },
@@ -139,16 +162,16 @@ export async function setOutsideSandboxStep(
       throw new RpcError(RpcErrorCodes.connectorUnavailable, "connector_confirmation_unavailable");
     if (!receipt.approved)
       throw new RpcError(RpcErrorCodes.connectorUnavailable, "outside_sandbox_cancelled");
-    const commit = await this.deps.secrets.prepareSet(
-      scope,
-      OUTSIDE_SANDBOX_ACK,
-      JSON.stringify({
-        connectorId: connector.id,
-        installationId: connector.pluginInstallationId,
-        configurationDigest: connectorDigest(server),
-        approvedRevision: connector.revision,
-        approvedAt: new Date().toISOString(),
-      }),
+    const acknowledgement = JSON.stringify({
+      connectorId: connector.id,
+      installationId: connector.pluginInstallationId,
+      configurationDigest: connectorDigest(server),
+      approvedRevision: connector.revision,
+      approvedAt: new Date().toISOString(),
+    });
+    const commit = await retryReceiptStorage(
+      () => this.deps.secrets.prepareSet(scope, OUTSIDE_SANDBOX_ACK, acknowledgement),
+      signal,
     );
     signal?.throwIfAborted();
     // Revision CAS inside the same transaction: a change during the dialog voids the answer.

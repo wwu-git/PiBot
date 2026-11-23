@@ -44,6 +44,7 @@ export interface DesktopBrainHost extends BrainHost {
 const HOST_ACTION_TIMEOUT_MS = 60_000;
 // Bounded (5 s in all) so one credential read cannot stall a run through a whole login grace;
 // the callers' own retries (remote setup backoff, the next request) cover the rest of it.
+const TRANSIENT_STORAGE_BACKOFF_MS = 500;
 const SESSION_PENDING_WAITS_MS = [500, 1000, 1500, 2000];
 
 async function cancellable<T>(action: () => Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -106,7 +107,9 @@ export function createBrainHost(
         // Back off across credential requests so a denied keyring is not immediately reprobed.
         const reason = secretStorageReason(error);
         if (!pending) {
-          unavailableUntil = performance.now() + 30_000;
+          const transient = reason === "secure_storage_busy" || reason === "secure_storage_timeout";
+          unavailableUntil =
+            performance.now() + (transient ? TRANSIENT_STORAGE_BACKOFF_MS : 30_000);
           unavailableReason = reason;
         }
         const code = error instanceof RpcError ? error.code : RpcErrorCodes.secretsUnavailable;

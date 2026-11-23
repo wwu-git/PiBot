@@ -127,39 +127,45 @@ export function createSecureStorage(
       );
     });
   }
-  return {
-    isAsyncEncryptionAvailable: () =>
-      run("available", "read", async () => {
-        // Available can be true even when the cached provider has no encryption key.
-        try {
-          const available = await storage.isAsyncEncryptionAvailable();
-          signal.throwIfAborted();
-          if (!available) {
-            health?.failed();
-            return false;
-          }
-          if (health && !validated) {
-            // Runs on even after the caller's eight seconds expired: a user who took longer to
-            // approve the keychain prompt got a working provider, not a fault to restart for.
-            const probe = await storage.encryptStringAsync(PROBE);
-            signal.throwIfAborted();
-            if (insecure(probe))
-              throw new RpcError(
-                RpcErrorCodes.secretsUnavailable,
-                "secure_storage_insecure_backend",
-              );
-            validated = true;
-            health.healthy();
-          }
-          return true;
-        } catch (error) {
-          // An insecure Linux backend is configuration, which no restart repairs.
-          const configuration =
-            error instanceof RpcError && error.message === "secure_storage_insecure_backend";
-          if (!signal.aborted && !configuration) health?.failed();
-          throw error;
+  let availability: Promise<boolean> | undefined;
+  function isAsyncEncryptionAvailable(): Promise<boolean> {
+    if (availability) return availability;
+    const probe = run("available", "read", async () => {
+      // Available can be true even when the cached provider has no encryption key.
+      try {
+        const available = await storage.isAsyncEncryptionAvailable();
+        signal.throwIfAborted();
+        if (!available) {
+          health?.failed();
+          return false;
         }
-      }),
+        if (health && !validated) {
+          // Runs on even after the caller's eight seconds expired: a user who took longer to
+          // approve the keychain prompt got a working provider, not a fault to restart for.
+          const probe = await storage.encryptStringAsync(PROBE);
+          signal.throwIfAborted();
+          if (insecure(probe))
+            throw new RpcError(RpcErrorCodes.secretsUnavailable, "secure_storage_insecure_backend");
+          validated = true;
+          health.healthy();
+        }
+        return true;
+      } catch (error) {
+        // An insecure Linux backend is configuration, which no restart repairs.
+        const configuration =
+          error instanceof RpcError && error.message === "secure_storage_insecure_backend";
+        if (!signal.aborted && !configuration) health?.failed();
+        throw error;
+      }
+    });
+    availability = probe.finally(() => {
+      availability = undefined;
+    });
+    return availability;
+  }
+
+  return {
+    isAsyncEncryptionAvailable,
     ...(storage.getSelectedStorageBackend
       ? {
           getSelectedStorageBackend: () => storage.getSelectedStorageBackend?.() ?? "unknown",

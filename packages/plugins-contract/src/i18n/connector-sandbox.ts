@@ -40,6 +40,9 @@ export const connectorSandboxZh = {
   "connectors.outsideSandbox.switch": "在沙箱外运行（以你的身份）",
   "connectors.outsideSandbox.note":
     "默认在沙箱里运行：看不到你的文件、钥匙串和登录凭据，只能连它声明过的网站。打开后它以你的身份运行，能访问你所有的文件、钥匙串和凭据、任何网络和任何程序。打开时会弹出系统对话框请你确认；Bot 调用它的工具仍按上面的确认方式询问并记录。",
+  "connectors.secureStorageBusy": "系统安全存储暂时繁忙。请处理系统授权提示后重试。",
+  "connectors.secureStorageUnavailable":
+    "无法访问系统安全存储。请解锁系统钥匙串，并在系统提示时允许 Pi Bot 访问。",
   "connectors.outsideSandbox.cancelled": "已取消，它仍在沙箱里运行。",
   "connectors.outsideSandbox.on": "正以你的身份运行，没有沙箱隔离。关掉后回到沙箱里运行。",
   "connectors.outsideSandbox.reconfirm":
@@ -127,6 +130,10 @@ export const connectorSandboxEn: Record<keyof typeof connectorSandboxZh, string>
   "connectors.outsideSandbox.switch": "Run outside the sandbox (as you)",
   "connectors.outsideSandbox.note":
     "By default it runs in the sandbox: it cannot see your files, Keychain or saved logins, and can only reach the sites it declared. Turned on, it runs as you and can reach all your files, your Keychain and credentials, any network and any program. A system dialog asks you to confirm; a Bot's tool calls are still asked and recorded under the confirmation setting above.",
+  "connectors.secureStorageBusy":
+    "System secure storage is busy. Respond to any system authorization prompts, then retry.",
+  "connectors.secureStorageUnavailable":
+    "System secure storage is unavailable. Unlock your system keyring and allow Pi Bot access if prompted.",
   "connectors.outsideSandbox.cancelled": "Cancelled; it still runs in the sandbox.",
   "connectors.outsideSandbox.on":
     "Running as you, without the sandbox. Turn it off to return to the sandbox.",
