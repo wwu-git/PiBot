@@ -92,17 +92,32 @@ export async function diagnosticsStep(
     : undefined;
   const availability = outsideSandboxAvailability(this, connector, server);
   const lastFailure = this.startFailures.get(id) ?? null;
-  const needsReconfirm =
-    availability === "available" &&
-    connector.outsideSandbox &&
-    !!server &&
-    !(await outsideSandboxConfirmed(this, connector, server));
+  let needsReconfirm = false;
+  let receiptUnavailable = false;
+  if (availability === "available" && connector.outsideSandbox && server) {
+    try {
+      needsReconfirm = !(await outsideSandboxConfirmed(this, connector, server));
+    } catch (error) {
+      if (!isReceiptStorageUnavailable(error)) throw error;
+      receiptUnavailable = true;
+    }
+  }
   let suggestion: ConnectorDiagnostics["suggestion"] = null;
   if (availability === "available" && !connector.outsideSandbox && server) {
     if (await pointsIntoAiConfig(this, server).catch(() => false)) suggestion = "ai_config_path";
     else if (lastFailure && !lastFailure.outsideSandbox) suggestion = "sandbox_start_failed";
   }
-  return { outsideSandbox: availability, needsReconfirm, suggestion, lastFailure };
+  return {
+    outsideSandbox: availability,
+    needsReconfirm,
+    ...(receiptUnavailable ? { receiptUnavailable: true as const } : {}),
+    suggestion,
+    lastFailure,
+  };
+}
+
+export function isReceiptStorageUnavailable(error: unknown): error is RpcError {
+  return error instanceof RpcError && error.code === RpcErrorCodes.secretsUnavailable;
 }
 
 async function retryReceiptStorage<T>(operation: () => Promise<T>, signal?: AbortSignal) {
@@ -115,8 +130,7 @@ async function retryReceiptStorage<T>(operation: () => Promise<T>, signal?: Abor
       const wait = waits[attempt];
       if (
         wait === undefined ||
-        !(error instanceof RpcError) ||
-        error.code !== RpcErrorCodes.secretsUnavailable ||
+        !isReceiptStorageUnavailable(error) ||
         (error.message !== "secure_storage_busy" && error.message !== "secure_storage_timeout")
       )
         throw error;

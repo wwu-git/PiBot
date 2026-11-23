@@ -10,6 +10,7 @@ import { connectorSecretUses } from "../connector-secrets.ts";
 import type { ConnectorServiceOperations } from "../connector-service.ts";
 import { classifyStartFailure, startFailureLog } from "../connector-start-failure.ts";
 import {
+  isReceiptStorageUnavailable,
   outsideSandboxAvailability,
   outsideSandboxConfirmed,
 } from "./connector-service-sandbox.ts";
@@ -162,7 +163,19 @@ export function buildTargetStep(
         row.outsideSandbox &&
         outsideSandboxAvailability(this, row, server) === "available" &&
         server.transport === "stdio";
-      if (outsideSandbox && !(await outsideSandboxConfirmed(this, row, server, signal))) {
+      let receiptConfirmed = false;
+      if (outsideSandbox) {
+        try {
+          receiptConfirmed = await outsideSandboxConfirmed(this, row, server, signal);
+        } catch (error) {
+          if (!isReceiptStorageUnavailable(error)) throw error;
+          throw new ConnectorOpenError(
+            "secure_storage_unavailable",
+            "Outside-sandbox authorization could not be read",
+          );
+        }
+      }
+      if (outsideSandbox && !receiptConfirmed) {
         recordStartFailure(
           this,
           row.id,

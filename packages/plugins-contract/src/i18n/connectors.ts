@@ -360,6 +360,8 @@ export const connectorsZh = {
   "connectors.failure.unsupported_format": "不支持此配置格式",
   "connectors.failure.unsafe_path": "配置包含不安全的路径",
   "connectors.failure.secret_required": "缺少所需密钥",
+  "connectors.failure.secure_storage_unavailable":
+    "无法读取沙箱外运行授权。请解锁系统钥匙串，允许 Pi Bot 访问，再重启此连接。",
   "connectors.failure.secret_reconfiguration_required":
     "旧插件的密钥引用无法安全升级，请重新导入并配置此插件。",
   "connectors.failure.auth_required": "需要授权（此流程尚未接线）",
@@ -776,6 +778,8 @@ export const connectorsEn: Record<keyof typeof connectorsZh, string> = {
   "connectors.failure.unsupported_format": "Unsupported configuration format",
   "connectors.failure.unsafe_path": "Configuration contains an unsafe path",
   "connectors.failure.secret_required": "Required secret is missing",
+  "connectors.failure.secure_storage_unavailable":
+    "Pi Bot could not read the authorization to run outside the sandbox. Unlock your system keyring, allow Pi Bot access, then restart this connection.",
   "connectors.failure.secret_reconfiguration_required":
     "The legacy plugin's secret references could not be upgraded safely. Re-import and configure this plugin.",
   "connectors.failure.auth_required": "Authorization required",

@@ -1,10 +1,18 @@
-import { RpcError, RpcErrorCodes } from "@pibot/plugins-contract/full";
+import { type Connector, RpcError, RpcErrorCodes } from "@pibot/plugins-contract/full";
 import { expect, it, vi } from "vitest";
+import { openConnectorConnection } from "../src/brain/service/connector-runtime.ts";
+import { buildTargetStep } from "../src/brain/service/connector-service/connector-service-connection.ts";
 import {
+  diagnosticsStep,
   OUTSIDE_SANDBOX_ACK,
   setOutsideSandboxStep,
 } from "../src/brain/service/connector-service/connector-service-sandbox.ts";
 import type { ConnectorServiceOperations } from "../src/brain/service/connector-service.ts";
+
+vi.mock("../src/brain/service/connector-runtime.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/brain/service/connector-runtime.ts")>()),
+  openConnectorConnection: vi.fn(),
+}));
 
 function fixture(reason: string) {
   const connector = {
@@ -84,4 +92,65 @@ it("leaves the sandbox unchanged when the request is cancelled while waiting", a
   expect(prepareSet).toHaveBeenCalledTimes(1);
   expect(setOutsideSandbox).not.toHaveBeenCalled();
   expect(save).not.toHaveBeenCalled();
+});
+
+function receiptFixture(getReceipt: () => Promise<string | undefined>) {
+  const connector = {
+    id: "connection",
+    pluginInstallationId: "installation",
+    outsideSandbox: true,
+  };
+  const server = { transport: "stdio", command: "synthetic", args: [], networkDomains: [] };
+  const context = {
+    deps: {
+      connectors: { get: () => connector, configuration: () => server },
+      plugins: { get: () => ({ sourceKind: "json" }), isApplication: () => false },
+      platform: "darwin",
+      secrets: { get: getReceipt },
+    },
+    registry: { effectiveServer: () => server, fromInstallation: () => undefined },
+    generations: new Map(),
+    startFailures: new Map(),
+  } as unknown as ConnectorServiceOperations;
+  return {
+    diagnose: () => diagnosticsStep.call(context, { id: connector.id }),
+    start: () =>
+      buildTargetStep.call(context, connector as Connector).open(new AbortController().signal),
+  };
+}
+
+it("keeps sandbox controls available when secure storage cannot read the receipt", async () => {
+  const { diagnose } = receiptFixture(async () => {
+    throw new RpcError(RpcErrorCodes.secretsUnavailable, "secrets_unavailable");
+  });
+  await expect(diagnose()).resolves.toMatchObject({
+    outsideSandbox: "available",
+    needsReconfirm: false,
+    receiptUnavailable: true,
+  });
+});
+
+it("asks for confirmation when the stored receipt is missing", async () => {
+  const { diagnose } = receiptFixture(async () => undefined);
+  await expect(diagnose()).resolves.toMatchObject({
+    outsideSandbox: "available",
+    needsReconfirm: true,
+  });
+  expect(await diagnose()).not.toMatchObject({ receiptUnavailable: true });
+});
+
+it("propagates receipt errors unrelated to secure storage", async () => {
+  const error = new Error("unexpected store failure");
+  const { diagnose } = receiptFixture(async () => {
+    throw error;
+  });
+  await expect(diagnose()).rejects.toBe(error);
+});
+
+it("reports unavailable secure storage before starting the MCP process", async () => {
+  const { start } = receiptFixture(async () => {
+    throw new RpcError(RpcErrorCodes.secretsUnavailable, "secrets_unavailable");
+  });
+  await expect(start()).rejects.toMatchObject({ failureCode: "secure_storage_unavailable" });
+  expect(openConnectorConnection).not.toHaveBeenCalled();
 });

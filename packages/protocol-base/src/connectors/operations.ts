@@ -12,6 +12,7 @@ export const ConnectorFailureCodeSchema = z.enum([
   "unsupported_format",
   "unsafe_path",
   "secret_required",
+  "secure_storage_unavailable",
   "secret_reconfiguration_required",
   "auth_required",
   "unsupported_platform",

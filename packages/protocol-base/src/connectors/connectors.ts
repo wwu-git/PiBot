@@ -228,6 +228,7 @@ export const ConnectorDiagnosticsSchema = z.strictObject({
   outsideSandbox: z.enum(["available", "windows", "unavailable"]),
   /** The switch is on but the configuration changed since the person confirmed it. */
   needsReconfirm: z.boolean(),
+  receiptUnavailable: z.literal(true).optional(),
   /** Why the detail panel suggests the switch; never turns it on by itself. */
   suggestion: z.enum(["ai_config_path", "sandbox_start_failed"]).nullable(),
   lastFailure: ConnectorStartFailureSchema.nullable(),

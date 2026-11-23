@@ -111,7 +111,9 @@ export function ConnectorSandboxSection({
           {t(
             diagnostics.needsReconfirm
               ? "connectors.outsideSandbox.reconfirm"
-              : "connectors.outsideSandbox.on",
+              : connector.status === "ready" || connector.status === "idle"
+                ? "connectors.outsideSandbox.on"
+                : "connectors.outsideSandbox.enabled",
           )}
         </p>
       )}

@@ -350,14 +350,30 @@ export function ConnectorDetails({
               <ConnectorStartFailureView failure={diagnostics.value.lastFailure} />
             ) : (
               <p className={styles.warn}>
-                {failure.success
-                  ? t(`connectors.failure.${failure.data}`)
-                  : t("connectors.setupNote")}
-                {connector.kind === "mcp_stdio" && connector.status === "error" && (
-                  <> {t("connectors.startFailure.restartToSee")}</>
-                )}
+                {diagnostics.value?.receiptUnavailable
+                  ? t("connectors.failure.secure_storage_unavailable")
+                  : failure.success
+                    ? t(`connectors.failure.${failure.data}`)
+                    : t("connectors.setupNote")}
+                {connector.kind === "mcp_stdio" &&
+                  connector.status === "error" &&
+                  !diagnostics.value?.receiptUnavailable &&
+                  failure.data !== "secure_storage_unavailable" && (
+                    <> {t("connectors.startFailure.restartToSee")}</>
+                  )}
               </p>
             ))}
+          {connector.status === "error" && connector.enabled && (
+            <div className={styles.row}>
+              <Button
+                variant="secondary"
+                disabled={disabled}
+                onClick={() => void lifecycle("restart")}
+              >
+                {t("connectors.restart")}
+              </Button>
+            </div>
+          )}
           {hostPlatform() === "win32" && connector.kind === "mcp_stdio" && (
             <p className={styles.warn}>{t("connectors.windowsWarning")}</p>
           )}
@@ -565,15 +581,17 @@ export function ConnectorDetails({
                   {t("connectors.updateSource")}
                 </Button>
               </section>
-              <div className={styles.row}>
-                <Button
-                  variant="secondary"
-                  disabled={disabled || connector.status === "starting"}
-                  onClick={() => void lifecycle("restart")}
-                >
-                  {t("connectors.restart")}
-                </Button>
-              </div>
+              {!(connector.status === "error" && connector.enabled) && (
+                <div className={styles.row}>
+                  <Button
+                    variant="secondary"
+                    disabled={disabled || connector.status === "starting"}
+                    onClick={() => void lifecycle("restart")}
+                  >
+                    {t("connectors.restart")}
+                  </Button>
+                </div>
+              )}
               <section className={styles.stack}>
                 <h3>{t("connectors.tools")}</h3>
                 <p className={styles.note}>{t("connectors.toolsNote")}</p>

@@ -44,6 +44,7 @@ export const connectorSandboxZh = {
   "connectors.secureStorageUnavailable":
     "无法访问系统安全存储。请解锁系统钥匙串，并在系统提示时允许 Pi Bot 访问。",
   "connectors.outsideSandbox.cancelled": "已取消，它仍在沙箱里运行。",
+  "connectors.outsideSandbox.enabled": "已选择在沙箱外运行。关掉此选项可切回沙箱模式。",
   "connectors.outsideSandbox.on": "正以你的身份运行，没有沙箱隔离。关掉后回到沙箱里运行。",
   "connectors.outsideSandbox.reconfirm":
     "这个 MCP 的配置变了，之前的确认已失效。先关掉再打开，重新确认一次。",
@@ -135,6 +136,8 @@ export const connectorSandboxEn: Record<keyof typeof connectorSandboxZh, string>
   "connectors.secureStorageUnavailable":
     "System secure storage is unavailable. Unlock your system keyring and allow Pi Bot access if prompted.",
   "connectors.outsideSandbox.cancelled": "Cancelled; it still runs in the sandbox.",
+  "connectors.outsideSandbox.enabled":
+    "Outside-sandbox mode is selected. Turn it off to return to sandbox mode.",
   "connectors.outsideSandbox.on":
     "Running as you, without the sandbox. Turn it off to return to the sandbox.",
   "connectors.outsideSandbox.reconfirm":
