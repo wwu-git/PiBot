@@ -348,6 +348,15 @@ export async function runToolJournalProbe(root: string) {
       },
       20_000,
     );
+    assert(
+      (await toolResults(f.root)).some(
+        (result) =>
+          result.includes("Service reply") &&
+          result.includes("fixtureReceipts") &&
+          result.includes(directContent),
+      ),
+      "直接写入应把 MCP 返回的实际结果交给模型",
+    );
 
     return {
       scenario: "执行登记与防重放",

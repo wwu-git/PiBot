@@ -12,7 +12,7 @@ import { snapshotCalendarName } from "./calendar-name.ts";
 import { capabilitySelectionMatches } from "./capability-adapter.ts";
 import {
   ConnectorToolError,
-  connectorServiceMessageText,
+  connectorDraftResult,
   dispatchReadConnector,
   redactedConnectorJson,
 } from "./connector-tools.ts";
@@ -110,12 +110,7 @@ export async function executeCapabilityConnector(
       prepared,
       signal,
     );
-    const { serviceMessage, ...receipt } = result as typeof result & { serviceMessage?: string };
-    return {
-      text: JSON.stringify(receipt) + connectorServiceMessageText(serviceMessage),
-      isError: result.status !== "sent",
-      ...(result.code === "user_rejected" ? { details: { userRejected: true } } : {}),
-    };
+    return connectorDraftResult(result, run.local.deps.redactor);
   }
   const capabilityImpl =
     run.context.capabilities?.get(capability.capabilityId) === "builtin"

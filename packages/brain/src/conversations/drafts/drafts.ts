@@ -20,6 +20,11 @@ import { resolveDraft } from "./draft-resolution.ts";
 import { connectionToolRememberable } from "./draft-tool-grants.ts";
 import { DraftWaitRegistry } from "./draft-waiting.ts";
 
+interface DraftResponse {
+  reply?: unknown;
+  serviceMessage?: string;
+}
+
 export class DraftService {
   readonly repo: DraftsRepo;
   readonly calendars = new CalendarDirectory();
@@ -197,13 +202,14 @@ export class DraftService {
     };
   }
 
-  async create(
+  private async create(
     context: ToolRunContext,
     call: LocalToolCall,
     input: ConnectorCallInput,
     prepared: PreparedConnector,
     signal: AbortSignal,
-    gate?: PreparedTool,
+    gate: PreparedTool,
+    response: DraftResponse,
   ) {
     if (!context.conversationId || this.local.execution.mode(context) === "plan")
       return fail("draftDenied", "draft_context_denied");
@@ -335,12 +341,10 @@ export class DraftService {
     }
     if (created && automatic) {
       try {
-        await this.resolve(
-          { approvalId: approval.id, action: "send" },
-          "automatic",
-          confirmedNow,
+        await this.resolve({ approvalId: approval.id, action: "send" }, "automatic", confirmedNow, {
           context,
-        );
+          response,
+        });
       } catch (error) {
         const outcome = this.repo.get(approval.id)?.view.status;
         // A durable failed/uncertain receipt is a tool result, not an invitation to retry.
@@ -476,7 +480,8 @@ export class DraftService {
     signal: AbortSignal,
   ) {
     if (!gate.connector) return fail("draftUnavailable", "connector_unavailable");
-    const created = await this.create(context, call, input, gate.connector, signal, gate);
+    const response: DraftResponse = {};
+    const created = await this.create(context, call, input, gate.connector, signal, gate, response);
     if ("duplicate" in created)
       return {
         ...this.receipt(created.approvalId),
@@ -495,9 +500,9 @@ export class DraftService {
       const receipt = this.receipt(created.approvalId);
       // Maintainers 2026-10-31: after a confirmed send the Bot also gets what the service answered
       // (e.g. the new issue's link); the caller formats it as external data.
-      if (this.replies.has(created.approvalId) && receipt.status === "sent")
-        return { ...receipt, reply: this.replies.get(created.approvalId) };
-      const serviceMessage = this.failures.get(created.approvalId);
+      const reply = "reply" in response ? response.reply : this.replies.get(created.approvalId);
+      if (reply !== undefined && receipt.status === "sent") return { ...receipt, reply };
+      const serviceMessage = response.serviceMessage ?? this.failures.get(created.approvalId);
       // The caller labels it as external data; "unknown" keeps no reason so it never reads as a
       // definite failure that invites a resend.
       return serviceMessage && receipt.status === "failed"
@@ -548,7 +553,7 @@ export class DraftService {
     input: DraftResolve,
     actor: "user" | "automatic" = "user",
     confirmedNow = false,
-    liveCall?: ToolRunContext,
+    liveCall?: { context: ToolRunContext; response: DraftResponse },
   ) {
     const job = resolveDraft(
       {
@@ -556,8 +561,8 @@ export class DraftService {
         repo: this.repo,
         context: (view, payload) => {
           const current = this.context(view, payload);
-          return liveCall?.interactiveChat && !liveCall.auditSource
-            ? { ...current, interactiveChat: true, signal: liveCall.signal }
+          return liveCall?.context.interactiveChat && !liveCall.context.auditSource
+            ? { ...current, interactiveChat: true, signal: liveCall.context.signal }
             : current;
         },
         expire: (id) => this.expire(id),
@@ -565,13 +570,14 @@ export class DraftService {
         changed: (id) => this.changed(id),
         audit: (id, phase, actor) => this.audit(id, phase, actor),
         sent: (id, reply) => {
-          // Only a call still waiting on this draft reads the reply; others never collect it.
-          if (!this.waiting.context(id)) return;
-          this.replies.set(id, reply);
+          if (liveCall) liveCall.response.reply = reply;
+          else if (this.waiting.context(id)) this.replies.set(id, reply);
         },
         failed: (id, serviceMessage) => {
-          if (!this.waiting.context(id)) return;
-          this.failures.set(id, this.local.deps.redactor.redact(serviceMessage));
+          if (!liveCall && !this.waiting.context(id)) return;
+          const redacted = this.local.deps.redactor.redact(serviceMessage);
+          if (liveCall) liveCall.response.serviceMessage = redacted;
+          else this.failures.set(id, redacted);
         },
       },
       input,
