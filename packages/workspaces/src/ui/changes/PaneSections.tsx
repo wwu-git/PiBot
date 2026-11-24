@@ -133,14 +133,18 @@ function ScopeFiles({ model }: { model: ChangesPaneModel }) {
         <Empty title={t("changes.empty.turn", { name: model.botName })} icon="eye" tone="blue" />
       ) : (
         <Empty title={t("changes.empty.turn", { name: model.botName })} icon="folder" tone="violet">
-          <span>{t("changes.empty.notRepo", { folder: status?.root.name ?? "" })}</span>
-          <Button
-            variant="secondary"
-            disabled={model.busy}
-            onClick={() => void model.sendText(t("changes.empty.initMessage"), "changes.sent")}
-          >
-            {t("changes.empty.init", { name: model.botName })}
-          </Button>
+          {status?.git.state === "none" && status.git.reason === "not_repo" && (
+            <>
+              <span>{t("changes.empty.notRepo", { folder: status.root.name })}</span>
+              <Button
+                variant="secondary"
+                disabled={model.busy}
+                onClick={() => void model.sendText(t("changes.empty.initMessage"), "changes.sent")}
+              >
+                {t("changes.empty.init", { name: model.botName })}
+              </Button>
+            </>
+          )}
         </Empty>
       );
     return (
@@ -273,10 +277,15 @@ export function Notices({ model }: { model: ChangesPaneModel }) {
     items.push(
       <Notice key="turn" tone={model.repo ? "accent" : "info"}>
         <span>
-          {t(model.repo ? "changes.turn.note" : "changes.turn.noteNotRepo", {
-            name: model.botName,
-            count: model.turn.data?.total ?? model.files.length,
-          })}
+          {t(
+            git?.state === "none" && git.reason === "not_repo"
+              ? "changes.turn.noteNotRepo"
+              : "changes.turn.note",
+            {
+              name: model.botName,
+              count: model.turn.data?.total ?? model.files.length,
+            },
+          )}
           {model.turn.data?.truncated &&
             ` ${t("changes.turn.truncated", { count: model.files.length })}`}
         </span>

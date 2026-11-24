@@ -27,8 +27,23 @@ export function TemplateList({
   const groupsAvailable = withInstalled(builtin.catalog?.groups ?? [], cloud.catalog?.groups);
   const rolesAvailable = withInstalled(builtin.catalog?.roles ?? [], cloud.catalog?.roles);
   const candidates = catalogCandidates(cloud.state?.entries ?? [], "group");
-  const remoteIds = new Set(candidates.map((entry) => entry.id));
-  const downloads = candidates.filter((entry) => catalogMatches(entry, cloud.language, query));
+  const refreshing = cloud.busy === "check";
+  const localVersions = new Map(groupsAvailable.map((group) => [group.id, group.version]));
+  // A cached update must leave the existing template usable while the library is unreachable.
+  const downloads = candidates.filter((entry) => {
+    const localVersion = localVersions.get(entry.id);
+    if (
+      localVersion !== undefined &&
+      (refreshing ||
+        cloud.offline ||
+        !cloud.connected ||
+        entry.needsUpdate ||
+        localVersion >= entry.version)
+    )
+      return false;
+    return catalogMatches(entry, cloud.language, query);
+  });
+  const remoteIds = new Set(downloads.map((entry) => entry.id));
   async function download(entry: (typeof candidates)[number]) {
     const next = await cloud.install(entry);
     if (!next) return;
@@ -76,7 +91,7 @@ export function TemplateList({
             ref={group.id === target?.id ? targetRef : undefined}
             type="button"
             className={styles.choice}
-            disabled={disabled || !!cloud.busy}
+            disabled={disabled || (!!cloud.busy && !refreshing)}
             onClick={() => openWorkspace({ name: "template", id: group.id })}
           >
             <GroupAvatar size={36}>

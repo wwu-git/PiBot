@@ -21,6 +21,7 @@ export function useChatScreenModel(props: ConnectedChatProps) {
   const memoryNotices = useMemoryNotices(props.peer, state.state.bot?.id, state.actualTopicId);
   // Keyed by conversation so a request made in one topic never opens the row in another.
   const [compactRequested, requestCompact] = useState<string>();
+  const [compactDismissed, dismissCompaction] = useState<string>();
   return {
     ...props,
     ...state,
@@ -29,6 +30,8 @@ export function useChatScreenModel(props: ConnectedChatProps) {
     memoryNotices,
     compactRequested,
     requestCompact,
+    compactDismissed,
+    dismissCompaction,
   };
 }
 export type ChatScreenModel = ReturnType<typeof useChatScreenModel>;

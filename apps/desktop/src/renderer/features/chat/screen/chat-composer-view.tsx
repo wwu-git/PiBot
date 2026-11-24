@@ -25,9 +25,9 @@ import type { ChatScreenModel } from "./chat-screen-model.ts";
 // composer's + menu (「整理上下文」) for someone who wants to shorten a long topic.
 const compactionFailures = new Set(["compaction_failed", "compaction_timeout", "context_overflow"]);
 
-function needsCompaction(messages: ChatScreenModel["state"]["messages"]): boolean {
+function compactionFailure(messages: ChatScreenModel["state"]["messages"]): string | undefined {
   const last = messages.findLast((message) => message.role === "assistant");
-  return Boolean(last?.errorCode && compactionFailures.has(last.errorCode));
+  return last?.errorCode && compactionFailures.has(last.errorCode) ? last.id : undefined;
 }
 
 export function renderChatComposer(screen: ChatScreenModel) {
@@ -70,7 +70,11 @@ export function renderChatComposer(screen: ChatScreenModel) {
     requestKey,
     compactRequested,
     requestCompact,
+    compactDismissed,
+    dismissCompaction,
   } = screen;
+  const failedCompaction = compactionFailure(state.messages);
+  const needsCompaction = !!failedCompaction && failedCompaction !== compactDismissed;
   const canOrganize =
     state.bot?.category !== "image" &&
     !!state.bot &&
@@ -93,7 +97,7 @@ export function renderChatComposer(screen: ChatScreenModel) {
         canOrganize &&
         state.bot &&
         state.conversationId &&
-        !needsCompaction(state.messages) &&
+        !needsCompaction &&
         compactRequested !== state.conversationId && (
           <ContextHintNotice
             key={`${state.bot.id}:${state.conversationId}`}
@@ -108,13 +112,19 @@ export function renderChatComposer(screen: ChatScreenModel) {
       {canOrganize &&
         state.bot &&
         state.conversationId &&
-        (needsCompaction(state.messages) || compactRequested === state.conversationId) && (
+        (needsCompaction || compactRequested === state.conversationId) && (
           <CompactionActions
             key={`${state.bot.id}:${state.conversationId}`}
             peer={peer}
             botId={state.bot.id}
             conversationId={state.conversationId}
             disabled={busy || sendingBlocked}
+            dismiss={() => {
+              requestCompact((requested) =>
+                requested === state.conversationId ? undefined : requested,
+              );
+              dismissCompaction(failedCompaction);
+            }}
           />
         )}
       {/* An external agent has its own model; Pi Bot's model settings do not apply. */}

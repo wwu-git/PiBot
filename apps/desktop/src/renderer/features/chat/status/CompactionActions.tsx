@@ -10,14 +10,17 @@ export function CompactionActions({
   botId,
   conversationId,
   disabled,
+  dismiss,
 }: {
   peer: ChatPeer;
   botId: string;
   conversationId: string;
   disabled: boolean;
+  dismiss(): void;
 }) {
   const t = useT();
   const active = useRef<{ requestId: string; signal: AbortController } | undefined>(undefined);
+  const successTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState<"done" | "mechanical" | "failed" | "nothing">();
   const cancel = useCallback(() => {
@@ -36,8 +39,17 @@ export function CompactionActions({
     },
     [cancel],
   );
+  useEffect(
+    () => () => {
+      clearTimeout(successTimer.current);
+      successTimer.current = undefined;
+    },
+    [],
+  );
   const compact = async (fork: boolean) => {
     if (active.current || disabled) return;
+    clearTimeout(successTimer.current);
+    successTimer.current = undefined;
     const current = { requestId: crypto.randomUUID(), signal: new AbortController() };
     active.current = current;
     setPending(true);
@@ -48,7 +60,19 @@ export function CompactionActions({
         { botId, conversationId, requestId: current.requestId, fork },
         { timeoutMs: 1_210_000, signal: current.signal.signal },
       );
-      if (!current.signal.signal.aborted) setResult(result.mechanical ? "mechanical" : "done");
+      if (!current.signal.signal.aborted) {
+        setResult(result.mechanical ? "mechanical" : "done");
+        if (!result.mechanical) {
+          const timer = setTimeout(() => {
+            // An earlier completion must not close a newer compaction or a different topic.
+            if (successTimer.current !== timer || current.signal.signal.aborted) return;
+            successTimer.current = undefined;
+            setResult(undefined);
+            dismiss();
+          }, 5_000);
+          successTimer.current = timer;
+        }
+      }
     } catch (error) {
       // A topic whose replies never created a model session (welcome text, a failed first turn)
       // has nothing to summarize; that is not a failure worth retrying.
