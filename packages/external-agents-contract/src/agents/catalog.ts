@@ -264,7 +264,7 @@ export const AGENTS: readonly AgentDescriptor[] = [
     loginCommand: "agy acp --gemini-dir .pibot-agy --login",
     allowances: posix({
       readWrite: [".pibot-agy"],
-      readOnly: [],
+      readOnly: [keychain],
       machLookup: [],
       unixSockets: [],
       network: ["daily-cloudcode-pa.googleapis.com", "oauth2.googleapis.com"],
