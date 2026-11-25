@@ -9,7 +9,7 @@ import styles from "./agents.module.css";
 /** The vendor's own mark (default avatar of an agent Bot); a neutral tile for a custom command. */
 export function AgentLogo({ agentId, size = 42 }: { agentId: ExternalAgentId; size?: number }) {
   const style = { "--logo-size": `${size}px` } as CSSProperties;
-  if (agentId === "custom")
+  if (agentId === "custom" || !AGENT_LOGOS[agentId])
     return (
       <span className={styles.logo} data-custom style={style} aria-hidden="true">
         <Icon name="terminal" size={Math.round(size * 0.5)} />

@@ -67,6 +67,7 @@ async function commonDirs(
     return [
       win32.join(profile, ".local", "bin"),
       ...(env.APPDATA ? [win32.join(env.APPDATA, "npm")] : []),
+      win32.join(env.LOCALAPPDATA ?? win32.join(profile, "AppData", "Local"), "agy", "bin"),
       ...(env.LOCALAPPDATA ? [win32.join(env.LOCALAPPDATA, "pnpm")] : []),
       win32.join(profile, "scoop", "shims"),
       win32.join(profile, ".bun", "bin"),

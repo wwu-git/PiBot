@@ -6,7 +6,14 @@
  */
 import { z } from "zod";
 
-export const ExternalAgentIdSchema = z.enum(["codex", "claude", "cursor", "opencode", "custom"]);
+export const ExternalAgentIdSchema = z.enum([
+  "codex",
+  "claude",
+  "cursor",
+  "opencode",
+  "antigravity",
+  "custom",
+]);
 export type ExternalAgentId = z.infer<typeof ExternalAgentIdSchema>;
 export type KnownAgentId = Exclude<ExternalAgentId, "custom">;
 
@@ -246,6 +253,24 @@ export const AGENTS: readonly AgentDescriptor[] = [
         network: opencodeNetwork,
       },
     },
+  },
+  {
+    id: "antigravity",
+    name: "Antigravity",
+    vendor: "Google",
+    commands: ["agy"],
+    launch: { kind: "native", args: ["acp", "--gemini-dir", ".pibot-agy"] },
+    installUrl: "https://antigravity.google/docs/getting-started?tab=cli",
+    loginCommand: "agy acp --gemini-dir .pibot-agy --login",
+    allowances: posix({
+      readWrite: [".pibot-agy"],
+      readOnly: [],
+      machLookup: [],
+      unixSockets: [],
+      network: ["daily-cloudcode-pa.googleapis.com", "oauth2.googleapis.com"],
+      // The ACP backend starts a local language server on a dynamically assigned port.
+      localBinding: true,
+    }),
   },
 ];
 

@@ -10,6 +10,7 @@ export async function probeAccount(
   signal: AbortSignal,
   isolation: "sandbox" | "unisolated",
 ): Promise<"unknown" | "login_required"> {
+  if (agentId === "antigravity") return "unknown";
   const args =
     agentId === "codex"
       ? ["login", "status"]
