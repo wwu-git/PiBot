@@ -1,5 +1,6 @@
 import { lstat, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { untilAborted } from "../../core/abort.ts";
 import { AgentError } from "../../core/errors.ts";
 import type { AgentRuntime, ContextEstimate } from "../../core/types.ts";
 import type { CompactionState } from "../../extensions/compaction.ts";
@@ -40,6 +41,7 @@ export function createCompactionOperations({
         if (error.code === "ENOENT") return undefined;
         throw error;
       });
+      request.signal.throwIfAborted();
       // A remembered filename legitimately has no JSONL until the first model turn, and pi writes
       // a header when it opens such a file; a session with no bytes has no context to warn about.
       if (!info?.isFile() || info.size === 0) return undefined;
@@ -47,10 +49,10 @@ export function createCompactionOperations({
       if (cached && cached.size === info.size && cached.mtimeMs === info.mtimeMs)
         return cached.value;
       const running = estimating.get(file);
-      if (running) return running;
+      if (running) return untilAborted(running, request.signal);
+      // Cancel each caller's wait independently; the file read is shared by the other callers.
       const task = (async () => {
         const { pi } = await buildRuntime();
-        request.signal.throwIfAborted();
         const manager = pi.SessionManager.open(file, sessionDir, homeDir);
         // The compaction scheduler measures this same projection, so the hint compares against
         // the line at which the agent would really start organizing context.
@@ -69,13 +71,9 @@ export function createCompactionOperations({
         // One entry per started topic; dropping the oldest bounds the map in a long-lived brain.
         if (estimates.size > 64) estimates.delete(estimates.keys().next().value as string);
         return value;
-      })();
+      })().finally(() => estimating.delete(file));
       estimating.set(file, task);
-      try {
-        return await task;
-      } finally {
-        estimating.delete(file);
-      }
+      return untilAborted(task, request.signal);
     },
     async compactHistory(request) {
       const { pi, runtime } = await buildRuntime();
