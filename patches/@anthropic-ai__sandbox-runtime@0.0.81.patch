@@ -25,7 +25,6 @@ index 9a16855dff76efea64af8516a38d079c105a2ffb..2e5586f835e04a10bed8b1727e9afa1d
   * The directories below `cwd`, down to `maxDepth`, that ripgrep said it could
   * not read, that this process cannot read either, and whose mode is this
 diff --git a/dist/sandbox/linux-sandbox-utils.js b/dist/sandbox/linux-sandbox-utils.js
-index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c239b19184c 100644
 --- a/dist/sandbox/linux-sandbox-utils.js
 +++ b/dist/sandbox/linux-sandbox-utils.js
 @@ -1,3 +1,4 @@
@@ -33,7 +32,7 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
  import { quote } from '../utils/shell-quote.js';
  import { logForDebugging } from '../utils/debug.js';
  import { realPathOf, wayTo } from '../utils/real-path.js';
-@@ -10,7 +11,7 @@ import path, { join } from 'node:path';
+@@ -10,7 +11,7 @@
  import { ripGrep, RipgrepError } from '../utils/ripgrep.js';
  import { buildJavaToolOptions } from './java-proxy-agent.js';
  import { readNamesOf, writeNamesOf } from './path-entries.js';
@@ -42,7 +41,7 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
  import { getApplySeccompBinaryPath } from './generate-seccomp-filter.js';
  /** Default max depth for searching dangerous files */
  const DEFAULT_MANDATORY_DENY_SEARCH_DEPTH = 3;
-@@ -316,12 +317,12 @@ function dotGitKindAt(dotGitPath) {
+@@ -316,12 +317,12 @@
   * violation monitor, which needs the same denies to judge a write bwrap
   * refuses — reads the same definition rather than a copy of it.
   */
@@ -57,7 +56,7 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
          // Dangerous directories in CWD
          ...getDangerousDirectories().map(d => path.resolve(cwd, d)),
      ];
-@@ -398,13 +399,13 @@ export function unreadableDirectories(stderr, cwd, maxDepth) {
+@@ -398,13 +399,13 @@
   * Uses a SINGLE ripgrep call with multiple glob patterns for efficiency.
   * With --max-depth limiting, this is fast enough to run on each command without memoization.
   */
@@ -73,7 +72,7 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
      // Build iglob args for all patterns in one ripgrep call
      const iglobArgs = [];
      for (const fileName of DANGEROUS_FILES) {
-@@ -443,8 +444,11 @@ async function linuxGetMandatoryDenyPaths(ripgrepConfig = { command: 'rg' }, max
+@@ -443,8 +444,11 @@
              '--max-depth',
              String(maxDepth + 1),
              ...iglobArgs,
@@ -87,7 +86,7 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
          ], cwd, signal, ripgrepConfig);
      }
      catch (error) {
-@@ -498,7 +502,11 @@ async function linuxGetMandatoryDenyPaths(ripgrepConfig = { command: 'rg' }, max
+@@ -498,7 +502,11 @@
          const found = segments.slice(0, at + length);
          if (lower[at] === '.git' && lower[at + 1] === 'head')
              found[at + 1] = 'hooks';
@@ -100,7 +99,7 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
      }
      return [...new Set(denyPaths)];
  }
-@@ -1675,7 +1683,7 @@ function pushReadDenyDirMounts(args, unit) {
+@@ -1675,7 +1683,7 @@
  /**
   * Generate filesystem bind mount arguments for bwrap
   */
@@ -109,7 +108,7 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
      const args = [];
      const startedIn = workingDirectory();
      // fs already imported
-@@ -2067,7 +2075,7 @@ async function generateFilesystemArgs(readConfig, writeConfig, maskedFileBinds,
+@@ -2067,7 +2075,7 @@
          const configuredDenyPaths = writeConfig.denyWithinAllow || [];
          const denyPaths = [
              ...configuredDenyPaths,
@@ -118,16 +117,44 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
          ];
          // INVARIANT: one plan, one working directory. A relative entry is resolved
          // against it on both sides of the await above, the only one here.
-@@ -2851,7 +2859,7 @@ async function generateFilesystemArgs(readConfig, writeConfig, maskedFileBinds,
+@@ -2851,7 +2859,7 @@
   * inheritable sets.
   */
  export async function wrapCommandWithSandboxLinux(params) {
 -    const { command, commandId, needsNetworkRestriction, httpSocketPath, socksSocketPath, httpProxyPort, socksProxyPort, proxyAuthToken, caCertPath, javaAgentJarPath, unsetEnvVars, setEnvVars, maskedFileBinds, maskedFileStoreDir, enableWeakerNestedSandbox, allowNestedUserNamespaces, allowAllUnixSockets, binShell, ripgrepConfig = { command: 'rg' }, mandatoryDenySearchDepth = DEFAULT_MANDATORY_DENY_SEARCH_DEPTH, allowGitConfig = false, gitSafeDirectories, seccompConfig, bwrapPath, socatPath, observeSocketPath, abortSignal, } = params;
-+    const { command, commandId, needsNetworkRestriction, httpSocketPath, socksSocketPath, httpProxyPort, socksProxyPort, proxyAuthToken, caCertPath, javaAgentJarPath, unsetEnvVars, setEnvVars, maskedFileBinds, maskedFileStoreDir, enableWeakerNestedSandbox, allowNestedUserNamespaces, allowAllUnixSockets, binShell, ripgrepConfig = { command: 'rg' }, mandatoryDenySearchDepth = DEFAULT_MANDATORY_DENY_SEARCH_DEPTH, allowGitConfig = false, gitManifestWriteRoots = [], gitSafeDirectories, seccompConfig, bwrapPath, socatPath, observeSocketPath, abortSignal, } = params;
++    const { command, commandId, needsNetworkRestriction, httpSocketPath, socksSocketPath, httpProxyPort, socksProxyPort, proxyAuthToken, caCertPath, javaAgentJarPath, unsetEnvVars, setEnvVars, maskedFileBinds, maskedFileStoreDir, enableWeakerNestedSandbox, allowNestedUserNamespaces, allowAllUnixSockets, binShell, ripgrepConfig = { command: 'rg' }, mandatoryDenySearchDepth = DEFAULT_MANDATORY_DENY_SEARCH_DEPTH, allowGitConfig = false, gitManifestWriteRoots = [], gitSafeDirectories, seccompConfig, bwrapPath, socatPath, observeSocketPath, pibotProxyRelay, abortSignal, } = params;
      // bubblewrap takes no patterns, so every path here is a name. The literal
      // lists are folded into the lists they belong to, once, so that nothing
      // below can read a list and miss them; a pattern in `allowOnly` that is no
-@@ -3019,7 +3027,7 @@ export async function wrapCommandWithSandboxLinux(params) {
+@@ -2894,7 +2902,12 @@
+         // ========== SECCOMP FILTER (Unix Socket Blocking) ==========
+         // apply-seccomp wraps the workload and applies the baked-in BPF filter
+         // that blocks socket(AF_UNIX, ...). Skipped when allowAllUnixSockets is true.
+-        if (!allowAllUnixSockets) {
++        if (pibotProxyRelay && (!needsNetworkRestriction || allowAllUnixSockets ||
++            enableWeakerNestedSandbox || allowNestedUserNamespaces ||
++            !httpProxyPort || !socksProxyPort)) {
++            throw new Error('Pi Bot proxy relay requires full Linux sandbox isolation');
++        }
++        if (!allowAllUnixSockets && !pibotProxyRelay) {
+             applySeccompPrefix = resolveApplySeccompPrefix(seccompConfig?.applyPath, seccompConfig?.argv0);
+             if (!applySeccompPrefix) {
+                 logForDebugging('[Sandbox Linux] apply-seccomp binary not available - unix socket blocking disabled. ' +
+@@ -2976,11 +2989,11 @@
+                         'The bridge process may have died. Try reinitializing the sandbox.');
+                 }
+                 // Bind both sockets into the sandbox
+-                bwrapArgs.push('--bind', httpSocketPath, httpSocketPath);
++                if (!pibotProxyRelay) bwrapArgs.push('--bind', httpSocketPath, httpSocketPath);
+                 // When the mux serves both protocols, socksSocketPath is the same
+                 // file as httpSocketPath; bwrap rejects a duplicate --bind of the
+                 // same source→target.
+-                if (socksSocketPath !== httpSocketPath) {
++                if (!pibotProxyRelay && socksSocketPath !== httpSocketPath) {
+                     bwrapArgs.push('--bind', socksSocketPath, socksSocketPath);
+                 }
+                 // Add proxy environment variables
+@@ -3019,7 +3032,7 @@
              // If no sockets provided, network is completely blocked (--unshare-net without proxy)
          }
          // ========== FILESYSTEM RESTRICTIONS ==========
@@ -136,6 +163,35 @@ index b3acba671fe6356ad5d9e187ca13753f345f931b..f3a0b86c1f07684527fee838cf1c4c23
          const mountsStart = bwrapArgs.length;
          bwrapArgs.push(...fsArgs);
          const mounts = {
+@@ -3073,7 +3086,13 @@
+         // beside the helper, which makes one of its own, and not under
+         // enableWeakerNestedSandbox: bubblewrap does it by writing a sysctl, and
+         // dies on the read-only /proc/sys of an unprivileged container.
+-        if (applySeccompPrefix === undefined &&
++        if (pibotProxyRelay) {
++            if (!bwrapCanDisableUserns(bwrapPath ?? whichSync('bwrap'))) {
++                throw new Error('Pi Bot proxy relay requires Bubblewrap --disable-userns');
++            }
++            bwrapArgs.push('--disable-userns');
++        }
++        else if (applySeccompPrefix === undefined &&
+             allowNestedUserNamespaces !== true) {
+             const bwrap = enableWeakerNestedSandbox
+                 ? null
+@@ -3100,6 +3119,13 @@
+         const shell = whichSync(shellName);
+         if (!shell) {
+             throw new Error(`Shell '${shellName}' not found in PATH`);
++        }
++        if (pibotProxyRelay) {
++            bwrapArgs.push('--', '/usr/bin/python3', '-I', '-S', '-c',
++                pibotProxyRelay.bootstrap, shell, '-c', command);
++            return quote(['/usr/bin/python3', '-I', '-S', '-c', pibotProxyRelay.host,
++                String(httpProxyPort), String(socksProxyPort)]) + ' ' +
++                renderBwrapInvocation(bwrapPath ?? 'bwrap', bwrapArgs, mounts);
+         }
+         bwrapArgs.push('--', shell, '-c');
+         // With network restrictions, route the command through buildSandboxCommand
 diff --git a/dist/sandbox/macos-sandbox-utils.d.ts b/dist/sandbox/macos-sandbox-utils.d.ts
 index 8af5e03041b27d060b0027278fb0567745b06f2f..c2a19594484cc778c28a5a06c916367b11a51c25 100644
 --- a/dist/sandbox/macos-sandbox-utils.d.ts
@@ -559,7 +615,6 @@ index 76b00b1dc82a2d42a451a9f58068cbbd5e68da75..48c58789df5f0c0ab9eaa80a24debc82
          .boolean()
          .optional()
 diff --git a/dist/sandbox/sandbox-manager.js b/dist/sandbox/sandbox-manager.js
-index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c18d4e398c 100644
 --- a/dist/sandbox/sandbox-manager.js
 +++ b/dist/sandbox/sandbox-manager.js
 @@ -1,3 +1,4 @@
@@ -567,7 +622,7 @@ index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c1
  import { hasNameReading, literalReadLists, literalWriteLists, reExposedBy, readRulesOf, samePathEntries, spelledOf, withOtherReadings, writeRootsOf, } from './path-entries.js';
  import { createHttpProxyServer } from './http-proxy.js';
  import { assertTlsTerminationSupported } from './emitted-connection.js';
-@@ -19,14 +20,14 @@ import { expandReadDenyGlobLinuxSteps } from './read-deny-glob.js';
+@@ -19,14 +20,14 @@
  import { wrapCommandWithSandboxMacOS, startMacOSSandboxLogMonitor, } from './macos-sandbox-utils.js';
  import { startLinuxSandboxViolationMonitor, } from './linux-violation-monitor.js';
  import { checkWindowsDependencies, checkWindowsDependenciesAsync, wrapCommandWithSandboxWindows, parseWindowsBinShell, expandWindowsFsPaths, rankWindowsFsAccess, restoreWindowsAcl, grantWindowsAclPersistent, windowsSetupVersionMismatch, windowsSrtWinOutdatedError, missingWindowsSrtWinCapability, windowsGrantsBeneathDenies, getWindowsProfileReadStatus, getWindowsProfileReadStatusAsync, windowsProfileExclusionConflicts, revokeWindowsAclChecked, getWindowsSandboxUserStatusAsync, ensurePersistentWindowsCa, verifyWindowsWfpEgress, resolveSrtWin, WindowsSandboxError, DEFAULT_WINDOWS_PROXY_PORT_RANGE, } from './windows-sandbox-utils.js';
@@ -584,7 +639,7 @@ index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c1
  import { getJavaProxyAgentJarPathAsync } from './java-proxy-agent.js';
  import { getApplySeccompBinaryPathAsync } from './generate-seccomp-filter.js';
  // ============================================================================
-@@ -880,7 +881,7 @@ async function initializeSteps(runtimeConfig, sandboxAskCallback, enableLogMonit
+@@ -880,7 +881,7 @@
                  // them, so the monitor must not judge by them either.
                  ...(config.filesystem.disabled
                      ? []
@@ -593,7 +648,7 @@ index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c1
              ],
              ignoreViolations: config.ignoreViolations,
              resolveCommandText,
-@@ -1649,6 +1650,9 @@ function getNetworkRestrictionConfig() {
+@@ -1649,6 +1650,9 @@
  function getAllowUnixSockets() {
      return config?.network?.allowUnixSockets;
  }
@@ -603,10 +658,11 @@ index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c1
  function getAllowAllUnixSockets() {
      return config?.network?.allowAllUnixSockets;
  }
-@@ -1676,6 +1680,25 @@ function getRipgrepConfig() {
+@@ -1675,6 +1679,25 @@
+ }
  function getMandatoryDenySearchDepth() {
      return config?.mandatoryDenySearchDepth ?? 3;
- }
++}
 +// A manifest exception must never expand writes into SDK default temporary roots.
 +function getGitManifestWriteRoots(customConfig) {
 +    const filesystem = { ...config?.filesystem, ...customConfig?.filesystem };
@@ -625,11 +681,10 @@ index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c1
 +            throw new Error('gitManifestWriteRoots must be within explicit allowWrite');
 +        return normalized;
 +    }))];
-+}
+ }
  function getAllowGitConfig() {
      return config?.filesystem?.allowGitConfig ?? false;
- }
-@@ -1990,12 +2013,14 @@ async function wrapWithSandboxOnce(walkEnded, restarts, command, binShell, custo
+@@ -1990,12 +2013,14 @@
                  maskedFileBinds: credentialRestrictions.maskedFileBinds,
                  degradeToDenyPaths: credentialRestrictions.degradeToDenyPaths,
                  allowUnixSockets: getAllowUnixSockets(),
@@ -644,7 +699,7 @@ index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c1
                  gitSafeDirectories,
                  enableWeakerNetworkIsolation: getEnableWeakerNetworkIsolation(),
                  allowAppleEvents: getAllowAppleEvents(),
-@@ -2035,6 +2060,7 @@ async function wrapWithSandboxOnce(walkEnded, restarts, command, binShell, custo
+@@ -2035,11 +2060,13 @@
                  ripgrepConfig: getRipgrepConfig(),
                  mandatoryDenySearchDepth: getMandatoryDenySearchDepth(),
                  allowGitConfig: getAllowGitConfig(),
@@ -652,6 +707,12 @@ index d475e55977bf54a2fe00a0c6aba38313761d55aa..37975a274e42f8f2d419ec42f0f986c1
                  gitSafeDirectories,
                  seccompConfig: getSeccompConfig(),
                  bwrapPath: config?.bwrapPath,
+                 socatPath: config?.socatPath,
+                 observeSocketPath: linuxMonitor?.observeSocketPath,
++                pibotProxyRelay: options?.pibotProxyRelay,
+                 abortSignal,
+             }).catch((err) => {
+                 // It awaits once more, for its scan: see the invariant above.
 diff --git a/dist/sandbox/sandbox-utils.d.ts b/dist/sandbox/sandbox-utils.d.ts
 index 80ae1fd68b53f1dfb216eda78e42dbff085fbc6a..88793e8ac1a70635c310c42d21f281b09cea2bf9 100644
 --- a/dist/sandbox/sandbox-utils.d.ts

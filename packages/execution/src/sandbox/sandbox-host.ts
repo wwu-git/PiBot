@@ -16,6 +16,9 @@ import { writeSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { SandboxManager } from "@anthropic-ai/sandbox-runtime";
 import { fixedHostSshCommand } from "../ssh/ssh-command.ts";
+import { linuxProxyBootstrap } from "./linux-proxy-bootstrap.ts";
+import { linuxProxyRelay } from "./linux-proxy-relay.ts";
+import { linuxUserNamespaceSettings } from "./linux-userns.ts";
 import { createSandboxNetwork } from "./network-proxy.ts";
 import { parseSandboxPayload, SANDBOX_PAYLOAD_BYTES } from "./sandbox-host-payload.ts";
 import { sandboxProxySetup, validProxyPort } from "./sandbox-proxy-setup.ts";
@@ -156,16 +159,30 @@ async function main() {
     const command = payload.hostSsh
       ? fixedHostSshCommand(payload.hostSsh, http as number)
       : payload.command;
+    const relay =
+      process.platform === "linux" &&
+      payload.stdioServer &&
+      (await linuxUserNamespaceSettings(lifetime.signal)).apparmor === 1;
     const prepared =
       process.platform === "darwin"
         ? `${sandboxProxySetup(http as number, socks as number)}\n${command}`
-        : command;
+        : relay
+          ? `${sandboxProxySetup(3128, 1080)}
+${command}`
+          : command;
+    const wrapOptions = {
+      commandId: payload.commandId,
+      commandText: payload.commandText ?? payload.command,
+      ...(relay
+        ? { pibotProxyRelay: { bootstrap: linuxProxyBootstrap, host: linuxProxyRelay } }
+        : {}),
+    };
     const wrapped = await SandboxManager.wrapWithSandbox(
       prepared,
       "/bin/bash",
       payload.config,
       undefined,
-      { commandId: payload.commandId, commandText: payload.commandText ?? payload.command },
+      wrapOptions,
     );
     if (payload.foreground || payload.waitForDispatch) {
       // Revalidate workspace/Git ownership in exec after SRT startup, immediately before spawn.
