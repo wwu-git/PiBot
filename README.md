@@ -116,6 +116,10 @@ Thank you to everyone who has contributed to Pi Bot. See the
 - [@eltociear](https://github.com/eltociear)
 <!-- CONTRIBUTORS:END -->
 
+Thanks also to [@rajnishmanitiwari](https://github.com/rajnishmanitiwari), whose pull request
+[#25](https://github.com/w01fb0ss/PiBot/pull/25) independently arrived at the same fix as
+[#21](https://github.com/w01fb0ss/PiBot/pull/21).
+
 ## Star History
 
 <a href="https://www.star-history.com/#w01fb0ss/PiBot&Date">

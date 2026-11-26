@@ -77,9 +77,10 @@ type Queue = {
 /**
  * Switches queued input `id` between "add to the current task" and "after the current task". pi
  * keeps no per-item removal, so its queue is taken out and put back in order: only inputs still in
- * it go back; one pi already took (in flight, not yet announced) is in neither list, is not added
- * twice, and switching it reports false. Anything pi held that is not matched (another source, or
- * text a skill command expanded) goes back to its own queue unchanged.
+ * it go back, and the switched input joins the end of its destination queue. One pi already took
+ * (in flight, not yet announced) is in neither list, is not added twice, and switching it reports
+ * false. Anything pi held that is not matched (another source, or text a skill command expanded)
+ * goes back to its own queue unchanged.
  */
 export async function requeue(
   additions: SessionAdditions,
@@ -88,21 +89,29 @@ export async function requeue(
   mode: "steer" | "followUp",
 ): Promise<boolean> {
   const cleared = session.clearQueue();
-  const left = { steer: [...cleared.steering], followUp: [...cleared.followUp] };
-  const back: Input[] = [];
-  let switched = false;
+  const tracked = new Map<string, { key: string; input: Input }[]>();
   for (const [key, input] of additions.queued) {
-    const at = left[input.mode].indexOf(input.text);
-    if (at < 0) continue;
-    left[input.mode].splice(at, 1);
-    if (key === id) {
-      input.mode = mode;
-      switched = true;
-    }
-    back.push(input);
+    const lookup = `${input.mode}:${input.text}`;
+    const matches = tracked.get(lookup);
+    if (matches) matches.push({ key, input });
+    else tracked.set(lookup, [{ key, input }]);
   }
-  for (const text of left.steer) await session.steer(text);
-  for (const text of left.followUp) await session.followUp(text);
-  for (const input of back) await session[input.mode](input.text, input.images);
-  return switched;
+  let moved: Input | undefined;
+  for (const [queue, texts] of [
+    ["steer", cleared.steering],
+    ["followUp", cleared.followUp],
+  ] as const) {
+    for (const text of texts) {
+      const match = tracked.get(`${queue}:${text}`)?.shift();
+      if (match?.key === id) {
+        moved = match.input;
+        continue;
+      }
+      await session[queue](text, match?.input.images);
+    }
+  }
+  if (!moved) return false;
+  await session[mode](moved.text, moved.images);
+  moved.mode = mode;
+  return true;
 }
