@@ -26,10 +26,12 @@ import { createComputerGuard } from "../computer/computer-guard-adapter.ts";
 import { createComputerHost } from "../computer/computer-host.ts";
 import { createHostCapabilities } from "../host/host-capabilities.ts";
 import { createSecureStorage } from "../host/secure-storage.ts";
+import { createLiveIsland } from "../island/live-island.ts";
 import type { MainStartupTiming } from "../startup-timing.ts";
 import { createUpdateProxy } from "../updates/update-proxy.ts";
 import { isAppUrl, parseAppUrl } from "../window/app-url.ts";
 import { desktopLaunchEnvironment, loginItemSyncEnabled } from "../window/login-item-scope.ts";
+import type { ProviderLinkInbox } from "../window/provider-link-inbox.ts";
 import { readSystemLocale } from "../window/system-locale.ts";
 import { createTray, notifyKeyringRestart, notifyLoginDefault } from "../window/tray.ts";
 import { createBackgroundBrainCycle } from "./background-brain-cycle.ts";
@@ -46,6 +48,7 @@ import { createBackgroundSleepOwner } from "./background-sleep-owner.ts";
 import { createKeyringRecovery, createKeyringSessionGate } from "./keyring-recovery.ts";
 import { watchKeyringSession } from "./keyring-session.ts";
 import { watchMainLoop } from "./main-loop-watch.ts";
+import { createProviderImportReview } from "./provider-import-review.ts";
 import { createWindowsBackgroundSecurity } from "./windows-background-security.ts";
 
 export async function startBackgroundOwner(options: {
@@ -61,6 +64,7 @@ export async function startBackgroundOwner(options: {
   prelaunchedBrain?: ReturnType<typeof prelaunchBrainProcess>;
   /** Claim, Windows security and locale already started beside the role import. */
   early?: EarlyOwnerPreparation;
+  providerLinks?: ProviderLinkInbox;
 }) {
   const updateProxy = createUpdateProxy();
   if (!app.hasSingleInstanceLock()) throw new Error("background_writer_lock_required");
@@ -104,6 +108,16 @@ export async function startBackgroundOwner(options: {
   let language = resolveLanguage("system", systemLocale);
   let settings: Settings | undefined;
   let foreground = false;
+  let island: ReturnType<typeof createLiveIsland> | undefined;
+  // The window whose focus hides the live island. Another client (a second window, the CLI)
+  // leaving must not bring the island over a Pi Bot window that is still in front.
+  let focusedClient: unknown;
+  const islandForeground = (client: unknown, focused: boolean) => {
+    if (focused) focusedClient = client;
+    else if (focusedClient !== client) return;
+    else focusedClient = undefined;
+    island?.foreground(focused);
+  };
   let pendingNavigation: UiNavigation | undefined;
   let preferences = BackgroundPreferencesSchema.parse({});
   let lifecycle: IndependentBackgroundState["lifecycle"] = "starting";
@@ -549,7 +563,12 @@ export async function startBackgroundOwner(options: {
     if (stopped || !childReady || !brain)
       throw new RpcError(RpcErrorCodes.closed, "background_not_ready");
   }
+  const providerImport = createProviderImportReview(open, options.logger);
   await lifetime.initialize(async () => {
+    lifetime.own(() => providerImport.dispose());
+    lifetime.own(
+      options.providerLinks?.subscribe((intent) => providerImport.offer(intent)) ?? (() => {}),
+    );
     lifetime.own(() => storage.dispose());
     lifetime.own(() => recovery.dispose());
     lifetime.own(
@@ -580,7 +599,9 @@ export async function startBackgroundOwner(options: {
           JSON.stringify({ module: "background", event: "request_timeout", method }),
         ),
       disconnected: async (client, pid) => {
+        providerImport.dismiss(client);
         foreground = false;
+        islandForeground(client, false);
         await clients.disconnected(client, pid);
         syncTray();
       },
@@ -637,7 +658,9 @@ export async function startBackgroundOwner(options: {
           );
         hostWork++;
         const wake =
-          control.type === "detach" || control.type === "blur"
+          control.type === "detach" ||
+          control.type === "blur" ||
+          control.type === "provider-import-dismiss"
             ? Promise.resolve()
             : ensureWorking("gui");
         void wake.catch(() => {}); // The serialized caller still observes failure; do not leak an early rejection.
@@ -645,7 +668,12 @@ export async function startBackgroundOwner(options: {
           await wake;
           if (stopped) throw new RpcError(RpcErrorCodes.closed, "background_stopping");
           const current = brain;
-          if (!current && control.type !== "detach" && control.type !== "blur")
+          if (
+            !current &&
+            control.type !== "detach" &&
+            control.type !== "blur" &&
+            control.type !== "provider-import-dismiss"
+          )
             throw new RpcError(RpcErrorCodes.closed, "background_not_ready");
           switch (control.type) {
             case "diagnostics":
@@ -672,25 +700,40 @@ export async function startBackgroundOwner(options: {
               if (settings) server?.broadcast({ kind: "settings", settings });
               return state();
             case "detach":
+              providerImport.dismiss(client);
               foreground = false;
+              islandForeground(client, false);
               await clients.detach(client, control.stop === true);
               syncTray();
               return state();
             case "focus":
               foreground = true;
+              islandForeground(client, true);
               routineHost?.focused(control.at);
               return null;
             case "blur":
               foreground = false;
+              islandForeground(client, false);
               return null;
             case "ui-ready":
+              if (current) await providerImport.present(client, current);
               if (pendingNavigation) {
                 if (!current) throw new Error("background_not_ready");
                 current.navigate(pendingNavigation);
                 pendingNavigation = undefined;
               }
               return null;
+            case "provider-import":
+              providerImport.offer(control.intent, client);
+              return null;
+            case "provider-import-decide":
+              return providerImport.resolve(client, control.decision);
+            case "provider-import-dismiss":
+              providerImport.dismiss(client);
+              return null;
             case "navigate":
+              if ("view" in control.target && control.target.view === "provider-import")
+                throw new RpcError(RpcErrorCodes.invalidParams, "desktop_method_unavailable");
               if (!current) throw new Error("background_not_ready");
               current.navigate(control.target);
               return null;
@@ -848,12 +891,29 @@ export async function startBackgroundOwner(options: {
       focusBot: (botId, tab, target) => navigate(target ?? { botId, tab }),
     });
     lifetime.own(() => capabilities?.dispose());
+    // Lives with the brain, like the run indicator, so it also shows with no desktop window.
+    const ownedIsland = createLiveIsland({
+      outputDir: options.outputDir,
+      logger: options.logger,
+      platform: process.platform,
+      env: options.originalEnv,
+      open: (target) => navigate(target),
+    });
+    island = ownedIsland;
+    lifetime.own(() => {
+      island = undefined;
+      ownedIsland.dispose();
+    });
     // macOS keeps the computer driver in the owner so routines can use it after the desktop
     // quits. Nothing native loads until a grant is used.
     // The indicator and stop shortcut live here too, so they work with no desktop window.
     const computerGuard = createComputerGuard({
       logger: options.logger,
       outputDir: options.outputDir,
+      // While stopping, the guard's own reset must not bring the island back for a moment.
+      visibilityChanged: (visible) => {
+        if (!stopped) island?.guardVisible(visible);
+      },
     });
     lifetime.own(() => computerGuard.dispose());
     const computer = createComputerHost({
@@ -917,6 +977,7 @@ export async function startBackgroundOwner(options: {
           const nextLanguage = resolveLanguage(next.language, systemLocale);
           const changed = language !== nextLanguage;
           language = nextLanguage;
+          island?.settings(next, nextLanguage);
           syncTray(changed);
           tray?.refresh();
           server?.broadcast({ kind: "settings", settings: next });
@@ -929,6 +990,7 @@ export async function startBackgroundOwner(options: {
           activeRuns = count;
           tray?.updateActiveRuns(count);
         },
+        onLiveActivity: (value) => island?.activity(value),
         onStartupProgress: (phase) => {
           startupProgressAt = new Date().toISOString();
           startupPhase = phase;

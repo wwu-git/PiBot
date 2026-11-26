@@ -74,6 +74,8 @@ export const GroupWorkflowDecisionSchema = z.strictObject({
   resolution: z.enum(["retry", "skip", "reassign", "accept"]).optional(),
   reassignedTo: z.string().min(1).max(200).optional(),
   note: z.string().max(500).optional(),
+  /** `context_full`: what the stopped run was reading (redacted file names) for the card. */
+  reading: z.string().max(300).optional(),
 });
 
 export type GroupWorkflowRunStatus = z.infer<typeof GroupWorkflowRunStatusSchema>;

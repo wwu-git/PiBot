@@ -61,6 +61,7 @@ export function useCustomProvider(
   task: Task,
   refresh: () => Promise<void>,
   testModelId?: string,
+  addModelIds?: string[],
 ) {
   const { peer } = useRpc();
   const t = useT();
@@ -114,8 +115,13 @@ export function useCustomProvider(
         if (!active) return;
         setSaved(info);
         const hydrated = fromSaved(info);
-        setForm(hydrated);
         setBaseline(snapshot(hydrated));
+        // Preselected additions leave the form dirty, so nothing is saved until the user saves.
+        const known = new Set(hydrated.models.map((model) => model.id));
+        const added = (addModelIds ?? [])
+          .filter((model) => !known.has(model))
+          .map((model) => modelRow({ id: model }));
+        setForm(added.length ? { ...hydrated, models: [...hydrated.models, ...added] } : hydrated);
         setLoading(false);
       },
       () => {

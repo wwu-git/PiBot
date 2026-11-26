@@ -7,7 +7,12 @@ import {
   providerCatalog,
   providerGroups,
 } from "@pibot/models/ui";
-import { CHATGPT_PLAN_PROVIDER, providerFamily } from "@pibot/protocol";
+import {
+  CHATGPT_PLAN_PROVIDER,
+  MAGPIE_PROVIDER,
+  magpiePort,
+  providerFamily,
+} from "@pibot/protocol";
 import {
   TaskStatus,
   useComboboxText,
@@ -42,7 +47,7 @@ import { RECOMMENDED_ROUTES, RecommendedSetup } from "./RecommendedSetup.tsx";
 import { useModelDirectory } from "./useModelDirectory.ts";
 import styles from "./welcome.module.css";
 
-type Mode = "recommended" | "chatgpt" | "local" | "provider";
+type Mode = "recommended" | "chatgpt" | "local" | "provider" | "magpie";
 const CHATGPT_PLANS = [
   "welcome.model.plan.go",
   "welcome.model.plan.plus",
@@ -114,14 +119,36 @@ export function ModelStep({
   const task = useTask(taskScope);
   const confirmation = useTask(taskScope);
   const directory = useModelDirectory();
-  const { epoch, data: current, loading, failed, ollama, detecting, refresh, detect } = directory;
+  const {
+    epoch,
+    data: current,
+    loading,
+    failed,
+    ollama,
+    magpie,
+    detecting,
+    refresh,
+    detect,
+  } = directory;
   const busy = task.busy || confirmation.busy;
   const isBusy = () => task.isBusy() || confirmation.isBusy();
   const [dirty, setDirty] = useState(false);
   const [pending, setPending] = useState<{ action(): void }>();
   const [localModel, setLocalModel] = useState("");
   const providers = current?.providers ?? [];
-  const catalog = providerCatalog(providers, t("setup.customLabel"), t("models.payAsYouGo"));
+  const magpieDetected = magpie?.running === true;
+  const allCatalog = providerCatalog(providers, t("setup.customLabel"), t("models.payAsYouGo"));
+  const magpieProvider = allCatalog.find(
+    (entry) => entry.id === MAGPIE_PROVIDER.id && entry.available,
+  );
+  const magpieSelected =
+    mode === "magpie" ||
+    (selection?.epoch === epoch &&
+      !!magpieProvider &&
+      selection.identity === providerIdentity(magpieProvider));
+  const catalog = allCatalog.filter(
+    (entry) => entry.id !== MAGPIE_PROVIDER.id || magpieDetected || magpieSelected,
+  );
   const recommended = catalog.find(
     (entry) => entry.id === route.provider && entry.auth === "apiKey" && entry.available,
   );
@@ -132,6 +159,17 @@ export function ModelStep({
   const chatgptOffered = !current || !!plan?.chatgpt?.available;
   const onPlan = plan?.chatgpt?.state === "connected";
   const routes = [
+    ...(magpieDetected && magpieProvider
+      ? [
+          {
+            id: "magpie" as const,
+            label: "models.magpie.welcomeTitle" as const,
+            note: "models.magpie.welcomeNote" as const,
+            mark: { icon: "laptop" as const },
+            tone: "violet" as const,
+          },
+        ]
+      : []),
     {
       id: "recommended" as const,
       label: route.label,
@@ -147,18 +185,26 @@ export function ModelStep({
   const chosen =
     mode === "recommended"
       ? recommended
-      : selection?.epoch === epoch
-        ? catalog.find((entry) => providerIdentity(entry) === selection.identity && entry.available)
-        : undefined;
-  const models = configuredTextModels(providers, current?.models ?? []).filter((entry) =>
-    mode === "local"
-      ? entry.provider === "ollama"
-      : mode === "recommended"
-        ? entry.provider === route.provider
-        : mode === "chatgpt"
-          ? // Only plan models: an OpenAI API key is the 「API Key」 route, not this one.
-            onPlan && entry.provider === CHATGPT_PLAN_PROVIDER
-          : true,
+      : mode === "magpie"
+        ? magpieProvider
+        : selection?.epoch === epoch
+          ? catalog.find(
+              (entry) => providerIdentity(entry) === selection.identity && entry.available,
+            )
+          : undefined;
+  const models = configuredTextModels(providers, current?.models ?? []).filter(
+    (entry) =>
+      (entry.provider !== MAGPIE_PROVIDER.id || magpieDetected || magpieSelected) &&
+      (mode === "local"
+        ? entry.provider === "ollama"
+        : mode === "magpie"
+          ? entry.provider === MAGPIE_PROVIDER.id
+          : mode === "recommended"
+            ? entry.provider === route.provider
+            : mode === "chatgpt"
+              ? // Only plan models: an OpenAI API key is the 「API Key」 route, not this one.
+                onPlan && entry.provider === CHATGPT_PLAN_PROVIDER
+              : true),
   );
   const grouped = groupedProviderCatalog(catalog);
   const chosenTile =
@@ -277,6 +323,18 @@ export function ModelStep({
         )
       )
         throw new SetupError("setup.noModels");
+      if (selected.provider === MAGPIE_PROVIDER.id) {
+        const port = magpiePort(
+          fresh.providers.find((entry) => entry.id === MAGPIE_PROVIDER.id)?.baseUrl ?? "",
+        );
+        if (port === undefined) throw new SetupError("models.magpie.modelsUnavailable");
+        const gateway = await requirePeer(peer).call(
+          "local.detectMagpie",
+          { port },
+          { signal, timeoutMs: 3000 },
+        );
+        if (!gateway.running) throw new SetupError("models.magpie.modelsUnavailable");
+      }
       await choosePiModel(requirePeer(peer), selected.provider, selected.id, signal);
       signal.throwIfAborted();
       if (directory.current()) onContinue();
@@ -344,6 +402,7 @@ export function ModelStep({
             className={styles.route}
             data-checked={mode === card.id || undefined}
             data-disabled={locked || undefined}
+            data-wide={card.id === "magpie" || undefined}
           >
             <IconTile {...card.mark} tone={card.tone} size="lg" className={styles.routeTile} />
             <span className={styles.routeText}>
@@ -368,6 +427,19 @@ export function ModelStep({
         ))}
       </fieldset>
       <div className={styles.routeBody}>
+        {mode === "magpie" && magpieProvider && (
+          <>
+            <ProviderForm
+              key={`${epoch}:${providerIdentity(magpieProvider)}`}
+              provider={magpieProvider}
+              task={formTask}
+              refresh={refreshForm}
+              onDirtyChange={onDirtyChange}
+              compact
+            />
+            {modelPicker}
+          </>
+        )}
         {mode === "recommended" && (
           <RecommendedSetup
             route={route}
@@ -506,9 +578,8 @@ export function ModelStep({
           </>
         )}
       </div>
-      {/* Every online route (recommended keys, ChatGPT sign-in, any provider or custom address)
-          can need a proxy in some regions; a local model never leaves this computer. */}
-      {mode !== "local" && (
+      {/* Online routes can need this proxy; Magpie owns its upstream connection itself. */}
+      {mode !== "local" && !magpieSelected && (
         <ProxyEntry
           failure={
             [task, confirmation].find(

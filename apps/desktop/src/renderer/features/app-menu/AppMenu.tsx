@@ -1,15 +1,18 @@
+import { ChatFontSizeSchema } from "@pibot/protocol";
 import { useNavigation, useRpc, useSettings } from "@pibot/renderer-kit";
 import { Avatar, Button, type IconName, IconTile, SegmentedControl, type Tone } from "@pibot/ui";
-import { useRef, useState } from "react";
-import { menuKeys, useMenuPopover } from "../workspace/profile/use-menu-popover.ts";
+import { useState } from "react";
 import { AboutYouMenuItem } from "./AboutYouMenuItem.tsx";
 import { AppDialog } from "./AppDialog.tsx";
 import { AboutPanel, FeedbackPanel, openWebsite } from "./AppPanels.tsx";
 import { AvatarUpload } from "./AvatarUpload.tsx";
 import styles from "./app-menu.module.css";
+import { ConversationImportDialog } from "./conversation-import/ConversationImportDialog.tsx";
+import { MenuPopover } from "./MenuPopover.tsx";
 import { UpdatesPanel } from "./UpdatesPanel.tsx";
 
 type Panel = "profile" | "about" | "feedback" | "updates";
+type MenuPanel = Panel | "conversation-import";
 /** One colour per destination, shared by the menu tile and its dialog's mark. */
 const marks: Record<Panel, { icon: IconName; tone: Exclude<Tone, "neutral" | "red"> }> = {
   profile: { icon: "user", tone: "violet" },
@@ -22,9 +25,9 @@ export function AppMenu() {
     { peer } = useRpc(),
     { openSettings } = useNavigation();
   const [menu, setMenu] = useState<{ opener: HTMLElement; x: number; y: number }>(),
-    [panel, setPanel] = useState<Panel>(),
+    [panel, setPanel] = useState<MenuPanel>(),
     [failed, setFailed] = useState(false);
-  const show = (next: Panel) => {
+  const show = (next: MenuPanel) => {
     setMenu(undefined);
     setPanel(next);
   };
@@ -96,6 +99,19 @@ export function AppMenu() {
                 onValueChange={(theme) => void update({ theme })}
               />
             </div>
+            <div className={styles.pref}>
+              <span>{t("chatFont.label")}</span>
+              <SegmentedControl
+                label={t("chatFont.label")}
+                disabled={!peer}
+                value={settings?.chatFontSize ?? "medium"}
+                options={ChatFontSizeSchema.options.map((value) => ({
+                  value,
+                  label: t(`chatFont.${value}`),
+                }))}
+                onValueChange={(chatFontSize) => void update({ chatFontSize })}
+              />
+            </div>
           </div>
           <div className={styles.separator} />
           <Button
@@ -124,6 +140,15 @@ export function AppMenu() {
             {t("appMenu.website")}
           </Button>
           <AboutYouMenuItem close={() => setMenu(undefined)} />
+          <Button
+            variant="ghost"
+            role="menuitem"
+            disabled={!peer}
+            onClick={() => show("conversation-import")}
+          >
+            <IconTile icon="download" tone="teal" size="sm" />
+            {t("conversationImport.title")}
+          </Button>
           <Button variant="ghost" role="menuitem" onClick={() => show("about")}>
             <IconTile icon="info" tone="violet" size="sm" />
             {t("appMenu.about")}
@@ -144,7 +169,11 @@ export function AppMenu() {
           )}
         </MenuPopover>
       )}
-      {panel && (
+      <ConversationImportDialog
+        open={panel === "conversation-import"}
+        close={() => setPanel(undefined)}
+      />
+      {panel && panel !== "conversation-import" && (
         <AppDialog
           title={t(`appMenu.${panel}`)}
           mark={panel === "profile" ? undefined : marks[panel]}
@@ -171,32 +200,5 @@ export function AppMenu() {
         </AppDialog>
       )}
     </>
-  );
-}
-function MenuPopover({
-  opener,
-  x,
-  y,
-  close,
-  children,
-}: {
-  opener: HTMLElement;
-  x: number;
-  y: number;
-  close(): void;
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useMenuPopover(ref, opener, x, y, close);
-  return (
-    <div
-      ref={ref}
-      popover="manual"
-      role="menu"
-      className={styles.menu}
-      onKeyDown={(event) => menuKeys(event, close)}
-    >
-      {children}
-    </div>
   );
 }

@@ -36,6 +36,7 @@ import { messageScope } from "../../conversations/chat/read-messages.ts";
 import { abortable } from "../../core/abort.ts";
 import { auditText } from "../../core/audit-fields.ts";
 import type { PreparedTool, ToolRunContext } from "../../core/local-types.ts";
+import { mainDirectRun } from "../../core/main-direct.ts";
 import {
   explainRunScope,
   runPermissionScope,
@@ -133,6 +134,7 @@ export function toolFingerprint(prepared: PreparedTool, authorization = prepared
     prepared.secretUses,
     prepared.browserSecretUses,
     prepared.memorySafety,
+    prepared.projectNotesWrite,
     gitConfigurationFingerprint(prepared.gitConfiguration),
     gitHookFingerprint(prepared.gitHook),
     gitEntriesFingerprint(prepared.gitEntries),
@@ -141,7 +143,7 @@ export function toolFingerprint(prepared: PreparedTool, authorization = prepared
     prepared.call.tool,
     createHash("sha256").update(JSON.stringify(prepared.call.input)).digest("hex"),
     result.facts,
-    prepared.settings,
+    withoutPiLevels(prepared.settings),
     result.path?.path,
     result.command,
     result.commandHome,
@@ -211,8 +213,12 @@ async function prepareToolCurrent(
   await local.endpoints?.prepare?.(input.tool, context, signal);
   local.endpoints?.check(input.tool, context);
   const primary = workplace.boundary.roots.find((root) => root.role === "primary");
+  const projectChange = context.projectNotesChange;
+  if (projectChange && (call.id !== projectChange.callId || input.tool !== "write_file"))
+    throw new RpcError(RpcErrorCodes.invalidParams, "project_notes_invalid");
   const projectEdit =
-    input.tool === "project_notes" ? projectNotesEdit(input.args, context.language) : undefined;
+    projectChange ??
+    (input.tool === "project_notes" ? projectNotesEdit(input.args, context.language) : undefined);
   if (projectEdit && (!primary || workplace.boundary.location?.target.startsWith("acp:")))
     throw new RpcError(RpcErrorCodes.unsupported, "project_notes_unsupported");
   const projectPath =
@@ -674,15 +680,20 @@ async function prepareToolCurrent(
                                   submit: true,
                                   localPorts: local.background.ports(context.botId),
                                 }
-                              : policyRequest(
-                                  input,
-                                  local.deps.capabilityTools,
-                                  browserUrl,
-                                  login?.site,
-                                  // Read at judging time, so a stopped command's port is refused.
-                                  local.background.ports(context.botId),
-                                  // Installed native converters change whether the call writes a file.
-                                  { platform: local.deps.platform, env: local.deps.env },
+                              : withMainDirect(
+                                  local,
+                                  context,
+                                  input.tool,
+                                  policyRequest(
+                                    input,
+                                    local.deps.capabilityTools,
+                                    browserUrl,
+                                    login?.site,
+                                    // Read at judging time, so a stopped command's port is refused.
+                                    local.background.ports(context.botId),
+                                    // Installed native converters change whether the call writes a file.
+                                    { platform: local.deps.platform, env: local.deps.env },
+                                  ),
                                 )),
                   ),
                   ...(memoryFacts
@@ -996,6 +1007,7 @@ async function prepareToolCurrent(
     browserSecretUses.length,
   );
   return {
+    ...(projectChange ? { projectNotesWrite: { expectedHash: projectChange.expectedHash } } : {}),
     ...(browserSecretUses.length ? { browserSecretUses } : {}),
     ...(gitConfiguration ? { gitConfiguration } : {}),
     ...(gitHook ? { gitHook } : {}),
@@ -1145,9 +1157,11 @@ export function authorizationSnapshot(
     new BotsRepo(local.deps.db).get(botId)?.archivedAt ?? null,
     new BotsRepo(local.deps.db).get(botId)?.memoryMode ?? "auto",
     searchSnapshot,
-    context
-      ? local.tasks.settings(context, runPermissions(local, context))
-      : local.permissions.effective(botId),
+    withoutPiLevels(
+      context
+        ? local.tasks.settings(context, runPermissions(local, context))
+        : local.permissions.effective(botId),
+    ),
     workplaceAuthorization(local, botId, context),
     local.grants(botId, context),
     // Package assignment changes invalidate prepared local calls; roots never become grants.
@@ -1183,4 +1197,35 @@ function topicAuthorization(local: LocalService, context: ToolRunContext) {
   const snapshot = topicWorkplaceSnapshot(local, context);
   // Leave untouched legacy topics compatible; a bind/unbind revision still invalidates old consent.
   return snapshot && (snapshot.folderId !== null || snapshot.revision > 0) ? [snapshot] : [];
+}
+
+/**
+ * The default Pi's tools carry the kernel's own answer to "is this Pi's direct chat, typed by the
+ * person here"; the capability's constant request cannot set it, so policy refuses without it.
+ */
+function withMainDirect(
+  local: LocalService,
+  context: ToolRunContext,
+  tool: string,
+  request: PolicyRequest,
+): PolicyRequest {
+  if (!local.deps.capabilityTools.specs[tool]?.mainBotOnly) return request;
+  if (request.category !== "bot_management" && request.category !== "work_dispatch")
+    throw new Error("Main-only tool without a Pi manager category");
+  return { ...request, mainDirect: mainDirectRun(local, context) };
+}
+
+/**
+ * The default Pi's two levels stay out of the "did authorization change while the card was open"
+ * snapshot: the card's own "don't ask again" sets one of them, which must not void the very call
+ * it approved. A level lowered to never is still caught: policy judges the call again on allow.
+ */
+function withoutPiLevels<T>(settings: T): T {
+  if (!settings || typeof settings !== "object" || !("levels" in settings)) return settings;
+  const {
+    bot_management: _manage,
+    work_dispatch: _dispatch,
+    ...levels
+  } = (settings as { levels: Record<string, unknown> }).levels;
+  return { ...settings, levels } as T;
 }

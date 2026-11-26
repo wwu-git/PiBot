@@ -104,6 +104,26 @@ export async function registerNativeManifest(options: {
   return true;
 }
 
+/** The launcher an existing manifest starts, if it is ours and readable. */
+export async function nativeManifestLauncher(options: {
+  platform: NodeJS.Platform;
+  home: string;
+  browser: NativeBrowser;
+}): Promise<string | undefined> {
+  const path = nativeManifestPath(options.platform, options.home, options.browser);
+  try {
+    const value: unknown = JSON.parse(await readFile(path, "utf8"));
+    if (!value || typeof value !== "object") return undefined;
+    const manifest = value as { name?: unknown; path?: unknown };
+    return manifest.name === NATIVE_HOST_NAME && typeof manifest.path === "string"
+      ? manifest.path
+      : undefined;
+  } catch {
+    // Missing or unreadable: no other Pi Bot's launcher to protect.
+    return undefined;
+  }
+}
+
 export async function revokeNativeManifest(options: {
   platform: NodeJS.Platform;
   home: string;

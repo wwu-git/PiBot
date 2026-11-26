@@ -6,6 +6,8 @@ export const independentBackgroundZh = {
   "background.startupTimeout": "后台服务启动超时。电脑负载高时会慢一些，可以重试。",
   "background.startupSecurityTimeout":
     "后台安全检查超时。可以重试；仍然失败时请导出日志并联系开发者。",
+  "background.startupWindowsListenerUnverified":
+    "Windows 无法确认本机后台服务的监听端口属于 Pi Bot。可以在 Windows 更新中检查累积更新，安装后再试。如果仍然失败，请将下方目录中的启动日志片段脱敏后，连同 Windows 内部版本号发给开发者。\n{logsFolder}",
   "background.startupOldVersion": "旧版本的 Pi Bot 还在运行。请先完全退出旧版本，再重试。",
   "background.startupDataFolderUnsafe":
     "Pi Bot 的数据文件夹可以被这台电脑上的其他账户修改，为了安全没有启动后台服务。请使用默认数据位置（你自己的用户文件夹），或收紧这个文件夹的权限后重试。",
@@ -77,6 +79,8 @@ export const independentBackgroundEn = {
     "The background service took too long to start. A busy computer makes this slower; you can retry.",
   "background.startupSecurityTimeout":
     "The background security check timed out. Retry; if it keeps failing, export the logs and contact the developer.",
+  "background.startupWindowsListenerUnverified":
+    "Windows couldn’t verify that Pi Bot owns the local listener for its background service. Check Windows Update for a cumulative update and retry after installing it. If it still fails, send the developer a redacted excerpt from the startup logs below and your Windows build number.\n{logsFolder}",
   "background.startupOldVersion":
     "An older version of Pi Bot is still running. Quit it completely, then retry.",
   "background.startupDataFolderUnsafe":

@@ -1,6 +1,6 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { LocalToolPorts } from "../core/types.ts";
+import type { LocalToolDefinition, LocalToolPorts } from "../core/types.ts";
 import { redactedToolText } from "./redacted-tool-text.ts";
 import type { ToolLoadout } from "./tool-loadout.ts";
 
@@ -13,9 +13,12 @@ export function pibotAppsExtension(
   ports: LocalToolPorts,
   permits: Map<string, string>,
   loadout?: ToolLoadout,
+  registration?: readonly LocalToolDefinition[],
 ): ExtensionFactory {
   return (pi) => {
-    for (const tool of ports.definitions.filter((definition) => isConnectorTool(definition.name))) {
+    for (const tool of (registration ?? ports.definitions).filter((definition) =>
+      isConnectorTool(definition.name),
+    )) {
       pi.registerTool({
         name: tool.name,
         label: tool.name,

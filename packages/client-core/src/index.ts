@@ -28,6 +28,7 @@ export { providerFailureText } from "./chat/provider-failure.ts";
 export { ChatReadCache, chatReadCache, disposeChatReads } from "./chat/read-cache.ts";
 export { replyCitationText } from "./chat/reply-citations.ts";
 export { appendReplyDelta, preserveLiveReply } from "./chat/reply-delta.ts";
+export { type ReplyReceiptPosition, replyReceiptPositions } from "./chat/reply-receipts.ts";
 export { messageShownText, routineTriggerText } from "./chat/routine-trigger-text.ts";
 export { activeRun, currentImageModel, retryText } from "./chat/selectors.ts";
 export { silentWake } from "./chat/silent-wake.ts";

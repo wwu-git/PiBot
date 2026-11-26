@@ -1,3 +1,4 @@
+// Expose the execution adapters and shared host path helpers.
 export { agentBridgeSocketPath } from "./agents/agent-bridge-path.ts";
 export {
   AGENT_PLACEHOLDER_PATHS,
@@ -54,6 +55,12 @@ export {
 export * from "./core/file-identity.ts";
 export { canonicalPath, owningWriteRoot } from "./core/paths.ts";
 export * from "./core/types.ts";
+export {
+  windowsProgramFiles,
+  windowsSystemDrive,
+  windowsSystemRoot,
+  windowsSystemTrees,
+} from "./core/windows-environment.ts";
 export {
   type WindowsPathName,
   windowsHostNames,

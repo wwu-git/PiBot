@@ -1,3 +1,4 @@
+// Owns a chat run from model dispatch to the committed reply and terminal event.
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -88,6 +89,7 @@ import { resolveWorkflowFolder, type WorkflowFolder } from "../workflows/workflo
 import { workflowPipeline } from "../workflows/workflow-pipeline.ts";
 import type { WorkflowRun } from "../workflows/workflow-prepare.ts";
 import { workflowSkillText, workflowSystemBlock } from "../workflows/workflow-text.ts";
+import { chatMemoryRecall } from "./chat-memory-recall.ts";
 import { routineTopicReference } from "./routine-topic-reference.ts";
 import { abortRun } from "./run-queue-shared.ts";
 import { runStateFacts } from "./run-state-facts.ts";
@@ -397,6 +399,16 @@ export async function generateRun(
   let workplace: string | undefined;
   // Ids of memory notes injected into this run's prompts, listed on its receipt.
   const usedMemoryIds = new Set<string>();
+  const recall = chatMemoryRecall(deps.local?.memory, run.runId, run.signal, () =>
+    deps.logger.warn(
+      JSON.stringify({
+        module: "memory",
+        event: "recall_measurement_failed",
+        runId: run.runId,
+        botId: run.botId,
+      }),
+    ),
+  );
   const backgroundRequests = new Set<string>();
   let loggedCatalog: string | undefined;
   let stalledCompaction = false;
@@ -638,7 +650,7 @@ export async function generateRun(
         : childTier
           ? { modelTier: childTier }
           : {}),
-      ...(tools ? { localTools: tools.ports } : {}),
+      ...(tools ? { localTools: recall.tools(tools.ports) } : {}),
       // Only this Bot's enabled skills, read fresh for every run (no disk discovery).
       ...(tools && local
         ? {
@@ -652,6 +664,7 @@ export async function generateRun(
       ...(local
         ? {
             requestObserver: {
+              metrics: local.budgets.observer(toolContext).metrics,
               beforeRequest: (request) => {
                 if (
                   request.kind === "response" &&
@@ -865,12 +878,16 @@ export async function generateRun(
                   memory: resourceGroupId
                     ? local.groupMemory.prompt(resourceGroupId, bot.id, {
                         query: memoryQuery,
+                        runId: run.runId,
+                        runSignal: run.signal,
                         signal,
                         project: memoryProjectPath(toolContext),
                         onUsed: rememberUsed,
                       })
                     : local.memory.prompt(bot.id, {
                         query: memoryQuery,
+                        runId: run.runId,
+                        runSignal: run.signal,
                         signal,
                         project: memoryProjectPath(toolContext),
                         onUsed: rememberUsed,
@@ -946,12 +963,16 @@ export async function generateRun(
                         memory: resourceGroupId
                           ? local.groupMemory.prompt(resourceGroupId, bot.id, {
                               query: memoryQuery,
+                              runId: run.runId,
+                              runSignal: run.signal,
                               signal,
                               project: memoryProjectPath(toolContext),
                               onUsed: rememberUsed,
                             })
                           : local.memory.prompt(bot.id, {
                               query: memoryQuery,
+                              runId: run.runId,
+                              runSignal: run.signal,
                               signal,
                               project: memoryProjectPath(toolContext),
                               onUsed: rememberUsed,
@@ -1056,6 +1077,8 @@ export async function generateRun(
         return;
       }
       if (run.aborted || run.signal.aborted) return;
+      if (event.type === "delta") recall.observe({ kind: "reply", text: event.text });
+      if (event.type === "replyStart") recall.observe({ kind: "replyEnd" });
       replies.event(event);
     };
     type PromptValue = Awaited<ReturnType<BotSession["prompt"]>>;
@@ -1434,6 +1457,11 @@ export async function generateRun(
               result.calledTools,
             );
     });
+    // Queue before publishing done so a new topic can wait for an already visible correction.
+    if (result.stopReason === "stop" && !run.executionTaskId && !run.routine && !run.threadId) {
+      const sourceId = runs.get(run.runId)?.userMessageId;
+      if (sourceId) deps.local?.memoryExtraction?.correction(conversationId, sourceId);
+    }
     replies.publishUpdates(updates);
     deps.peer.emit("inbox.changed", {});
     completed?.();
@@ -1486,11 +1514,27 @@ export async function generateRun(
     if ((stalledCompaction || questionPause) && !cancelled) {
       replies.flush();
       let pause = questionPause;
+      // A group step that stops here is told apart from one that simply did not finish, so its
+      // card can say what did not fit and offer a narrower retry.
+      let stopped: { observation: "compaction_no_progress"; reads?: string } | undefined;
       if (!pause) {
         abortRun(run, { code: "compaction_no_progress" });
         const reading = deps.redactor
           .redact((toolContext.compactionProgress?.reads ?? []).join(", "))
           .slice(0, 300);
+        // File names, not absolute paths: the card has one line for them (PROGRESS.md, CODEMAP.md).
+        const names = deps.redactor
+          .redact(
+            [
+              ...new Set(
+                (toolContext.compactionProgress?.reads ?? []).map(
+                  (path) => path.split(/[\\/]/).at(-1) || path,
+                ),
+              ),
+            ].join(", "),
+          )
+          .slice(0, 300);
+        stopped = { observation: "compaction_no_progress", ...(names ? { reads: names } : {}) };
         pause = {
           reason: "blocked",
           summary:
@@ -1510,7 +1554,7 @@ export async function generateRun(
           }),
         );
       deps.local?.noteParentContinuation(toolContext);
-      replies.pause(pause);
+      replies.pause({ ...pause, ...stopped });
       tools?.finish();
       const updates = transaction(deps.db, () => {
         const updates = replies.finish("done", {
@@ -1606,6 +1650,7 @@ export async function generateRun(
       `Chat ${run.runId} ${code}${status ? ` status=${status}` : ""}${budgetReason ? ` budget=${budgetReason}` : ""} model=${bot.modelProvider ?? "?"}/${bot.modelId ?? "?"}`,
     );
   } finally {
+    recall.finish();
     deps.local?.background.continuation.releaseProjection(run.runId);
     clearInterval(timer);
     replies.interruptAdditions();

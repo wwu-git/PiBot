@@ -469,11 +469,14 @@ export class RunsRepo {
   }
 
   private appendMessageFinalized(run: Run, at: string) {
+    // Recovery settles the run's reply, even when attachment pages were inserted after it.
     const message = this.db
-      .prepare(
-        "SELECT id,role,content,status,error_code AS errorCode,length(CAST(content AS BLOB)) AS contentLength FROM messages WHERE run_id=? AND status<>'streaming' ORDER BY rowid DESC LIMIT 1",
-      )
-      .get(run.id);
+      .prepare(`SELECT id,role,content,status,error_code AS errorCode,
+        length(CAST(content AS BLOB)) AS contentLength FROM messages
+        WHERE run_id=? AND status<>'streaming'
+        AND json_extract(usage,'$.attachmentContinuationOf') IS NULL
+        ORDER BY id=? DESC, rowid DESC LIMIT 1`)
+      .get(run.id, run.messageId);
     if (!message) return;
     new RunEventsRepo(this.db).append({
       runId: run.id,

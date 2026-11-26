@@ -123,6 +123,8 @@ export async function handoffStep(
     // A derived fetch must not discard another run's pages or wake its sleeping tabs.
     if (temporary && (this.tabs.size || this.sleeping)) throw busy("browser_resource_busy");
     this.rules = undefined;
+    await this.privateTransport.revoke();
+    this.proxyKey = undefined;
     this.closePages("remember");
     await this.downloads.cancelActive();
     await this.session.closeAllConnections();
@@ -135,8 +137,16 @@ export async function quiesceStep(this: BotBrowserOperations, runId: string): Pr
   let owned = this.activeRunId === runId;
   const retire = () => {
     this.activeRunId = undefined;
+    void this.privateTransport.revoke();
+    this.proxyKey = undefined;
     if (this.rules)
-      this.rules = { ...this.rules, runId: undefined, readRoots: [], downloadsDir: null };
+      this.rules = {
+        ...this.rules,
+        runId: undefined,
+        readRoots: [],
+        downloadsDir: null,
+        privateOrigins: [],
+      };
   };
   if (owned) retire();
   await this.serial(async () => {
@@ -194,6 +204,7 @@ export function closePagesStep(
 /** `remember`: the brain went away (standby, restart), so the pages come back on next use. */
 export function disposeStep(this: BotBrowserOperations, mode: "remember" | "keep" = "keep"): void {
   if (this.disposed) return;
+  void this.privateTransport.revoke();
   this.keyframes?.dispose();
   this.keyframes = undefined;
   this.recording.stop();

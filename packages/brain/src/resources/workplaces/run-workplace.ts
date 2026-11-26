@@ -1,6 +1,6 @@
 import { lstat } from "node:fs/promises";
 import { AgentError, type AgentErrorCode } from "@pibot/agent";
-import { ExecError } from "@pibot/execution";
+import { directoryIdentity, ExecError } from "@pibot/execution";
 import {
   type ResolvedWorkplace,
   RpcError,
@@ -33,6 +33,22 @@ export async function resolveRunWorkplace(
   context: ToolRunContext,
   parent: AbortSignal,
 ): Promise<ResolvedWorkplace> {
+  if (context.projectNotesChange) {
+    parent.throwIfAborted();
+    await context.projectNotesChange.assertSource?.(parent);
+    const workplace = context.projectNotesChange.workplace;
+    const root = workplace.boundary.roots[0];
+    if (!root) throw new RpcError(-32602, "workspace_boundary_changed");
+    const current = await directoryIdentity(root.canonicalPath);
+    parent.throwIfAborted();
+    if (
+      current.canonicalPath !== root.canonicalPath ||
+      current.device !== root.device ||
+      current.inode !== root.inode
+    )
+      throw new RpcError(-32602, "workspace_boundary_changed");
+    return workplace;
+  }
   if (local.tasks.hasAuthority(context)) return local.tasks.workplace(context, parent);
   const signal = AbortSignal.any([parent, local.shutdown.signal, AbortSignal.timeout(20_000)]);
   const topic = topicWorkplaceSnapshot(local, context);

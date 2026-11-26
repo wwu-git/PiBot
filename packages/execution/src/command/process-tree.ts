@@ -21,6 +21,26 @@ const POLL_BLIND_MS = 6_000;
 /** .NET ticks (100 ns since 0001-01-01) of the Unix epoch, the unit of Windows CreationDate. */
 const EPOCH_TICKS = 621355968000000000n;
 
+// Loading the CIM cmdlets on every scan can exceed the cleanup deadline on Windows.
+const WINDOWS_SNAPSHOT_SCRIPT = [
+  "$ErrorActionPreference='Stop';",
+  "$searcher=[Management.ManagementObjectSearcher]::new('root\\cimv2','SELECT ProcessId,ParentProcessId,CreationDate FROM Win32_Process');",
+  "try {",
+  "  $rows=$searcher.Get();",
+  "  try {",
+  "    foreach ($row in $rows) {",
+  "      try {",
+  "        $created=$row.CreationDate;",
+  "        if ($created) {",
+  "          $started=[Management.ManagementDateTimeConverter]::ToDateTime($created).ToUniversalTime().Ticks;",
+  "          '{0} {1} 0 {2}' -f $row.ProcessId,$row.ParentProcessId,$started",
+  "        }",
+  "      } finally { $row.Dispose() }",
+  "    }",
+  "  } finally { $rows.Dispose() }",
+  "} finally { $searcher.Dispose() }",
+].join(" ");
+
 function ticks(value: string | undefined) {
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
   return BigInt(value);
@@ -35,13 +55,7 @@ export async function snapshot(
   return new Promise((resolve, reject) => {
     const windows = platform === "win32";
     const args = windows
-      ? [
-          "-NoLogo",
-          "-NoProfile",
-          "-NonInteractive",
-          "-Command",
-          "$ErrorActionPreference='Stop'; Get-CimInstance -Query 'SELECT ProcessId,ParentProcessId,CreationDate FROM Win32_Process' | ForEach-Object { if ($_.CreationDate) { '{0} {1} 0 {2}' -f $_.ProcessId,$_.ParentProcessId,$_.CreationDate.ToUniversalTime().Ticks } }",
-        ]
+      ? ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_SNAPSHOT_SCRIPT]
       : ["-A", "-o", "pid=,ppid=,pgid=,lstart="];
     const ps = spawn(windows ? (env.SHELL as string) : "/bin/ps", args, {
       env,

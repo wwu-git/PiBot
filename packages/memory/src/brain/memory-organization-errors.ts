@@ -1,7 +1,10 @@
+// Classifies organization failures without exposing diagnostic text.
 import { AgentErrorCodeSchema } from "@pibot/protocol-base";
 
 /** SQLite diagnostics may contain identifiers or content; only fixed classifications leave here. */
 export function organizationErrorDetails(error: unknown) {
+  if (error instanceof Error && ["ZodError", "SyntaxError", "TypeError"].includes(error.name))
+    return { error: "draft_invalid" };
   const value = error as { code?: unknown; errcode?: unknown; message?: unknown } | null;
   if (value?.code !== "ERR_SQLITE_ERROR") {
     const parsed = AgentErrorCodeSchema.safeParse(value?.code);

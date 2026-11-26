@@ -19,7 +19,10 @@ export function registerUserQuestionRpc(
   const pending = new Set<string>();
   handle(
     "execution.question.answer",
-    async ({ messageId, reply }: KernelMethodParams["execution.question.answer"], { signal }) => {
+    async (
+      { messageId, reply }: KernelMethodParams["execution.question.answer"],
+      { signal, source, phone },
+    ) => {
       if (await local.collaboration?.answerPlanLimit?.(messageId, reply, signal))
         return { ok: true as const };
       const read = () => readUserQuestion(local, messageId);
@@ -114,6 +117,8 @@ export function registerUserQuestionRpc(
               assertCurrent();
             },
             continuationSignal,
+            // The person's own answer, from where they gave it (the default Pi's tools follow it).
+            { inputOrigin: source === "acp" ? "acp" : phone ? "phone" : "user" },
           );
         local.deps.peer.emit("inbox.changed", {});
         local.deps.peer.emit("execution.question.answered", {

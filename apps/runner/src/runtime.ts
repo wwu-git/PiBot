@@ -1,3 +1,4 @@
+// Assemble the runner with boundaries from the machine that owns its files.
 import { mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -5,6 +6,7 @@ import {
   createLocalExecutionTarget,
   type ExecOptions,
   type IsolationStatus,
+  windowsSystemTrees,
 } from "@pibot/execution";
 import { UnsafeSandboxEnvironmentError } from "@pibot/execution/host-environment";
 import { base64url } from "@pibot/link";
@@ -196,7 +198,11 @@ export async function runRunner(options: {
       appVersion: typeof __PIBOT_RUNNER_VERSION__ === "string" ? __PIBOT_RUNNER_VERSION__ : "0.0.0",
       platform: process.platform,
       target,
-      commandProtectionRoots: [resolve(options.dataDir), await realpath(options.dataDir)],
+      commandProtectionRoots: [
+        resolve(options.dataDir),
+        await realpath(options.dataDir),
+        ...(process.platform === "win32" ? windowsSystemTrees(process.env) : []),
+      ],
       journal,
       jobs,
       registerSecrets: options.redactor.register,

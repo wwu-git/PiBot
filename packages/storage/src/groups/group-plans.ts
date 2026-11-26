@@ -31,6 +31,15 @@ export class GroupPlansRepo {
       .get(conversationId, cycleId);
     return row ? this.get(String(row.id)) : undefined;
   }
+  /** The card a plan was started from, by the card's own id, within the conversation it was posted in. */
+  byCardId(conversationId: string, cardId: string) {
+    const row = this.db
+      .prepare(`SELECT id FROM messages WHERE conversation_id=?
+      AND json_extract(usage,'$.groupPlan.id')=?
+      ORDER BY rowid DESC LIMIT 1`)
+      .get(conversationId, cardId);
+    return row ? this.get(String(row.id)) : undefined;
+  }
   forVerification(conversationId: string, cycleId: string, sourceRunId: string) {
     const row = this.db
       .prepare(`SELECT id FROM messages WHERE conversation_id=?

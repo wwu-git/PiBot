@@ -68,6 +68,36 @@ export function absoluteFeed(feed: UpdateFeed, version: string): UpdateFeed {
   return { top: feed.top.map(absolute), files: feed.files.map((file) => file.map(absolute)) };
 }
 
+/** This version's manifests in a packaging output folder, by file name. */
+export async function readUpdateFeeds(directory: string, version: string) {
+  const feeds = new Map<string, UpdateFeed>();
+  for (const name of await readdir(directory).catch(() => [] as string[])) {
+    if (!FEED_FILE.test(name)) continue;
+    const feed = parseFeed(await readFile(join(directory, name), "utf8"));
+    if (feedValue(feed.top, "version") === version) feeds.set(name, feed);
+  }
+  return feeds;
+}
+
+/**
+ * A second builder run into the same folder rewrites each manifest with only its own files.
+ * Puts the earlier run's files (and top-level keys, which name its main installer) back first.
+ */
+export async function restoreUpdateFeeds(
+  directory: string,
+  version: string,
+  earlier: Map<string, UpdateFeed>,
+) {
+  const later = await readUpdateFeeds(directory, version);
+  for (const [name, first] of earlier) {
+    const files = [...first.files];
+    for (const file of later.get(name)?.files ?? [])
+      if (!files.some((known) => feedValue(known, "url") === feedValue(file, "url")))
+        files.push(file);
+    await writeFile(join(directory, name), formatFeed({ top: first.top, files }));
+  }
+}
+
 /** Rewrites every manifest builder left in a packaging output folder; returns their paths. */
 export async function rewriteUpdateFeeds(directory: string, version: string) {
   const written: string[] = [];

@@ -37,6 +37,8 @@ export const CATEGORY_LOOK: Record<Category, [IconName, Tone]> = {
   send_out: ["send", "violet"],
   web: ["globe", "green"],
   agent_delegation: ["bot", "teal"],
+  bot_management: ["users", "violet"],
+  work_dispatch: ["arrow", "blue"],
 };
 
 export function LevelRow({

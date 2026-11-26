@@ -1,8 +1,10 @@
+// Renders one group message without re-rendering the full streaming conversation.
 import { type ChatPeer, silentWake } from "@pibot/client-core";
 import {
   GroupExecutionReceiptSchema,
   GroupWorkflowDecisionSchema,
   type Message,
+  memoryNoted,
 } from "@pibot/protocol";
 import { useT } from "@pibot/renderer-kit";
 import { Button } from "@pibot/ui";
@@ -12,6 +14,7 @@ import { ChatMessage } from "../../chat/messages/ChatMessage.tsx";
 import { MessageTime } from "../../chat/messages/MessageTime.tsx";
 import type { ActivityState } from "../../chat/tools/local-activity.ts";
 import { GroupExecutionFact } from "../../receipt/GroupExecutionFact.tsx";
+import { CorrectionMemoryNotice } from "../../workspace/memory/CorrectionMemoryNotice.tsx";
 import type { GroupSnapshot } from "../data.ts";
 import { assignmentPresentation, GroupAssignments } from "../tasks/Assignments.tsx";
 import { GroupPlanCard } from "../tasks/GroupPlanCard.tsx";
@@ -243,6 +246,9 @@ export const GroupMessageRow = memo(function GroupMessageRow({
           { name },
         )}
       />
+      {!thread && message.botId && memoryNoted(message.usage)?.length ? (
+        <CorrectionMemoryNotice peer={peer} botId={message.botId} message={message} />
+      ) : null}
     </>
   );
 });

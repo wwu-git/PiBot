@@ -398,6 +398,21 @@ export class BotService {
       return { ok: true as const };
     });
   }
+  async topicMetadata({ botId, topicId }: KernelMethodParams["topics.metadata"]) {
+    this.active(botId);
+    this.shutdown.signal.throwIfAborted();
+    const topic = this.conversations.get(topicId);
+    if (
+      topic?.kind !== "dm" ||
+      topic.botId !== botId ||
+      topic.archivedAt ||
+      this.conversations.isInternal(topicId)
+    )
+      return null;
+    const { title, routineId, importSource, readOnly } = topic;
+    return { title, routineId, importSource, readOnly: !!readOnly };
+  }
+
   async topics(params: KernelMethodParams["topics.list"]) {
     this.active(params.botId);
     this.shutdown.signal.throwIfAborted();
@@ -442,6 +457,11 @@ export class BotService {
     return topic;
   }
   start() {
+    const repaired = new SidebarRepo(this.deps.db).repairMissing();
+    if (repaired)
+      this.deps.logger.info(
+        JSON.stringify({ module: "bots", event: "sidebar_rows_repaired", count: repaired }),
+      );
     return this.cleanup.start();
   }
   async stop() {

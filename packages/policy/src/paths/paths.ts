@@ -1,3 +1,4 @@
+// Resolve policy paths without erasing the filesystem identities they refer to.
 import { lstat, opendir, readFile, realpath, stat } from "node:fs/promises";
 import { posix, win32 } from "node:path";
 import { SCRIPT_MAX_BYTES } from "../commands/scripts.ts";
@@ -173,7 +174,7 @@ export async function canonicalPath(
 ): Promise<{ path: string; exists: boolean }> {
   const api = pathApi(context.platform);
   const expanded = expandHome(value, context.home);
-  if (context.platform === "win32" && /^[a-z]:[^\\/]/i.test(expanded))
+  if (context.platform === "win32" && /^[a-z]:(?![\\/])/i.test(expanded))
     throw new PolicyTargetError("path_resolution_failed");
   const absolute = api.isAbsolute(expanded) ? expanded : `${context.cwd}${api.sep}${expanded}`;
   const root = api.parse(absolute).root;

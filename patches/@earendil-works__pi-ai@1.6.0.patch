@@ -1,0 +1,310 @@
+diff --git a/dist/auth/oauth/openai-chatgpt.js b/dist/auth/oauth/openai-chatgpt.js
+--- a/dist/auth/oauth/openai-chatgpt.js
++++ b/dist/auth/oauth/openai-chatgpt.js
+@@ -77,6 +77,10 @@
+                     sendHtml(response, 404, oauthErrorHtml("Callback route not found."));
+                     return;
+                 }
++                if (request.method !== "GET" || url.searchParams.get("state") !== expectedState) {
++                    sendHtml(response, 400, oauthErrorHtml("State mismatch."));
++                    return;
++                }
+                 const error = url.searchParams.get("error");
+                 if (error) {
+                     sendHtml(response, 400, oauthErrorHtml("ChatGPT was not connected.", `Error: ${error}`));
+diff --git a/dist/utils/oauth-page.js b/dist/utils/oauth-page.js
+--- a/dist/utils/oauth-page.js
++++ b/dist/utils/oauth-page.js
+@@ -1,4 +1,25 @@
+-const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" aria-hidden="true"><path fill="#F09082" d="M165.29 165.29H517.36V400H400V282.65H165.29Z"/><path fill="#4D9ABF" d="M165.29 282.65H282.65V400H400V517.36H282.65V634.72H165.29Z"/><path fill="#F1BE58" d="M517.36 400H634.72V634.72H517.36Z"/></svg>`;
++// Pi Bot patch: the callback page is shown by Pi Bot's sign-in flow, so it uses Pi
++// Bot's mascot, follows the system language and theme, strips the authorization code from the
++// URL and links back to the app through pibot:// (only brings its window to the front).
++const MASCOT = (color, eyes) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 6 C80 6 94 20 94 50 C94 80 80 94 50 94 C20 94 6 80 6 50 C6 20 20 6 50 6 Z" fill="${color}" stroke="${color}" stroke-width="6" stroke-linejoin="round"/><path d="M39 35 L35 47 M61 35 L65 47" fill="none" stroke="${eyes}" stroke-width="7" stroke-linecap="round"/></svg>`;
++// Decoration only: a few teammates in Pi Bot's avatar colours around the card.
++const TEAM = [
++    ["#FF6700", "t1"],
++    ["#1084FE", "t2"],
++    ["#00A693", "t3"],
++    ["#FF309B", "t4"],
++    ["#FFA826", "t5"],
++];
++const CHECK = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
++const BANG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5v7M12 17.5h.01" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/></svg>`;
++const ICON = {
++    lock: "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5Z",
++    arrow: "M4 12h16M14 6l6 6-6 6",
++    chat: "M4 5h16v11H9l-5 4Z",
++    refresh: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7",
++    key: "M14 10a4 4 0 1 0-4 4l1 1h2v2h2v2h3v-3l-4-4",
++    globe: "M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17",
++};
+ function escapeHtml(value) {
+     return value
+         .replaceAll("&", "&amp;")
+@@ -7,27 +28,73 @@
+         .replaceAll('"', "&quot;")
+         .replaceAll("'", "&#39;");
+ }
++/** The provider named in pi's own message ("Signed in to OpenAI. …", "ChatGPT …"). */
++function providerOf(message) {
++    if (/^ChatGPT\b/.test(message))
++        return "ChatGPT";
++    const match = /^(?:Signed in to (.{1,60}?)\.|(.{1,60}?) (?:authorization|sign-in) failed\.)/.exec(message);
++    return match ? (match[1] ?? match[2]) : undefined;
++}
++// pi's fixed error texts that need a Chinese line; anything else falls back to a generic one.
++const ZH_ERRORS = {
++    "State mismatch.": "登录状态对不上，可能打开的是旧的登录页。",
++    "This sign-in has already been handled.": "这次登录已经处理过了。",
++    "Missing authorization code.": "没有拿到授权码。",
++    "Callback route not found.": "回调地址不对。",
++    "Internal error while processing the callback.": "处理回调时出错了。",
++};
++function both(en, zh) {
++    return `<span data-lang="en">${en}</span><span data-lang="zh" hidden>${zh}</span>`;
++}
++function step(icon, en, zh) {
++    return `<li><span class="step-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${ICON[icon]}"/></svg></span><span>${both(en, zh)}</span></li>`;
++}
+ function renderPage(options) {
+-    const title = escapeHtml(options.title);
+-    const heading = escapeHtml(options.heading);
+-    const message = escapeHtml(options.message);
++    const ok = options.ok;
++    const provider = options.provider ? escapeHtml(options.provider) : undefined;
+     const details = options.details ? escapeHtml(options.details) : undefined;
++    const link = ok ? "pibot://signed-in" : "pibot://open";
++    const team = TEAM.map(([color, cls]) => `<div class="mate ${cls}">${MASCOT(color, "#FFFFFF")}</div>`).join("");
++    const steps = ok
++        ? [
++            step("lock", "Your sign-in is saved encrypted on this computer and only used to call the model you pick.", "登录凭据加密保存在这台电脑上，只用来调用你选的模型。"),
++            step("arrow", "Back in Pi Bot, choose the model your Bots should use.", "回到 Pi Bot，选好 Bot 要用的模型。"),
++            step("chat", "Then chat with Pi, or set up more Bots to work together.", "然后和 Pi 聊天，或者建更多 Bot 一起干活。"),
++        ]
++        : [
++            step("refresh", "Go back to Pi Bot and sign in again.", "回到 Pi Bot，再登录一次。"),
++            step("globe", "Still failing? Check your network or proxy, then retry.", "还是不行的话，检查网络或代理后重试。"),
++            step("key", "You can also connect this provider with an API key instead.", "也可以改用 API Key 连接这个厂商。"),
++        ];
+     return `<!doctype html>
+ <html lang="en">
+ <head>
+   <meta charset="utf-8" />
+   <meta name="viewport" content="width=device-width, initial-scale=1" />
+-  <title>${title}</title>
++  <meta name="referrer" content="no-referrer" />
++  <title>Pi Bot · ${escapeHtml(options.title)}</title>
+   <style>
+     :root {
+-      --text: #fafafa;
+-      --text-dim: #a1a1aa;
+-      --page-bg: #09090b;
+-      --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+-      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
++      --bg: #FCFCFC;
++      --glow: #9159FE1F;
++      --text: #141414;
++      --text2: #14141499;
++      --card: #FFFFFF;
++      --line: #1414141A;
++      --code: #F4F4F4;
++      --chip: #00A85F14;
++      --chip-text: #006B3B;
++      --btn: #141414;
++      --on-btn: #FCFCFC;
++      --mate-opacity: 0.22;
++      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
++      --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
++      color-scheme: light;
++    }
++    @media (prefers-color-scheme: dark) {
++      :root { --bg: #141414; --glow: #9159FE2E; --text: #F0F0F0; --text2: #F0F0F0A6; --card: #1B1B1B; --line: #F0F0F01F; --code: #222222; --chip: #00A85F24; --chip-text: #5BD69A; --btn: #F0F0F0; --on-btn: #141414; --mate-opacity: 0.3; color-scheme: dark; }
+     }
+     * { box-sizing: border-box; }
+-    html { color-scheme: dark; }
+     body {
+       margin: 0;
+       min-height: 100vh;
+@@ -35,71 +102,116 @@
+       align-items: center;
+       justify-content: center;
+       padding: 24px;
+-      background: var(--page-bg);
++      background: radial-gradient(60rem 36rem at 50% 30%, var(--glow), transparent 70%), var(--bg);
+       color: var(--text);
+       font-family: var(--font-sans);
+-      text-align: center;
+-    }
++      overflow-x: hidden;
++    }
++    .stage { position: relative; width: 100%; max-width: 460px; }
++    .mate { position: absolute; width: 52px; height: 52px; opacity: var(--mate-opacity); animation: float 7s ease-in-out infinite; }
++    .mate svg { width: 100%; height: 100%; display: block; }
++    .t1 { left: -120px; top: 20px; width: 60px; height: 60px; }
++    .t2 { right: -110px; top: -10px; animation-delay: -2s; }
++    .t3 { right: -140px; bottom: 60px; width: 44px; height: 44px; animation-delay: -4s; }
++    .t4 { left: -90px; bottom: 10px; width: 40px; height: 40px; animation-delay: -1s; }
++    .t5 { left: 50%; top: -90px; width: 36px; height: 36px; animation-delay: -3s; }
++    @keyframes float { 0%, 100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-10px) rotate(4deg); } }
++    @media (prefers-reduced-motion: reduce) { .mate { animation: none; } }
++    @media (max-width: 720px) { .mate { display: none; } }
+     main {
+-      width: 100%;
+-      max-width: 560px;
++      position: relative;
++      padding: 40px 32px 28px;
++      border: 1px solid var(--line);
++      border-radius: 24px;
++      background: var(--card);
++      box-shadow: 0 12px 40px #1414140F;
+       display: flex;
+       flex-direction: column;
+       align-items: center;
+-      justify-content: center;
+-    }
+-    .logo {
+-      width: 72px;
+-      height: 72px;
+-      display: block;
+-      margin-bottom: 24px;
+-    }
+-    h1 {
+-      margin: 0 0 10px;
+-      font-size: 28px;
+-      line-height: 1.15;
+-      font-weight: 650;
+-      color: var(--text);
+-    }
+-    p {
+-      margin: 0;
+-      line-height: 1.7;
+-      color: var(--text-dim);
+-      font-size: 15px;
+-    }
+-    .details {
+-      margin-top: 16px;
+-      font-family: var(--font-mono);
+-      font-size: 13px;
+-      color: var(--text-dim);
+-      white-space: pre-wrap;
+-      word-break: break-word;
+-    }
++      gap: 10px;
++      text-align: center;
++    }
++    .logo { position: relative; width: 72px; height: 72px; margin-bottom: 6px; }
++    .logo > svg { width: 100%; height: 100%; display: block; }
++    .badge { position: absolute; right: -6px; bottom: -4px; width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--card); display: grid; place-items: center; }
++    .badge svg { width: 18px; height: 18px; }
++    .badge.ok { background: #00A85F; }
++    .badge.err { background: #E5484D; }
++    .brand { font-size: 13px; font-weight: 600; color: var(--text2); letter-spacing: 0.02em; }
++    h1 { margin: 0; font-size: 24px; line-height: 1.3; font-weight: 650; }
++    p { margin: 0; line-height: 1.7; color: var(--text2); font-size: 14px; }
++    .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--chip); color: var(--chip-text); font-size: 13px; font-weight: 600; }
++    .chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
++    .details { width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--code); font-family: var(--font-mono); font-size: 12px; color: var(--text2); text-align: left; white-space: pre-wrap; word-break: break-word; }
++    .back { margin-top: 10px; display: inline-flex; align-items: center; justify-content: center; min-width: 180px; height: 42px; padding: 0 22px; border-radius: 999px; background: var(--btn); color: var(--on-btn); font-size: 15px; font-weight: 600; text-decoration: none; }
++    .back:focus-visible { outline: 2px solid #9159FE; outline-offset: 3px; }
++    .hint { font-size: 12px; }
++    ol { list-style: none; margin: 14px 0 0; padding: 16px 0 0; width: 100%; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; text-align: left; }
++    li { display: flex; gap: 12px; align-items: flex-start; font-size: 13px; line-height: 1.6; color: var(--text2); }
++    .step-icon { flex: none; width: 26px; height: 26px; border-radius: 8px; background: var(--code); display: grid; place-items: center; color: var(--text); }
++    .step-icon svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
++    [hidden] { display: none !important; }
+   </style>
+ </head>
+ <body>
+-  <main>
+-    <div class="logo">${LOGO_SVG}</div>
+-    <h1>${heading}</h1>
+-    <p>${message}</p>
+-    ${details ? `<div class="details">${details}</div>` : ""}
+-  </main>
++  <div class="stage">
++    ${team}
++    <main>
++      <div class="logo">${MASCOT("#9159FE", "#FFFFFF")}<span class="badge ${ok ? "ok" : "err"}">${ok ? CHECK : BANG}</span></div>
++      <div class="brand">Pi Bot</div>
++      <h1>${both(escapeHtml(options.title), escapeHtml(options.zhTitle))}</h1>
++      ${ok && provider ? `<div class="chip">${both(`${provider} connected`, `${provider} 已连接`)}</div>` : ""}
++      <p>${both(escapeHtml(options.message), escapeHtml(options.zhMessage))}</p>
++      ${details ? `<div class="details">${details}</div>` : ""}
++      <a class="back" href="${link}">${both("Back to Pi Bot", "回到 Pi Bot")}</a>
++      <p class="hint">${both("If your browser asks, choose Open Pi Bot. You can also just close this page.", "浏览器询问时选「打开 Pi Bot」。也可以直接关闭这个页面。")}</p>
++      <ol>${steps.join("")}</ol>
++    </main>
++  </div>
++  <script>
++    (function () {
++      // Keep the one-time code and state out of the address bar and browser history.
++      try { history.replaceState(null, "", location.pathname); } catch (e) {}
++      if (/^zh\\b/i.test(navigator.language || "")) {
++        document.documentElement.lang = "zh-CN";
++        document.title = "Pi Bot · ${escapeHtml(options.zhTitle)}";
++        document.querySelectorAll("[data-lang]").forEach(function (node) {
++          node.hidden = node.getAttribute("data-lang") !== "zh";
++        });
++      }
++      // After a successful sign-in, offer the way back right away (the browser asks first).
++      ${ok ? `setTimeout(function () { location.href = "${link}"; }, 700);` : ""}
++    })();
++  </script>
+ </body>
+ </html>`;
+ }
+ export function oauthSuccessHtml(message) {
++    const provider = providerOf(message);
+     return renderPage({
+-        title: "Authentication successful",
+-        heading: "Authentication successful",
++        ok: true,
++        provider,
++        title: "Signed in",
++        zhTitle: "登录成功",
++        message: provider
++            ? `You're signed in to ${provider}. Pi Bot can use it now.`
++            : message,
++        zhMessage: provider
++            ? `已登录 ${provider}，Pi Bot 现在可以用它了。`
++            : "已完成登录，Pi Bot 现在可以用它了。",
++    });
++}
++export function oauthErrorHtml(message, details) {
++    const provider = providerOf(message);
++    return renderPage({
++        ok: false,
++        provider,
++        title: "Sign-in failed",
++        zhTitle: "登录没有完成",
+         message,
++        zhMessage: ZH_ERRORS[message] ??
++            (provider ? `${provider} 没有完成授权。下面是对方返回的原因：` : "登录没有完成。下面是返回的原因："),
++        details: details ?? message,
+     });
+ }
+-export function oauthErrorHtml(message, details) {
+-    return renderPage({
+-        title: "Authentication failed",
+-        heading: "Authentication failed",
+-        message,
+-        details,
+-    });
+-}
+ //# sourceMappingURL=oauth-page.js.map
+\ No newline at end of file
+diff --git a/package.json b/package.json
+--- a/package.json
++++ b/package.json
+@@ -58,6 +58,10 @@
+ 		"./lazy-oauth": {
+ 			"types": "./dist/lazy-oauth.d.ts",
+ 			"import": "./dist/lazy-oauth.js"
++		},
++		"./env-api-keys": {
++			"types": "./dist/env-api-keys.d.ts",
++			"import": "./dist/env-api-keys.js"
+ 		}
+ 	},
+ 	"bin": {

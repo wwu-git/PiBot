@@ -1,4 +1,4 @@
-import type { Message } from "@pibot/protocol";
+import { attachmentContinuationOf, type Message } from "@pibot/protocol";
 import { useRuntime } from "../../../runtime/context.tsx";
 import { readBudget } from "./calls.ts";
 import { type ChatScope, isDm, scopeKey } from "./scope.ts";
@@ -8,7 +8,11 @@ import { useRemoteValue } from "./use-remote-value.ts";
 export function useRunInfo(scope: ChatScope | undefined, messages: readonly Message[]) {
   const runtime = useRuntime();
   const latest = messages.findLast(
-    (message) => message.role === "assistant" && message.status !== "streaming" && message.runId,
+    (message) =>
+      message.role === "assistant" &&
+      message.status !== "streaming" &&
+      message.runId &&
+      !attachmentContinuationOf(message),
   );
   const runId = latest?.runId ?? undefined;
   const state = useRemoteValue(

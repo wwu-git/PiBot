@@ -18,9 +18,13 @@ export type DmConversation = Conversation & { kind: "dm"; botId: string };
 const columns =
   "id,kind,bot_id AS botId,pi_session_file AS piSessionFile,group_id AS groupId,thread_of AS threadOf,routine_id AS routineId,workplace_folder_id AS workplaceFolderId,workplace_revision AS workplaceRevision,title,archived_at AS archivedAt,created_at AS createdAt,updated_at AS updatedAt,import_source AS importSource";
 
-// The batch state is the publication barrier. Rows from an interrupted writer stay private.
-export const visibleImport =
-  "(import_id IS NULL OR import_id IN (SELECT id FROM import_jobs WHERE state='completed'))";
+// Staged imports and batches being removed are invisible even while their rows still exist.
+export function visibleImportedRows(column: "import_id" | "c.import_id") {
+  return `(${column} IS NULL OR ${column} IN (
+    SELECT id FROM import_jobs WHERE state='completed' AND cleanup_phase IS NULL))`;
+}
+
+export const visibleImport = visibleImportedRows("import_id");
 
 export function importProjection(source: unknown) {
   return typeof source === "string" ? { readOnly: true as const, importSource: source } : {};

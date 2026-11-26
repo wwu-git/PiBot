@@ -1,6 +1,10 @@
 import { enableCompileCache } from "node:module";
 import { join } from "node:path";
 import { bundleIdentity } from "../shared/bundle-identity.ts";
+import { guardConsoleStreams } from "../shared/console-guard.ts";
+
+// The brain inherits the desktop's console pipes; a closed one must not end the brain.
+guardConsoleStreams([process.stdout, process.stderr]);
 
 const entryAtMs = Math.round(performance.now());
 const parent = process.parentPort;

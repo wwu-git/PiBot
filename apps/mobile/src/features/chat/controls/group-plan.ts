@@ -110,6 +110,9 @@ function stepLook(
   if (state.verdictResolution?.kind === "skipped" || state.status === "skipped")
     return { mark: "skipped", label: "gpStepSkipped" };
   if (state.status === "passed") return { mark: "done", label: "gpStepDone" };
+  // The user's stop marks the interrupted step blocked; on a stopped plan it is stopped too.
+  if (terminalStopped && ["running", "blocked", "ready", "waiting"].includes(state.status))
+    return { mark: "waiting", label: "gpStepStopped" };
   // Stopped by the group's pause: not a failure, and it runs again when the group continues.
   if (state.paused)
     return {

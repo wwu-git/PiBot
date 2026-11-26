@@ -32,6 +32,7 @@ export interface OfflineDesktop {
   reconnectPhone(): void;
 }
 export const OFFLINE_MODEL = "offline-phone";
+const OFFLINE_ALT_MODEL = "offline-phone-alt";
 export const PERSONA_MARKER = "Sign every reply as Teal Fox";
 export const MEMORY_MARKER = "The user's cat is called Miso";
 /** The fake model's replies to the phone, in order (route `offline-phone`). */
@@ -84,7 +85,7 @@ export function switchableLink(desktop: OfflineDesktop, computer: Computer) {
     },
     async connect(_computer, _credential, signal) {
       signal.throwIfAborted();
-      if (!up) throw new Error("relay_unavailable");
+      if (!up) throw new Error("remote_room_empty");
       const closed = new AbortController();
       current = closed;
       return portConnection({
@@ -211,8 +212,7 @@ export async function runOfflineScenario(desktop: OfflineDesktop) {
   // The computer goes away; the phone replies itself.
   check(!engine.canReply(desktop.botId), "online_not_local");
   wire.down();
-  // A drop first shows "reconnecting" for up to 10 s (transport/session.ts RECONNECT_WINDOW_MS);
-  // only a real offline state hands replies to the phone.
+  // The simulated relay confirms the computer is absent before replies move to the phone.
   await waitFor(() => engine.getSnapshot().unreachable, "unreachable", 45_000);
   check(engine.canReply(desktop.botId), "offline_ready");
   const offlineModel = engine
@@ -226,12 +226,13 @@ export async function runOfflineScenario(desktop: OfflineDesktop) {
   );
   const alternate = engine
     .getSnapshot()
-    .manifest?.models.find((m) => m.delivered && m.modelId === "offline-phone-alt");
+    .manifest?.models.find((m) => m.delivered && m.modelId === OFFLINE_ALT_MODEL);
   if (!alternate) throw new Error("offline_probe_alternate_model_missing");
+  check(alternate.grantId === offlineModel.grantId, "offline_provider_grant_shared");
   await engine.selectModel(desktop.botId, alternate.providerId, alternate.modelId);
+  const switched = engine.getSnapshot().manifest?.bots.find((b) => b.id === desktop.botId);
   check(
-    engine.getSnapshot().manifest?.bots.find((b) => b.id === desktop.botId)?.grantId ===
-      alternate.grantId,
+    switched?.grantId === alternate.grantId && switched.modelId === alternate.modelId,
     "offline_model_switched",
   );
   await engine.selectModel(desktop.botId, offlineModel.providerId, offlineModel.modelId);

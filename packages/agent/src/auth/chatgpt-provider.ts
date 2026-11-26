@@ -104,7 +104,7 @@ export function chatGPTPlanFromCodex(
   oauth: OAuthAuth,
   ports: AgentAuthPorts,
   responses?: Provider,
-  /** The legacy Codex sign-in keeps pi's Codex route unchanged under its own provider id. */
+  /** The legacy Codex sign-in uses the Codex backend under its own provider id. */
   identity: { id: string; name: string } = { id: CHATGPT_PLAN_PROVIDER, name: "ChatGPT" },
 ): Provider {
   // OpenAI's open-source Sign in with ChatGPT route (developers.openai.com/siwc, 2026-11-15): the
@@ -135,7 +135,10 @@ export function chatGPTPlanFromCodex(
           baseUrl: OFFICIAL_BASE_URL,
           compat: { ...(model.compat as object | undefined), ...signInCompat },
         }
-      : {}),
+      : {
+          // Keep high/xhigh in reasoning.effort while pi #12361 affects mid-conversation updates.
+          compat: { ...(model.compat as object | undefined), supportsMidConvoEffort: false },
+        }),
   });
   const all = codex.getAllModels?.bind(codex) ?? codex.getModels.bind(codex);
   const chat = codex.getModels.bind(codex);

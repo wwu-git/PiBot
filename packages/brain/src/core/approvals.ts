@@ -12,6 +12,7 @@ import {
   type ApprovalFinalStatus,
   type ComputerApprovalRequest,
   credentialSiteLabel,
+  isPiManagerCategory,
   type LoginApprovalRequest,
   RpcError,
   type ToolTiming,
@@ -24,6 +25,7 @@ import {
   ConversationsRepo,
   GrantsRepo,
   MessagesRepo,
+  PermissionsRepo,
   SettingsRepo,
   SidebarRepo,
   ToolCallsRepo,
@@ -85,6 +87,8 @@ export interface ConnectorCardDisplay {
 /** Who answered a card: the user, or YOLO turned on in its conversation. */
 export type ResolvedBy = "user" | "yolo" | "task" | "acp";
 export class ApprovalService {
+  /** Tells clients a Bot's permission levels changed (set by the kernel after startup). */
+  levelChanged?: (botId: string) => void;
   parkedResolve?: (
     id: string,
     decision: "allow" | "deny",
@@ -246,6 +250,8 @@ export class ApprovalService {
       /** Original delegated request spelling; policy facts retain their canonical identities. */
       facts?: ApprovalFact[];
       title?(language: "zh" | "en"): string;
+      /** A capability's own card text (labelled rows, one lead sentence) in each language. */
+      text?(language: "zh" | "en"): { title: string; lead?: string; facts: ApprovalFact[] };
     },
     folderChange?: ApprovalFolderChange,
   ): Promise<ApprovalFinalStatus> {
@@ -287,8 +293,25 @@ export class ApprovalService {
       : undefined;
     // The card is written in both languages so it follows a later language switch;
     // `title` / `facts` keep the language of the moment (audit, notifications, older readers).
-    const textFor = (language: "zh" | "en") => {
+    const textFor = (
+      language: "zh" | "en",
+    ): { title: string; shown: string; lead?: string; facts: ApprovalFact[] } => {
       const zh = language === "zh";
+      const described = card?.text?.(language);
+      if (described) {
+        const facts = described.facts.map((fact) => ({
+          ...fact,
+          value: auditText(fact.value, deps.redactor, 2000),
+          ...(fact.label ? { label: fact.label.slice(0, 80) } : {}),
+        }));
+        const title = auditText(described.title, deps.redactor);
+        return {
+          title,
+          shown: title,
+          ...(described.lead ? { lead: auditText(described.lead, deps.redactor, 1000) } : {}),
+          facts,
+        };
+      }
       const display = approvalDisplay(
         call,
         // The title names the connection and tool; their internal ids are not for people.
@@ -438,8 +461,16 @@ export class ApprovalService {
       risk: result.risk,
       title: shown,
       localized: {
-        zh: { title: texts.zh.shown, facts: texts.zh.facts },
-        en: { title: texts.en.shown, facts: texts.en.facts },
+        zh: {
+          title: texts.zh.shown,
+          ...(texts.zh.lead ? { lead: texts.zh.lead } : {}),
+          facts: texts.zh.facts,
+        },
+        en: {
+          title: texts.en.shown,
+          ...(texts.en.lead ? { lead: texts.en.lead } : {}),
+          facts: texts.en.facts,
+        },
       },
       ...(searchDisclosure ? { searchDisclosure } : {}),
       ...(call.tool === "web_fetch" &&
@@ -687,7 +718,31 @@ export class ApprovalService {
               detail: { actor: "user", reasonCode: "sandbox_permission_remembered" },
             });
           }
-          if ((remember && !sandboxConsent) || rememberSecrets.length) {
+          // The default Pi's management and dispatch cards remember by changing Pi's own level
+          // to "always" (the same switch as its permissions page); no grant is created.
+          const levelRemember = remember && isPiManagerCategory(approval.category);
+          if (levelRemember) {
+            if (status !== "allowed" || !this.bots.get(context.botId)?.isMain)
+              throw new RpcError(-32602, "Approval cannot be remembered");
+            const permissions = new PermissionsRepo(deps.db);
+            permissions.setBotOverrides(context.botId, {
+              ...(permissions.getBotOverrides(context.botId) ?? {}),
+              [approval.category]: "always",
+            });
+            this.audit.append({
+              botId: context.botId,
+              runId: context.runId,
+              kind: "permissions.changed",
+              summary: "Permission set to always from a card / 已从卡片改成总是允许",
+              detail: {
+                actor: "user",
+                category: approval.category,
+                approvalId: approval.id,
+                reasonCode: "pi_manager_always",
+              },
+            });
+          }
+          if ((remember && !sandboxConsent && !levelRemember) || rememberSecrets.length) {
             if (approval.category === "memory")
               throw new RpcError(-32602, "Memory approval cannot be remembered");
             // Separate controls: a legacy remember=true can never authorize secret or command
@@ -774,6 +829,7 @@ export class ApprovalService {
           }
         }
         resolve(status);
+        if (remember && isPiManagerCategory(approval.category)) this.levelChanged?.(context.botId);
         if (
           remember &&
           (current?.reason === "local_service_once" || current?.reason === "system_service_once")

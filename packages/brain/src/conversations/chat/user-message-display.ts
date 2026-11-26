@@ -1,4 +1,4 @@
-import type { MessageForward, MessageQuote } from "@pibot/protocol-base";
+import type { MessageDispatch, MessageForward, MessageQuote } from "@pibot/protocol-base";
 
 /**
  * C7: what a trusted routine confirmation tells the display about the message it queues. The text
@@ -17,8 +17,10 @@ export type RoutineNotice = {
  * Never accepted from an RPC: the renderer cannot choose what its own bubble hides.
  */
 export interface UserMessageDisplay {
-  inputOrigin?: "user" | "acp";
+  inputOrigin?: "user" | "acp" | "phone";
   forward?: MessageForward;
+  /** The default Pi sent this message on the person's request (display label only). */
+  dispatch?: MessageDispatch;
   routineNotice?: RoutineNotice;
 }
 
@@ -28,6 +30,7 @@ export function userMessageUsage(quote: MessageQuote | undefined, display?: User
     ...(display?.inputOrigin ? { inputOrigin: display.inputOrigin } : {}),
     ...(quote ? { messageQuote: quote } : {}),
     ...(display?.forward ? { forward: display.forward } : {}),
+    ...(display?.dispatch ? { dispatch: display.dispatch } : {}),
     ...(display?.routineNotice ? { systemEvent: true, routineNotice: display.routineNotice } : {}),
   };
   return Object.keys(usage).length ? { usage } : {};

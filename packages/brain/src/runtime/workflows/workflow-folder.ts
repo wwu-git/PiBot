@@ -37,6 +37,14 @@ const SAME_DAY_RUNS = 99;
 const LISTED_FILES = 20;
 const FOLDER_MS = 5_000;
 
+type FolderWorkflow = Pick<
+  WorkflowRun,
+  "name" | "contract" | "folder" | "previous" | "previousFromLedger"
+> & {
+  /** The folder segment under the output root when it is not `folderName(name)` (group plans). */
+  root?: string;
+};
+
 export interface WorkflowFolder {
   folder: string;
   /** The latest earlier period of the same workflow, with up to 20 file names (manual runs). */
@@ -54,6 +62,32 @@ export function folderName(name: string): string {
   return safe && safe !== "." && safe !== ".." ? safe : "workflow";
 }
 
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])$/i;
+const PLAN_FOLDER_CHARS = 48;
+
+/**
+ * A group plan's folder segment from the coordinator's free-form plan name: letters (CJK
+ * included), digits, `_` and inner dots kept; whitespace becomes `-`; arrows, brackets, quotes and
+ * every other symbol go; dashes collapse. Maintainers 2026-11-25: a plan named
+ * "A → B（仅供评审）" made a folder with an arrow, full-width brackets and spaces, awkward in a
+ * shell and on Windows. Saved workflows and routines keep `folderName`, which earlier periods
+ * were written under.
+ */
+export function planFolderName(name: string): string {
+  const slug = Array.from(name.normalize("NFKC"))
+    .map((char) => (/[\p{L}\p{N}\p{M}_.]/u.test(char) ? char : /[\s\-‐-―]/u.test(char) ? "-" : ""))
+    .join("")
+    .replace(/-{2,}/g, "-")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[-.]+|[-.]+$/g, "");
+  const capped = Array.from(slug)
+    .slice(0, PLAN_FOLDER_CHARS)
+    .join("")
+    .replace(/[-.]+$/g, "");
+  if (!capped) return "plan";
+  return WINDOWS_RESERVED.test(capped.split(".")[0] ?? "") ? `${capped}-plan` : capped;
+}
+
 /** Local calendar day, the period of a manual run (a routine's period comes from its trigger). */
 function today(now: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -67,7 +101,7 @@ function today(now: Date) {
  */
 export async function resolveWorkflowFolder(
   primary: string,
-  workflow: Pick<WorkflowRun, "name" | "contract" | "folder" | "previous" | "previousFromLedger">,
+  workflow: FolderWorkflow,
   parent: AbortSignal,
   now = new Date(),
   files?: WorkspaceFileAccess,
@@ -82,7 +116,7 @@ export async function resolveWorkflowFolder(
   // A group workflow can start before any run used this folder; its earlier periods must be
   // in `.pibot/out` before the previous period is looked up. Idempotent; a failure leaves them.
   await migrateLegacyOutputs(primary, signal).catch(() => parent.throwIfAborted());
-  const workflowRoot = folderName(workflow.name);
+  const workflowRoot = workflow.root ?? folderName(workflow.name);
   const period = await freePeriod(
     join(primary, ...OUTPUT_ROOT_SEGMENTS, workflowRoot),
     today(now),
@@ -184,13 +218,14 @@ async function previousPeriod(
 
 async function remoteWorkflowFolder(
   primary: string,
-  workflow: Pick<WorkflowRun, "name" | "contract" | "folder" | "previous" | "previousFromLedger">,
+  workflow: FolderWorkflow,
   signal: AbortSignal,
   now: Date,
   files: WorkspaceFileAccess,
 ): Promise<WorkflowFolder> {
   const { join } = files.paths;
-  const root = join(primary, ...OUTPUT_ROOT_SEGMENTS, folderName(workflow.name));
+  const segment = workflow.root ?? folderName(workflow.name);
+  const root = join(primary, ...OUTPUT_ROOT_SEGMENTS, segment);
   let period: string | undefined;
   for (let run = 1; run <= SAME_DAY_RUNS; run++) {
     const key = run === 1 ? today(now) : `${today(now)}-${run}`;
@@ -208,7 +243,7 @@ async function remoteWorkflowFolder(
   }
   if (!period) throw new RpcError(RpcErrorCodes.unsupported, "workflow_folder_unavailable");
   let current = primary;
-  for (const part of [...OUTPUT_ROOT_SEGMENTS, folderName(workflow.name), period]) {
+  for (const part of [...OUTPUT_ROOT_SEGMENTS, segment, period]) {
     current = join(current, part);
     const info = await files.inspect(current, signal);
     if (!info) break;

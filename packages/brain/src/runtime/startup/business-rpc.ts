@@ -16,9 +16,14 @@ import type { BrainSleep } from "../queue/brain-sleep.ts";
 interface StartupContext {
   startupDiagnostics?: ReturnType<typeof import("./first-rpcs.ts").firstRpcDiagnostics>;
   loopWatch?: { mark(phase: string): void };
+  /** A request from the user's side (not background scheduling) just arrived. */
+  noteUserActivity?(): void;
   stopping: boolean;
   waitForContent(signal: AbortSignal): Promise<void>;
-  opts?: { requestSource?: () => "acp" | undefined };
+  opts?: {
+    requestSource?: () => "acp" | "desktop-main" | undefined;
+    isPhoneRequest?: () => boolean;
+  };
   sleep: BrainSleep | undefined;
   interactiveAttached: boolean;
   offlineAllowed: Set<string>;
@@ -78,13 +83,21 @@ export function registerBusinessRpc<K extends keyof typeof KernelMethods>(
   // erased so TypeScript does not expand every RPC payload union inside Promise inference.
   const execute = action as (params: unknown, context: RpcRequestContext) => Promise<unknown>;
   const invoke = async (params: unknown, context: RpcRequestContext): Promise<unknown> => {
-    context = { ...context, source: ctx.opts?.requestSource?.() };
+    const source = ctx.opts?.requestSource?.();
+    context = {
+      ...context,
+      source: source === "acp" ? source : undefined,
+      desktopMain: source === "desktop-main",
+      ...(ctx.opts?.isPhoneRequest?.() ? { phone: true } : {}),
+    };
     context.signal.throwIfAborted();
     if (ctx.stopping) throw new RpcError(-32001, "Brain stopping");
     ctx.sleep?.assertAdmission();
     const finishTiming = ctx.startupDiagnostics?.begin(method);
     // Method names are fixed protocol identifiers; parameters never reach the stall log.
     ctx.loopWatch?.mark(method);
+    if (!ctx.backgroundPrefixes.some((prefix) => method.startsWith(prefix)))
+      ctx.noteUserActivity?.();
     const request = Promise.resolve().then(async () => {
       context.signal.throwIfAborted();
       if (!ctx.interactiveAttached && !ctx.offlineAllowed.has(method))

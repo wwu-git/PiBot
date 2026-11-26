@@ -78,6 +78,7 @@ import { collaborationRefusal } from "../../core/assignment-refusal.ts";
 import { auditText, auditToolFields } from "../../core/audit-fields.ts";
 import { GroupToolError } from "../../core/collaboration-tool-error.ts";
 import type { PreparedTool, ToolRunContext } from "../../core/local-types.ts";
+import { mainDirectTopic } from "../../core/main-direct.ts";
 import { runPermissionScope, runPermissions } from "../../core/run-permissions.ts";
 import { toolPermissionCategory } from "../../core/tool-category.ts";
 import { auditYolo, runYolo } from "../../core/yolo.ts";
@@ -216,6 +217,8 @@ export class LocalRun implements ToolRuntime {
       });
     local.changes.turn.begin(context);
     this.lockOwner = { runId: context.runId, botId: context.botId, lease: randomUUID() };
+    let mainDirectAnswer: boolean | undefined;
+    const mainDirect = () => (mainDirectAnswer ??= mainDirectTopic(local, context));
     const definitions = local.toolDefinitions.filter(
       (tool) =>
         (!context.executionTaskId ||
@@ -224,6 +227,8 @@ export class LocalRun implements ToolRuntime {
         (!runPermissionScope(local, context) || tool.name !== "skill_propose") &&
         // A capability's run bookkeeping (routine_flag_attention) exists only inside such a run.
         (!local.deps.capabilityTools.specs[tool.name]?.unattendedOnly || !!context.routineRunId) &&
+        // The default Pi's management and dispatch tools exist only in its own direct chat.
+        (!local.deps.capabilityTools.specs[tool.name]?.mainBotOnly || mainDirect()) &&
         (!local.deps.capabilityTools.specs[tool.name]?.roleIds ||
           local.deps.capabilityTools.specs[tool.name]?.roleIds?.includes(
             new BotsRepo(local.deps.db).get(context.botId)?.role?.id ?? "",
@@ -457,6 +462,7 @@ export class LocalRun implements ToolRuntime {
       const adapted = connectorCapabilityDefinition(this.local, this.context, tool, capability);
       return adapted ? [adapted] : [];
     });
+    const executionAllows = this.local.execution.catalogAvailability(this.context);
     return selected.filter((tool) => {
       if (this.local.endpoints && !this.local.endpoints.allows(tool.name, this.context))
         return false;
@@ -480,7 +486,7 @@ export class LocalRun implements ToolRuntime {
           levels[category] !== "never" ||
           (["read_file", "list_dir"].includes(tool.name) && levels.read_ai_config !== "never")) &&
         this.local.reviews.allowsTool(this.context, tool.name) &&
-        this.local.execution.allows(this.context, tool.name) &&
+        executionAllows(tool.name) &&
         (tool.name !== "check_command_propose" || checks) &&
         // A capability tool that answers with an image (phone_media_get) needs image input too.
         (images || !this.local.deps.capabilityTools.specs[tool.name]?.imageInput) &&

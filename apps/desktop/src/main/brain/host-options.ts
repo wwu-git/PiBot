@@ -57,6 +57,8 @@ export interface BrainHostOptions {
   /** The tray's "waiting for you" count follows this instead of polling the brain. */
   onInboxChanged?(): void;
   onActiveRuns?(count: number): void;
+  /** Busy Bots for the live island; an empty list when the brain is not ready. */
+  onLiveActivity?(value: EventPayloads["runtime.liveActivity"]): void;
   routines?: ReturnType<typeof createRoutineHost>;
   /** Independent owners keep power listeners across expected utility retirement. */
   retainRoutineHost?: boolean;

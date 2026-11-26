@@ -12,6 +12,7 @@ import {
 import { withToolDiscovery } from "../../../tools/fake-llm/tool-discovery.ts";
 import { toolLoadGroup } from "../product-tool-groups.ts";
 import { deliveryCorrectionScenario } from "./delivery-correction.ts";
+import { opcWeeklyReviewScenario } from "./opc-weekly-review.ts";
 import { verdictRepairScenario } from "./verdict-repair.ts";
 import type { Reply, Scenario } from "../../../tools/fake-llm/scenario.ts";
 import { type Fixture, fixture, until } from "../chat/harness.ts";
@@ -296,13 +297,33 @@ async function parallelWriters(
     (items) => items.at(-1)?.status === "passed",
     280_000,
   );
-  const workspaces = dbRead(f, (db) =>
-    db
-      .prepare(
-        "SELECT w.task_id,w.state,w.integration_path,t.path FROM group_member_workspaces w JOIN managed_worktrees t ON t.id=w.worktree_id ORDER BY w.updated_at",
-      )
-      .all(),
-  ) as { task_id: string; state: string; integration_path: string; path: string }[];
+  // A passed plan starts cleanup asynchronously; its status alone does not prove Git removal.
+  const { workspaces } = await until(
+    "parallel workspaces cleaned",
+    async () => {
+      // Cleanup can still request an approval after the plan reaches passed.
+      await approve(f);
+      const workspaces = dbRead(f, (db) =>
+        db
+          .prepare(
+            "SELECT w.task_id,w.state,w.integration_path,t.path FROM group_member_workspaces w JOIN managed_worktrees t ON t.id=w.worktree_id ORDER BY w.updated_at",
+          )
+          .all(),
+      ) as { task_id: string; state: string; integration_path: string; path: string }[];
+      const left = existsSync(join(repo, ".pibot", "wt"))
+        ? readdirSync(join(repo, ".pibot", "wt"))
+        : [];
+      return { workspaces, left };
+    },
+    ({ workspaces, left }) =>
+      workspaces.length === 3 &&
+      workspaces
+        .map((row) => row.state)
+        .sort()
+        .join(",") === "integrated,integrated,removed" &&
+      left.length === 0,
+    60_000,
+  );
   assert.equal(workspaces.length, 3, "data, sources and the redo each had a workspace");
   assert(workspaces.every((row) => row.integration_path === repo), "Git repository: no copy");
   assert(workspaces.every((row) => row.path.startsWith(join(repo, ".pibot", "wt"))));
@@ -592,12 +613,18 @@ async function scenario(root: string, kind: Kind) {
       modelProvider: provider,
       modelId: "coordinator",
       thinkingLevel: "off",
+      memoryExtraction: false,
     });
     f.researcher = await f.client.call("bots.update", {
       botId: analyst.id,
       modelProvider: provider,
       modelId: "researcher",
       thinkingLevel: "off",
+      memoryExtraction: false,
+    });
+    f.writer = await f.client.call("bots.update", {
+      botId: f.writer.id,
+      memoryExtraction: false,
     });
     f.group = await f.client.call("groups.addMember", { groupId, botId: f.writer.id });
     if (kind === "parallel-writers") repo = gitRepository(f.root);
@@ -921,6 +948,9 @@ async function scenario(root: string, kind: Kind) {
           "SELECT json_extract(usage,'$.groupPlan.status') AS status FROM messages WHERE json_type(usage,'$.groupPlan')='object'",
         )
         .all(),
+      workspaces: db
+        .prepare("SELECT state, COUNT(*) AS count FROM group_member_workspaces GROUP BY state")
+        .all(),
       blocks: db
         .prepare(
           "SELECT json_extract(detail,'$.reason') AS reason FROM audit_log WHERE kind='group.workflow.step_blocked' ORDER BY at",
@@ -959,6 +989,7 @@ export async function runGroupPlanProbe(
   };
   if (selected === "delivery-correction") return report(selected, () => deliveryCorrectionScenario(root));
   if (selected === "verdict-repair") return report(selected, () => verdictRepairScenario(root));
+  if (selected === "opc-weekly-review") return report(selected, () => opcWeeklyReviewScenario(root));
   if (selected && isKind(selected)) return report(selected, () => scenario(root, selected));
   return {
     scenario: "动态调研报告",
@@ -977,5 +1008,6 @@ export async function runGroupPlanProbe(
     userStop: await report("user-stop", () => scenario(root, "user-stop")),
     stringPlan: await report("string-plan", () => scenario(root, "string-plan")),
     parallelWriters: await report("parallel-writers", () => scenario(root, "parallel-writers")),
+    opcWeeklyReview: await report("opc-weekly-review", () => opcWeeklyReviewScenario(root)),
   };
 }

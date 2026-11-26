@@ -37,7 +37,7 @@ export function registerPromptContext(pi: ExtensionAPI, state?: PromptState) {
   // `before_provider_request` for each request of a session in turn.
   let stateTexts: ReadonlySet<string> = new Set();
   pi.on("before_agent_start", (event) => {
-    // Both user and custom triggers start a new run in pi 1.4.0. Reset once here,
+    // Both user and custom triggers start a new run in pi 1.6.0. Reset once here,
     // never per turn; custom messages queued into an active run do not fire this hook.
     delete event.systemPromptOptions.sections.pibot_secrets;
     delete event.systemPromptOptions.sections.pibot_memory;

@@ -214,21 +214,28 @@ describe("T8 brain", () => {
       },
       env: { detect, read },
     };
-    brain = await startBrain({
-      orchestration: createOrchestrationFactory(),
-      capabilities: [
-        providersCapability(),
-        memoryCapability(),
-        credentialsCapability(),
-        workspacesCapability(),
-      ],
-      port: pair.server,
-      dataDir: dir,
-      version: "0.0.0",
-      platform: "darwin",
-      host,
-      composition: testComposition,
-    });
+    const dateTimeFormat = vi.spyOn(Intl, "DateTimeFormat").mockReturnValue({
+      resolvedOptions: () => ({ locale: "en-US" }),
+    } as Intl.DateTimeFormat);
+    try {
+      brain = await startBrain({
+        orchestration: createOrchestrationFactory(),
+        capabilities: [
+          providersCapability(),
+          memoryCapability(),
+          credentialsCapability(),
+          workspacesCapability(),
+        ],
+        port: pair.server,
+        dataDir: dir,
+        version: "0.0.0",
+        platform: "darwin",
+        host,
+        composition: testComposition,
+      });
+    } finally {
+      dateTimeFormat.mockRestore();
+    }
     peer = createPeer(pair.client, { methods: TestMethods, events: TestEvents });
     botId = (await peer.call("bots.list", undefined))[0]?.id as string;
   });

@@ -1,5 +1,5 @@
 import type { Bot, Group } from "@pibot/plugins-contract/full";
-import { BotAvatar, useSettings } from "@pibot/renderer-kit";
+import { BotAvatar, type BotAvatarSource, useSettings } from "@pibot/renderer-kit";
 import { GroupAvatar } from "@pibot/ui";
 import type { ReactNode } from "react";
 import styles from "./connections.module.css";
@@ -32,10 +32,20 @@ export function letterTone(name: string) {
   return LETTER_TONES[hash % LETTER_TONES.length];
 }
 
-export function GroupFace({ group, bots, size }: { group: Group; bots: Bot[]; size: number }) {
+type PickerBot = BotAvatarSource & Pick<Bot, "id">;
+
+export function GroupFace({
+  group,
+  bots,
+  size,
+}: {
+  group: Group;
+  bots: PickerBot[];
+  size: number;
+}) {
   const members = group.members
     .map((member) => bots.find((bot) => bot.id === member.botId))
-    .filter((bot): bot is Bot => !!bot);
+    .filter((bot): bot is PickerBot => !!bot);
   if (members.length < 2)
     return (
       <span className={styles.groupTile} style={{ width: size, height: size }} aria-hidden="true">
@@ -109,7 +119,7 @@ export function FacePicker({
   requestedTarget,
   isDisabled,
 }: {
-  bots: Bot[];
+  bots: PickerBot[];
   groups: Group[];
   isOn(kind: "bot" | "group", id: string): boolean;
   toggle(kind: "bot" | "group", id: string): void;

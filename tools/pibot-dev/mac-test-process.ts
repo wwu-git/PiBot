@@ -1,3 +1,4 @@
+// Identifies and drains only processes belonging to a disposable macOS app copy.
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { command } from "./windows/command.ts";
@@ -84,13 +85,18 @@ export async function launchMacCopy(
       detached: true,
     },
   );
-  const ended = new Promise<void>((resolve) => {
-    child.once("close", () => resolve());
+  const exit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+    child.once("close", (code, signal) => resolve({ code, signal }));
   });
   await new Promise<void>((resolve, reject) => {
     child.once("spawn", resolve);
     child.once("error", () => reject(new Error("mac_test_launch_failed")));
   });
   if (!child.pid) throw new Error("mac_test_launch_failed");
-  return { pid: child.pid, ended };
+  return {
+    pid: child.pid,
+    ended: exit.then(() => {}),
+    exit,
+    requestQuit: () => child.kill("SIGTERM"),
+  };
 }

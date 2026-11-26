@@ -10,6 +10,7 @@ export type ConnectedChatProps = {
   target: ChatTarget;
   visible: boolean;
   disconnected: boolean;
+  brainStarting: boolean;
 };
 export function useChatScreenModel(props: ConnectedChatProps) {
   const state = useChatState(props);

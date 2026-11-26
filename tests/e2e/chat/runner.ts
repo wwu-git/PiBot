@@ -172,7 +172,14 @@ export async function runAcceptance(root: string) {
     assert(!audit.some((entry) => entry.kind === "exec.started"));
   });
   await exerciseCase("记忆 auto / 新话题注入 / ask / 拒绝 / 删除", "memory", async (f) => {
-    await f.client.call("bots.update", { botId: f.researcher.id, memoryMode: "auto" });
+    // This case scripts the Bot's own memory tool calls in order. Background extraction (topic
+    // boundaries, corrections) sends extra model requests that would consume those scripted
+    // replies; it has its own acceptance, so it is off here.
+    await f.client.call("bots.update", {
+      botId: f.researcher.id,
+      memoryMode: "auto",
+      memoryExtraction: false,
+    });
     assert.equal((await dmDone(f, "以后报告先写结论"))?.status, "done");
     const notes = await f.client.call("memory.list", { botId: f.researcher.id });
     assert.equal(notes.length, 1);

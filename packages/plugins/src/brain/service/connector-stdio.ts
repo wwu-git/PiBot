@@ -6,6 +6,7 @@ import {
   childNodeRuntime,
   startSandboxedServer,
   startUnisolatedConnectorServer,
+  windowsSystemRoot,
 } from "@pibot/execution";
 import type { ConnectorStartFailure } from "@pibot/plugins-contract/full";
 import { classifyStartFailure } from "./connector-start-failure.ts";
@@ -63,6 +64,7 @@ export async function startStdioStream(options: StdioStartOptions): Promise<Conn
       return await startUnisolatedConnectorServer({
         ...common,
         env: { ...options.baseEnv, ...options.declaredEnv },
+        windowsRoot: windowsSystemRoot(options.commandEnv),
       });
     if (options.outsideSandbox)
       return await startUnisolatedConnectorServer({

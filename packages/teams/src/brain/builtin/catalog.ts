@@ -12,7 +12,7 @@ export function catalogView(
     const team = pack[language];
     const bot = team.template.bots[0];
     if (!bot?.role?.name || !bot.role.category) continue;
-    const { network: _network, ...levels } = bot.permissionOverrides;
+    const { network: _network, confirmEverySend: _confirm, ...levels } = bot.permissionOverrides;
     const needs = bot.needs ?? { vision: false, imageGeneration: false };
     roles.push({
       id,

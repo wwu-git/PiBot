@@ -1,3 +1,4 @@
+// Inject the runner host’s trusted facts into computer-use drivers.
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,6 +11,7 @@ import {
   createPlatformDriver,
   isSupportedPlatform,
 } from "@pibot/computer";
+import { windowsProgramFiles } from "@pibot/execution";
 import type { ComputerStatus, HostComputerParams, HostComputerResults } from "@pibot/protocol-base";
 import { probe } from "./process.ts";
 import { createRunnerSession } from "./session.ts";
@@ -84,7 +86,12 @@ export function createRunnerComputerHost(options: {
         pathToFileURL(imageEntry).href
       )) as typeof import("@napi-rs/image");
       const runnerImageCodec = createRunnerImageCodec(native);
-      const driver = createPlatformDriver({ platform, load: loader.load, session });
+      const driver = createPlatformDriver({
+        platform,
+        load: loader.load,
+        session,
+        ...(platform === "win32" ? { windowsProgramFiles: windowsProgramFiles(options.env) } : {}),
+      });
       const captureDisplay = driver.captureDisplay?.bind(driver);
       displaySupported = !!captureDisplay;
       service = createComputerService({

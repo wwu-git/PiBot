@@ -88,7 +88,7 @@ export function roleFingerprint(pack: Languages): RoleFingerprint {
   if (!zh || !en) throw new TypeError("role without a Bot");
   const zhSkills = packageSkills(pack.zh);
   const enSkills = packageSkills(pack.en);
-  const { network: _network, ...levels } = zh.permissionOverrides;
+  const { network: _network, confirmEverySend: _confirm, ...levels } = zh.permissionOverrides;
   return {
     thinkingLevel: zh.thinkingLevel,
     permissionOverrides: Object.fromEntries(

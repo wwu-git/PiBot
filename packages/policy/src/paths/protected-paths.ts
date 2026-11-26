@@ -1,3 +1,4 @@
+// Protect the host’s system and credential trees from outside-workplace writes.
 import type { PathContext, Platform } from "../core/types.ts";
 import { canonicalPath, containsPath, pathApi } from "./paths.ts";
 
@@ -131,13 +132,18 @@ export async function protectedPaths(
     ...new Set([
       api.parse(home).root,
       ...(platform === "win32"
-        ? ["C:\\", ...context.roots.map((root) => api.parse(root).root)]
+        ? [context.windowsSystemDrive ?? "", ...context.roots.map((root) => api.parse(root).root)]
         : []),
     ]),
   ];
   const system =
     platform === "win32"
-      ? drives.flatMap((drive) => WINDOWS_SYSTEM_DIRS.map((name) => api.join(drive, name)))
+      ? [
+          ...(context.windowsSystemTrees ?? []),
+          ...drives
+            .filter((drive) => /^[a-z]:[\\/]$/i.test(drive))
+            .flatMap((drive) => WINDOWS_SYSTEM_DIRS.map((name) => api.join(drive, name))),
+        ]
       : SYSTEM_DIRS[platform];
   const credentials = homeNames.flatMap((root) =>
     CREDENTIAL_DIRS[platform].map((entry) => api.join(root, ...entry.split("/"))),

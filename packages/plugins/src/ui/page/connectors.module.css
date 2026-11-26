@@ -273,6 +273,17 @@
   gap: 16px;
   padding: 20px;
 }
+.panelFooter {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--b1);
+  background: var(--bg);
+}
 .panelBody h3,
 .panelBody p {
   margin: 0;

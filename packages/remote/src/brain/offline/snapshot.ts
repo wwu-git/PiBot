@@ -38,6 +38,12 @@ const capabilityOfTool = new Map(
   remoteEndpointCapabilities.flatMap((cap) => cap.toolNames.map((tool) => [tool, cap.id] as const)),
 );
 
+function withoutSendMark(overrides: Bot["permissionOverrides"]) {
+  if (!overrides?.confirmEverySend) return overrides;
+  const { confirmEverySend: _mark, ...rest } = overrides;
+  return rest;
+}
+
 /** The manifest and each offline Bot's prompt snapshot for one phone. */
 export class OfflineSnapshots {
   constructor(
@@ -166,7 +172,9 @@ export class OfflineSnapshots {
               workplace: place.value,
               boundary: place.boundary,
               settings: new PermissionsRepo(this.r.ctx.db).get(),
-              overrides: bot.permissionOverrides,
+              // A runner never sends outward, and a runner built before the send mark would
+              // refuse its unknown key in a strict permission object.
+              overrides: withoutSendMark(bot.permissionOverrides),
               tools: [...allowed],
             };
             for (const tool of this.r.ctx.local.toolDefinitions)

@@ -218,3 +218,33 @@
 .plain {
   display: contents;
 }
+/* Typed model id beside its add button; the button sits on the field's baseline. */
+.addedModelForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.addedModelForm > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.addedModels {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.addedModels li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.addedModels li > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

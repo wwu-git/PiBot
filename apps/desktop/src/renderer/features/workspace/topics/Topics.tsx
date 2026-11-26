@@ -4,6 +4,7 @@ import { RoutineTopicLabel, routineTopicTitle } from "@pibot/routines/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTimelineDay } from "../../chat/messages/MessageTime.tsx";
 import { useTopicRestore } from "../../chat/topics/use-topic-archive.ts";
+import { importedTopicLabel, rememberTopicTitle } from "../../chat/topics/use-topic-title.ts";
 import { TopicListView } from "./TopicListView.tsx";
 
 export function Topics({
@@ -36,6 +37,7 @@ export function Topics({
     ),
   );
   const folderName = (topic: MethodResults["topics.list"][number]) => {
+    if (topic.readOnly) return importedTopicLabel(t, topic.importSource);
     const id = topic.workplaceFolderId;
     if (!id || id === "home") return t("agentWork.ownFolder");
     return topic.workplaceFolderName ?? t("agentWork.folderUnavailable");
@@ -288,6 +290,7 @@ export function Topics({
             .run(() => peer.call("topics.switch", { botId, topicId: topic.id }))
             .then((result) => {
               if (result) {
+                rememberTopicTitle(peer, botId, result);
                 navigate({ name: "chat", botId, topicId: result.id });
                 void workspace.refresh();
               }

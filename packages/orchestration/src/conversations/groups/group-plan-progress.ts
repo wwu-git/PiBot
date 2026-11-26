@@ -7,6 +7,7 @@ import {
 import type { GroupWorkflowRunRecord, GroupWorkflowStepRecord } from "@pibot/storage";
 import { stepTaskId, workspaceSteps } from "./group-plan-step-workspaces.ts";
 import type { GroupService } from "./group-service.ts";
+import { resolvePlanHold } from "./group-workflow-hold.ts";
 import { GroupWorkflowPause } from "./group-workflow-pause.ts";
 import { progressOf } from "./group-workflow-progress.ts";
 import { workflowOf } from "./group-workflow-snapshot.ts";
@@ -116,6 +117,9 @@ function facts(service: GroupService, record: GroupWorkflowRunRecord): GroupPlan
     steps,
     passed: steps.filter((step) => step.status === "passed").length,
     total: steps.length,
+    ...(progress.hold && ["running", "waiting"].includes(record.status)
+      ? { choice: { kind: progress.hold.kind, stepIds: progress.hold.stepIds } }
+      : {}),
     // Only settled unknown charges hide the total; retain the root ledger while streams run.
     costUsd: ledger && ledger.unknownCostRequests === pending ? ledger.knownCostUsd : null,
     pendingCostRequests: pending,
@@ -143,5 +147,15 @@ export function stopPlan(
   const record = current(service, params.groupId, params.workflowRunId);
   if (record.status === "running" || record.status === "waiting")
     service.workflows.progress.stop(record, "user_stopped", "user");
+  return facts(service, service.workflows.repo.get(record.id) ?? record);
+}
+
+/** The user's answer to the plan's waiting choice; the program does the rest, no model call. */
+export function choosePlan(
+  service: GroupService,
+  params: KernelMethodParams["groups.plan.choose"],
+): GroupPlanProgress {
+  const record = current(service, params.groupId, params.workflowRunId);
+  resolvePlanHold(service, record, params.choice);
   return facts(service, service.workflows.repo.get(record.id) ?? record);
 }

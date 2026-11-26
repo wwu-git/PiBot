@@ -81,8 +81,9 @@ export class Ui {
       `permission:${category}`,
       `(() => {
       const groups=[...document.querySelectorAll('fieldset')];
-      const group=groups.find(e=>${JSON.stringify(labels)}.includes(e.querySelector('legend')?.textContent.trim()));
-      const label=group && [...group.querySelectorAll('label')].find(e=>${JSON.stringify(options)}.includes(e.textContent.trim()));
+      // A group is named by its legend or, for card choices, by aria-label; a card option by its title.
+      const group=groups.find(e=>${JSON.stringify(labels)}.includes(e.querySelector('legend')?.textContent.trim() ?? '') || ${JSON.stringify(labels)}.includes(e.getAttribute('aria-label')?.trim() ?? ''));
+      const label=group && [...group.querySelectorAll('label')].find(e=>${JSON.stringify(options)}.includes(e.textContent.trim()) || ${JSON.stringify(options)}.includes(e.querySelector('strong')?.firstChild?.textContent?.trim() ?? ''));
       const button=label?.querySelector('input');
       if (!button || button.matches(':disabled')) return false; button.click(); return true;
     })()`,

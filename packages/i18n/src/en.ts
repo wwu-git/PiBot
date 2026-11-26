@@ -1,3 +1,4 @@
+// Assembles the English strings for the shared interface.
 import { botBrowserEn, browserDebugEn } from "@pibot/browser-contract/i18n";
 import {
   computerGuardEn,
@@ -9,11 +10,16 @@ import { externalAgentsEn } from "@pibot/external-agents-contract/i18n";
 import { mediaEn } from "@pibot/images-contract/i18n";
 import { providersEn } from "@pibot/models-contract/i18n";
 import { officeEn } from "@pibot/office-contract/i18n";
-import { connectionsEn, connectorsEn, knowledgeEn } from "@pibot/plugins-contract/i18n";
+import {
+  connectionDrawerEn,
+  connectionsEn,
+  connectorsEn,
+  knowledgeEn,
+} from "@pibot/plugins-contract/i18n";
 import { remoteEn } from "@pibot/remote-contract/i18n";
 import { routineProposalsEn, routinesEn } from "@pibot/routines-contract/i18n";
 import { skillsEn, teachEn, workflowsEn } from "@pibot/skills-contract/i18n";
-import { builtinEn, teamsEn } from "@pibot/teams-contract/i18n";
+import { builtinEn, piManagerEn, teamsEn } from "@pibot/teams-contract/i18n";
 import { changesEn, managedResourcesEn } from "@pibot/workspaces-contract/i18n";
 import { mergeTranslations } from "./merge-translations.ts";
 import { activityEn } from "./sections/activity.ts";
@@ -27,6 +33,7 @@ import { botHooksEn } from "./sections/bot-hooks.ts";
 import { capabilitiesEn } from "./sections/capabilities.ts";
 import { chatEn } from "./sections/chat.ts";
 import { commandAccessEn } from "./sections/command-access.ts";
+import { conversationImportEn } from "./sections/conversation-import.ts";
 import { draftsEn } from "./sections/drafts.ts";
 import { executionEn } from "./sections/execution.ts";
 import { filePreviewEn } from "./sections/file-preview.ts";
@@ -34,6 +41,7 @@ import { foldersEn } from "./sections/folders.ts";
 import { groupEn } from "./sections/group.ts";
 import { independentBackgroundEn } from "./sections/independent-background.ts";
 import { linuxStartupEn } from "./sections/linux-startup.ts";
+import { liveIslandEn } from "./sections/live-island.ts";
 import { memorySettingsEn } from "./sections/memory-settings.ts";
 import { messageActionsEn } from "./sections/message-actions.ts";
 import { networkEn } from "./sections/network.ts";
@@ -42,6 +50,7 @@ import { permissionsEn } from "./sections/permissions.ts";
 import { personalTodosEn } from "./sections/personal-todos.ts";
 import { policyExplanationEn } from "./sections/policy-explanation.ts";
 import { providerAuthEn } from "./sections/provider-auth.ts";
+import { providerImportEn } from "./sections/provider-import.ts";
 import { receiptEn } from "./sections/receipt.ts";
 import { runtimeEn } from "./sections/runtime.ts";
 import { settingsPagesEn } from "./sections/settings-pages.ts";
@@ -95,6 +104,10 @@ const common = {
   "theme.dark": "Dark",
   "theme.system": "System",
   "theme.preview": "{theme} appearance preview",
+  "chatFont.label": "Chat text size",
+  "chatFont.small": "Small",
+  "chatFont.medium": "Medium",
+  "chatFont.large": "Large",
   "welcome.title": "Meet Pi Bot",
   "welcome.subtitle": "Your bot team, working on your own computer",
   "welcome.progress": "Step {step} of {total}",
@@ -241,9 +254,15 @@ const common = {
   "settings.browserUnknown": "Unknown",
   "settings.browserExtension": "Pi Bot extension",
   "settings.browserExtensionStatus.connected": "Connected",
-  "settings.browserExtensionStatus.installed": "Installed but not connected",
+  "settings.browserExtensionStatus.installed": "Disconnected (previously connected)",
+  "settings.browserExtensionStatus.edgeNotListed": "Not yet listed in Microsoft Edge Add-ons",
   "settings.browserExtensionStatus.not_installed": "Not installed",
   "settings.browserExtensionStatus.unsupported": "Unsupported",
+  "settings.browserExtensionStatus.separate_data_dir":
+    "This Pi Bot uses a separate data folder and has not taken over the browser extension. Choose Connect here to switch the extension to this copy; your main Pi Bot loses it until this copy quits.",
+  "settings.browserExtensionStatus.other_instance":
+    "The browser extension is connected to another Pi Bot. Choose Connect here to switch it to this one.",
+  "settings.browserExtensionConnectHere": "Connect here",
   "settings.browserPreference": "Use browser",
   "settings.browserPreferenceUser": "Prefer your browser (use your sign-in)",
   "settings.browserPreferenceBot": "Use only Pi Bot's built-in Bot browser",
@@ -287,6 +306,8 @@ const common = {
     "Deleted {count} command logs under retention settings ({bytes} bytes)",
   "audit.runRetention.requested": "Requested cleanup of run records older than {days} days",
   "settings.saveError": "Couldn’t save settings. Please try again.",
+  "errors.import_format_chatgpt": "The ChatGPT export format was not recognized.",
+  "errors.import_format_claude": "The Claude export format was not recognized.",
   "errors.no_model":
     "No model is available. Configure a provider in Settings and choose a model for this Bot first.",
   "errors.subscription_unsupported":
@@ -348,6 +369,7 @@ export const enSections = {
   connectorsEn,
   knowledgeEn,
   connectionsEn,
+  connectionDrawerEn,
   browserDebugEn,
   executionEn,
   personalTodosEn,
@@ -355,6 +377,7 @@ export const enSections = {
   agentReviewEn,
   managedResourcesEn,
   commandAccessEn,
+  conversationImportEn,
   panelsEn,
   topicWorkplaceEn,
   yoloEn,
@@ -371,9 +394,11 @@ export const enSections = {
   networkEn,
   groupEn,
   teamsEn,
+  piManagerEn,
   builtinEn,
   activityEn,
   providerAuthEn,
+  providerImportEn,
   receiptEn,
   computerGuardEn,
   backgroundEn,
@@ -394,6 +419,7 @@ export const enSections = {
   credentialsEn,
   secretEn,
   settingsPagesEn,
+  liveIslandEn,
 } as const;
 
 export const en = mergeTranslations(enSections) satisfies TranslationTable;

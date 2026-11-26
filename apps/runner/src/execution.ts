@@ -1,6 +1,7 @@
+// Enforce runner-local boundaries on paths supplied over the authenticated link.
 import { access, readdir } from "node:fs/promises";
 import { hostname } from "node:os";
-import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, parse, relative, resolve, sep, win32 } from "node:path";
 import {
   type ExecutionTarget,
   type FolderLevel,
@@ -8,6 +9,7 @@ import {
   windowsHostNames,
   windowsPathName,
   windowsReservedRoot,
+  windowsSystemTrees,
   windowsWithin,
 } from "@pibot/execution";
 import { RpcError, RpcErrorCodes } from "@pibot/protocol-base";
@@ -29,6 +31,7 @@ export function runnerExecution(
   //; compare the normalized names instead.
   const hosts =
     host.platform === "win32" ? windowsHostNames(hostname(), host.env.COMPUTERNAME) : [];
+  const systemTrees = host.platform === "win32" ? windowsSystemTrees(host.env) : [];
   const contains = (root: string, path: string) => {
     if (host.platform === "win32")
       return windowsWithin(windowsPathName(root, hosts), windowsPathName(path, hosts));
@@ -82,14 +85,23 @@ export function runnerExecution(
   const canonicalize: ExecutionTarget["canonicalizePath"] = async (path, cwd, signal) => {
     signal.throwIfAborted();
     // Re-resolve aliases per operation, using the runner host rather than desktop paths/env.
+    const requested = host.platform === "win32" ? windowsPathName(path, []) : undefined;
+    if (requested && requested.kind !== "drive" && win32.isAbsolute(path))
+      throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");
     const denyRead = await privateRoots(signal);
     const result = await local.canonicalizePath(path, cwd, signal);
     signal.throwIfAborted();
     if (host.platform === "win32") {
-      const name = windowsPathName(result.path, hosts);
+      const name = windowsPathName(result.path, []);
       // Another machine's share and device paths cannot be shown to stay outside the private
       // directories, and a drive root or an install tree is no workplace: refuse instead of guessing.
-      if (name.kind !== "drive" || windowsReservedRoot(name))
+      if (
+        name.kind !== "drive" ||
+        (requested?.kind === "drive" &&
+          (win32.parse(requested.path).root !== win32.parse(name.path).root ||
+            windowsReservedRoot(requested, systemTrees))) ||
+        windowsReservedRoot(name, systemTrees)
+      )
         throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");
     }
     if (
@@ -116,24 +128,33 @@ export function runnerExecution(
   }) => {
     await accessible(input.cwd, input.cwd, input.signal);
     const checked = await accessible(input.path ?? input.cwd, input.cwd, input.signal);
-    if (input.expectedPath && input.expectedPath !== checked.path)
+    if (
+      input.expectedPath &&
+      !(host.platform === "win32"
+        ? windowsPathName(input.expectedPath, []).path === windowsPathName(checked.path, []).path
+        : input.expectedPath === checked.path)
+    )
       throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");
     for (const root of input.writeRoots) await accessible(root, root, input.signal);
     return checked.path;
   };
   /**
-   * Maintainers 2026-11-12: the folder chooser walks from `C:\\` or the user's home down to a
+   * The folder chooser walks from a drive or the user's profile down to a
    * project. Those ancestors contain this runner's own data, so `listDir` (a workplace read) refuses
    * them. This lists folder names only, never inside the data or private directories and never
    * showing them; choosing a folder still goes through `canonicalize`, which refuses those ancestors
    * as workplaces.
    */
-  const listFolders = async (path: string | null, signal: AbortSignal): Promise<FolderLevel> => {
+  const listFolders = async (
+    path: string | null | undefined,
+    signal: AbortSignal,
+  ): Promise<FolderLevel> => {
     signal.throwIfAborted();
     const windows = host.platform === "win32";
-    if (path === null && windows) {
+    if ((path === null || (path === undefined && !host.userHome)) && windows) {
       const folders: FolderLevel["folders"] = [];
-      for (const letter of "CDEFGHIJKLMNOPQRSTUVWXYZ") {
+      for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+        signal.throwIfAborted();
         const root = `${letter}:\\`;
         if (
           await access(root).then(
@@ -143,15 +164,25 @@ export function runnerExecution(
         )
           folders.push({ name: `${letter}:`, path: root });
       }
+      signal.throwIfAborted();
       return { path: null, parent: null, top: true, folders, truncated: false };
     }
-    const asked = path ?? "/";
+    const asked = path ?? (windows ? host.userHome : "/");
     if (!isAbsolute(asked))
+      throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");
+    const requested = windows ? windowsPathName(asked, []) : undefined;
+    if (requested && requested.kind !== "drive")
       throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");
     const real = (await local.canonicalizePath(asked, asked, signal)).path;
     signal.throwIfAborted();
-    if (windows && windowsPathName(real, hosts).kind !== "drive")
-      throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");
+    if (requested) {
+      const target = windowsPathName(real, []);
+      if (
+        target.kind !== "drive" ||
+        win32.parse(target.path).root !== win32.parse(requested.path).root
+      )
+        throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");
+    }
     const hidden = [dataDir, ...(await privateRoots(signal))];
     if (hidden.some((root) => contains(root, real)))
       throw new RpcError(RpcErrorCodes.invalidParams, "runner_path_unavailable");

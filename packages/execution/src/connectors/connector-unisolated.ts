@@ -10,6 +10,7 @@ import { userTerminalEnvironment } from "../command/environment.ts";
 import { checkedRoot, within } from "../core/paths.ts";
 import type { ExecRedactor } from "../core/types.ts";
 import { ExecError } from "../core/types.ts";
+import { windowsSystemRoot } from "../core/windows-environment.ts";
 import {
   type ConnectorServerDiagnosis,
   ConnectorStartError,
@@ -54,12 +55,18 @@ export interface UnisolatedServerOptions {
   redactor?: ExecRedactor;
 }
 
+function connectorWindowsRoot(options: UnisolatedServerOptions) {
+  return windowsSystemRoot({ SystemRoot: options.windowsRoot });
+}
+
 function serverEnvironment(options: UnisolatedServerOptions): NodeJS.ProcessEnv {
   const extra = [...(options.pathEntries ?? [])];
   if (options.platform === "win32") {
     const env: NodeJS.ProcessEnv = {
-      ...options.env,
-      SystemRoot: options.windowsRoot ?? "C:\\Windows",
+      ...Object.fromEntries(
+        Object.entries(options.env).filter(([key]) => key.toLowerCase() !== "systemroot"),
+      ),
+      SystemRoot: connectorWindowsRoot(options),
     };
     if (!extra.length) return env;
     // Windows names are case insensitive and a copied environment often spells it "Path".
@@ -196,7 +203,7 @@ export async function startUnisolatedConnectorServer(
     if (pid)
       await new Promise<void>((resolve, reject) => {
         const killer = spawn(
-          join(options.windowsRoot ?? "C:\\Windows", "System32", "taskkill.exe"),
+          join(connectorWindowsRoot(options), "System32", "taskkill.exe"),
           ["/PID", String(pid), "/T", "/F"],
           { windowsHide: true, stdio: "ignore", shell: false },
         );

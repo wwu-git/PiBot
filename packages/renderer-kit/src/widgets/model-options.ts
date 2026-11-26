@@ -40,6 +40,7 @@ export function useModelOptions(
       keywords: [model.name, model.id, model.provider, names.get(model.provider) ?? ""],
       group: grouped ? (names.get(model.provider) ?? model.provider) : undefined,
       secondary: [
+        ...(model.addedByUser ? [t("models.addedByUser")] : []),
         t("models.contextWindow", { count: model.contextWindow.toLocaleString(language) }),
         ...(model.input.includes("image") ? [t("models.images")] : []),
         ...(model.reasoning ? [t("models.reasoning")] : []),

@@ -61,7 +61,8 @@ While a group is working, a bar above the input shows the running step and who i
 [![Pause and continue a group (click for the video)](../../assets/pibot-group-pause.gif)](../../assets/pibot-group-pause.mp4)
 
 - **Pause**: the running steps stop and progress is kept; the bar changes to "Paused · progress kept; step N "…" stopped here". A command running inside a step is stopped; background services (such as a local preview) keep running.
-- **Continue**: the stopped steps pick up where they stopped. The Bot that continues is told which files it had changed and which commands it had run (the one the pause cut off is marked "stopped by the pause"), and which files someone else, such as you, changed during the pause. It reruns the command that was cut off and doesn't redo finished work.
+- **Continue**: the stopped steps pick up where they stopped. The Bot that continues is told which files it had changed and which commands it had run (the one the pause cut off is marked "stopped by the pause"), and which files someone else, such as you, changed during the pause. It reruns the command that was cut off and doesn't redo finished work. The continue message names every step resumed.
+- **Status**: **Paused** means the step can resume with **Continue**. **Stopped** means the plan was stopped or cancelled.
 - **Say it in the chat**: sending "hold on", "pause", "go on" or "continue" works like the buttons. Only a message that is just that counts; a question or a message with other instructions goes to the coordinator as usual.
 - **Chat while paused**: ask members questions or edit files yourself; Bots answer only when you send a message or mention them. No new plan starts while the group is paused.
 - The **Pause automatic conversation** switch at the top of the chat and **Pause / Continue** on the phone are the same pause (see [11 · Phone app](11-phone-app.md#chats-tasks-and-approvals)).

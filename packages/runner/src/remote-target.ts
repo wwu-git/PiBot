@@ -1,3 +1,4 @@
+// Adapt the authenticated runner peer to the execution target interface.
 import { randomUUID } from "node:crypto";
 import type { BackgroundJob, ExecutionTarget, GitEntryResult } from "@pibot/execution";
 import { ExecError } from "@pibot/execution";
@@ -308,8 +309,10 @@ export async function createRemoteExecutionTarget(
       return call("runner.path.canonicalize", { path, cwd }, { signal: callSignal(signal) });
     },
     // An older runner answers methodNotFound; the brain then falls back to listDir.
-    async listFolders(path: string | null, signal: AbortSignal) {
-      return call("runner.folders.list", { path }, { signal: callSignal(signal) });
+    async listFolders(path: string | null | undefined, signal: AbortSignal) {
+      return call("runner.folders.list", path === undefined ? {} : { path }, {
+        signal: callSignal(signal),
+      });
     },
     // Every other member here is async; a synchronous one made abortable() call .then on a
     // plain object, so the failure surfaced as "isolation_unknown" instead of this device's state.

@@ -23,6 +23,7 @@ import { useSettingsData } from "./use-settings-data.ts";
 const BotSettingsSchema: z.ZodType<BotSettings> = z.object({
   resourcesUnavailable: z.boolean().optional(),
   profile: Methods["bots.profile"].result,
+  dream: Methods["memory.dream.last"].result.optional(),
   models: Methods["models.list"].result.optional(),
   skills: Methods["skills.list"].result.optional(),
   routines: Methods["routines.list"].result.optional(),

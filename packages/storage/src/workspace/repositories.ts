@@ -2,8 +2,10 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
+  attachmentContinuationOf,
   ImageDeliverySchema,
   type KernelMethodResults,
+  LIVE_ISLAND_KINDS,
   MessageSchema,
   SettingsSchema,
   UserQuestionPauseSchema,
@@ -22,17 +24,27 @@ export type Bot = KernelMethodResults["bots.list"][number];
 export type Message = KernelMethodResults["chat.history"][number];
 export type JsonValue = Message["usage"];
 
+export const DEFAULT_BROWSER_EXTENSION_PREFERENCE = "user";
+
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   defaultModel: null,
   auxiliaryModel: null,
   acpDefaultBotId: null,
   backgroundCommandLimitMinutes: 120,
   commandLogRetention: {},
+  memoryDreamEnabled: false,
+  memoryDreamLocalOnly: false,
+  memoryDreamCostUsd: 0.05,
   memoryExtractionDailyCostUsd: 0.5,
   memoryExtractionDailyTokens: 2_000_000,
   language: "system",
   theme: "system",
+  chatFontSize: "medium",
+  liveIsland: true,
+  liveIslandContent: "full",
+  liveIslandKinds: [...LIVE_ISLAND_KINDS],
   onboardingCompleted: false,
+  browserExtensionPreference: DEFAULT_BROWSER_EXTENSION_PREFERENCE,
   openAtLogin: false,
   showTrayIcon: true,
   closeToTrayHintShown: false,
@@ -55,7 +67,7 @@ const OPTIONAL_KEYS = [
 export class SettingsRepo {
   constructor(private readonly db: DatabaseSync) {}
 
-  get(): Settings {
+  get({ initializeDefaultModel = true } = {}): Settings {
     // Older databases never persisted this default; a missing key must retain their enabled state.
     const values = { ...DEFAULT_SETTINGS, openAtLogin: true };
     let hasDefaultModel = false;
@@ -86,9 +98,10 @@ export class SettingsRepo {
               thinkingPreference: pi.thinkingPreference ?? null,
             }
           : null;
-      this.db
-        .prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING")
-        .run("defaultModel", JSON.stringify(values.defaultModel));
+      if (initializeDefaultModel)
+        this.db
+          .prepare("INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO NOTHING")
+          .run("defaultModel", JSON.stringify(values.defaultModel));
     }
     return SettingsSchema.parse(values);
   }
@@ -589,11 +602,13 @@ export class MessagesRepo {
       conversation.kind === "dm"
         ? `dm:${String(conversation.bot_id)}`
         : `group:${String(conversation.group_id)}`;
-    if (!conversation.internal_task_id)
+    const deliveryPage = attachmentContinuationOf(message);
+    if (!conversation.internal_task_id && !deliveryPage)
       new SidebarRepo(this.db).activity(key, markUnread ?? message.role !== "user");
     if (
       message.runId &&
       message.status !== "streaming" &&
+      !deliveryPage &&
       this.db
         .prepare("SELECT 1 FROM runs WHERE id=? AND conversation_id=?")
         .get(message.runId, message.conversationId)

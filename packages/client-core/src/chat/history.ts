@@ -1,5 +1,7 @@
+// Keep history windows contiguous so the chat can render complete reply segments.
 import { RpcError, RpcErrorCodes } from "@pibot/protocol";
 import { readCurrentTopic } from "./current-topic.ts";
+import { completeLeadingReplies, HISTORY_PAGE_SIZE, historyPage } from "./history-page.ts";
 import { sameMessage } from "./selectors.ts";
 import type { ChatSession } from "./session.ts";
 
@@ -139,16 +141,22 @@ export async function readHistory(
   const version = ++this.historyVersion;
   try {
     const route = this.route();
-    const messages = await this.reads.read(
-      `history:${JSON.stringify(route)}`,
-      (signal) => this.peer.call("chat.history", { ...route, limit: 50 }, { signal }),
-      this.lifetime.signal,
-    );
+    const signal = AbortSignal.any([this.lifetime.signal, AbortSignal.timeout(30_000)]);
+    const page = await historyPage(this, route, signal);
     if (this.disposed || version !== this.historyVersion) return;
     const expected =
       this.target.topicId ?? (this.topicRouting ? this.state.conversationId : undefined);
-    if (expected && messages.some((message) => message.conversationId !== expected))
+    if (expected && page.some((message) => message.conversationId !== expected))
       throw new Error("History target mismatch");
+    // A replacement window has no retained prefix to cover a cut reply segment.
+    const { messages, hasMore } = await completeLeadingReplies(
+      this,
+      route,
+      page,
+      signal,
+      !replaceWindow,
+    );
+    if (this.disposed || this.lifetime.signal.aborted || version !== this.historyVersion) return;
     // Terminal events refresh canonical text (including redaction) from the brain.
     const ids = new Set(messages.map((message) => message.id));
     const liveById = new Map(this.state.messages.map((message) => [message.id, message]));
@@ -172,19 +180,29 @@ export async function readHistory(
             ...this.state.messages.slice(last + 1),
           ];
     // A full disjoint page leaves an unknown gap; restart pagination instead of splicing around it.
-    const resetWindow = replaceWindow || (first < 0 && snapshot.length === 50);
+    const resetWindow = replaceWindow || (first < 0 && page.length === HISTORY_PAGE_SIZE);
     this.patch({
       messages: resetWindow ? snapshot : merged,
       conversationId:
         this.target.topicId ?? messages[0]?.conversationId ?? this.state.conversationId,
       historyError: !this.state.loading && !this.historyRouteReady,
       historyReady: !this.state.loading && this.historyRouteReady,
-      ...(resetWindow ? { hasMore: messages.length === 50 } : {}),
+      ...(resetWindow || (first === 0 && snapshot[0]?.id !== this.state.messages[0]?.id)
+        ? { hasMore }
+        : {}),
     });
-  } catch {
+  } catch (error) {
     if (!this.lifetime.signal.aborted && version === this.historyVersion) {
       this.failedPage = false;
-      this.patch({ historyError: true, historyReady: false });
+      const missing =
+        error instanceof RpcError &&
+        error.code === RpcErrorCodes.invalidParams &&
+        error.message === "Unknown topic";
+      this.patch({
+        historyError: true,
+        historyReady: false,
+        ...(missing ? { messages: [], hasMore: false } : {}),
+      });
     }
   }
 }
@@ -215,21 +233,35 @@ export async function readOlder(this: ChatSession, signal?: AbortSignal) {
   try {
     const version = this.historyVersion;
     const route = this.route();
-    const readSignal = AbortSignal.any([this.lifetime.signal, ...(signal ? [signal] : [])]);
-    const older = await this.reads.read(
-      `history-page:${JSON.stringify([route, before])}`,
-      (signal) => this.peer.call("chat.history", { ...route, before, limit: 50 }, { signal }),
+    const readSignal = AbortSignal.any([
+      this.lifetime.signal,
+      AbortSignal.timeout(30_000),
+      ...(signal ? [signal] : []),
+    ]);
+    const page = await historyPage(this, route, readSignal, before);
+    if (route.topicId && page.some((message) => message.conversationId !== route.topicId))
+      throw new Error("History target mismatch");
+    const { messages: older, hasMore: earlier } = await completeLeadingReplies(
+      this,
+      route,
+      page,
       readSignal,
     );
-    if (this.disposed || signal?.aborted || version !== this.historyVersion) return;
+    if (
+      this.disposed ||
+      this.lifetime.signal.aborted ||
+      signal?.aborted ||
+      version !== this.historyVersion
+    )
+      return;
     const ids = new Set(this.state.messages.map((message) => message.id));
     this.patch({
       messages: [...older.filter((message) => !ids.has(message.id)), ...this.state.messages],
-      hasMore: older.length === 50,
+      hasMore: earlier,
     });
   } catch {
     // A cancelled focus must not prepend a late page or turn ordinary browsing into a load error.
-    if (!signal?.aborted) {
+    if (!this.lifetime.signal.aborted && !signal?.aborted) {
       this.failedPage = true;
       this.patch({ historyError: true });
     }

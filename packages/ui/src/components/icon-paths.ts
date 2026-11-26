@@ -4,6 +4,7 @@ export const iconPaths = {
   image: "M3 3h18v18H3ZM3 16l6-6 5 5 3-3 4 4M16 7h.01",
   info: "M12 11v6M12 7h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
   message: "M3 4h18v13H8l-5 4ZM7 8h10M7 12h7",
+  island: "M7 8h10a4 4 0 0 1 0 8H7a4 4 0 0 1 0-8ZM8.5 12h.01",
   audit: "M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01",
   refresh: "M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1",
   clock: "M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",

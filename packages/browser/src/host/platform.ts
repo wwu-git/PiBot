@@ -151,7 +151,13 @@ export interface Session {
       | null,
   ): void;
   setPermissionCheckHandler(listener: (() => boolean) | null): void;
-  setProxy(config: { mode: string; proxyRules?: string; proxyBypassRules?: string }): Promise<void>;
+  setProxy(config: {
+    mode: string;
+    proxyRules?: string;
+    proxyBypassRules?: string;
+    pacScript?: string;
+  }): Promise<void>;
+  resolveProxy(url: string): Promise<string>;
   closeAllConnections(): Promise<void>;
   clearStorageData(): Promise<void>;
   clearCache(): Promise<void>;

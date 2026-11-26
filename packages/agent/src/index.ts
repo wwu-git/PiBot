@@ -1,4 +1,4 @@
-// The patched version-only entry is the locked 1.4.0 constant; it imports no SDK/config module.
+// The patched version-only entry is the locked 1.6.0 constant; it imports no SDK/config module.
 export { VERSION as PI_VERSION } from "@earendil-works/pi-coding-agent/version";
 export {
   type ChatGPTUnavailableReason,

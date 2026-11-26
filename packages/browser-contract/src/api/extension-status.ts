@@ -7,7 +7,11 @@ const empty = z.union([z.undefined(), z.strictObject({})]);
 export const BrowserExtensionMethods = {
   "browserExtension.status": { params: empty, result: BrowserExtensionStatusSchema },
   "browserExtension.setPreference": {
-    params: z.strictObject({ preference: z.enum(["user", "bot"]) }),
+    params: z.strictObject({
+      preference: z.enum(["user", "bot"]),
+      /** "Connect here": take the extension over from another Pi Bot or the main install. */
+      takeOver: z.literal(true).optional(),
+    }),
     result: BrowserExtensionStatusSchema,
   },
   /**

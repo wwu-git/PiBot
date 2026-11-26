@@ -1,3 +1,4 @@
+import { useMagpieDetection } from "@pibot/models/ui";
 import type { MethodResults, ModelInfo, Provider } from "@pibot/protocol";
 import { useRpc, useRpcEvent } from "@pibot/renderer-kit";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
@@ -5,6 +6,7 @@ import { requirePeer, SetupError } from "../settings/operations.ts";
 
 export function useModelDirectory() {
   const { peer } = useRpc();
+  const magpie = useMagpieDetection(true);
   const owner = useRef({ peer, epoch: 0, controller: new AbortController() });
   if (owner.current.peer !== peer)
     owner.current = { peer, epoch: owner.current.epoch + 1, controller: new AbortController() };
@@ -98,6 +100,7 @@ export function useModelDirectory() {
     loading,
     failed,
     ollama,
+    magpie: magpie.result,
     detecting,
     refresh,
     detect,

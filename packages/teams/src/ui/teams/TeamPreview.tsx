@@ -1,4 +1,4 @@
-import { CategorySchema, type TeamPreview as Preview } from "@pibot/protocol";
+import { CategorySchema, isPiManagerCategory, type TeamPreview as Preview } from "@pibot/protocol";
 import { avatarColors, avatarEyes, avatarShapes, useRpc, useT } from "@pibot/renderer-kit";
 import { Avatar, Button, IconTile } from "@pibot/ui";
 import { useState } from "react";
@@ -144,14 +144,16 @@ export function TeamPreview({ preview }: { preview: Preview }) {
               )}
             </div>
             <div className={styles.mapping}>
-              {CategorySchema.options.map((category) => (
-                <div key={category}>
-                  {t(`permissions.category.${category}`)}:{" "}
-                  {bot.permissionOverrides[category] === undefined
-                    ? t("workspace.inherit")
-                    : t(`permissions.level.${bot.permissionOverrides[category]}`)}
-                </div>
-              ))}
+              {CategorySchema.options
+                .filter((category) => !isPiManagerCategory(category))
+                .map((category) => (
+                  <div key={category}>
+                    {t(`permissions.category.${category}`)}:{" "}
+                    {bot.permissionOverrides[category] === undefined
+                      ? t("workspace.inherit")
+                      : t(`permissions.level.${bot.permissionOverrides[category]}`)}
+                  </div>
+                ))}
             </div>
             <h4 className={styles.heading}>{t("workspace.persona")}</h4>
             <div className={styles.persona}>{bot.systemPrompt || t("teams.emptyPersona")}</div>

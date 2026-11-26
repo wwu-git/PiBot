@@ -18,6 +18,7 @@ export function registerBotRpc(
   });
   handle("bots.archive", ({ botId }) => bots.archive(botId));
   handle("bots.profile", async ({ botId }) => bots.profile(botId));
+  handle("topics.metadata", (params) => bots.topicMetadata(params));
   handle("topics.list", async (params) => bots.topics(params));
   handle("topics.archive", (params) => bots.topicArchive.archive(params));
   handle("topics.restore", (params) => bots.topicArchive.restore(params));

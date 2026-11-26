@@ -79,6 +79,17 @@ export function useTopics(
       setCurrent(copy ? shown(copy.topics, copy.current) : undefined);
     }
     void load();
+    if (kind !== "bot") return;
+    let refresh: ReturnType<typeof setTimeout> | undefined;
+    const off = mobile.peer?.on("sidebar.changed", (event) => {
+      if (event.conversationKey !== `dm:${id}`) return;
+      clearTimeout(refresh);
+      refresh = setTimeout(() => void load(), 150);
+    });
+    return () => {
+      clearTimeout(refresh);
+      off?.();
+    };
   }, [mobile.selectedId, mobile.peer, kind, id, mobile.refreshVersion]);
   const title = topics.find((topic) => topic.id === current)?.title;
   return {

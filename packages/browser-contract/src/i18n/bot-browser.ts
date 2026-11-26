@@ -94,13 +94,13 @@ export const botBrowserZh = {
   "botBrowser.notice.handBackSites": "{took}（访问了 {sites}）· 已交还给{name}",
   // A login form was submitted during the takeover; {sites} are those hostnames only.
   "botBrowser.notice.handBackSignedIn": "{took}（登录了 {sites}）· 已交还给{name}",
-  "botBrowser.notice.extensionFallback": "你的浏览器插件已断开，已改用 Pi Bot 浏览器",
+  "browserExtension.install.edgeFallback":
+    "扩展尚未在 Microsoft Edge 加载项商店上架。本次任务继续使用 Bot 浏览器。",
   "browserExtension.install.title": "让 Bot 用你的 {browser}？",
   "browserExtension.install.description":
     "装上 Pi Bot 扩展后，Bot 就能在你的浏览器里用你已登录的账号干活；它只在自己的「Pi Bot」标签组里操作，提交表单前先问你。这次先用 Bot 浏览器继续。",
   "browserExtension.install.step.open": "在 {browser} 里打开 Pi Bot Browser 的商店页",
-  "browserExtension.install.step.edge": "页面顶部出现提示时，点「允许来自其他应用商店的扩展」",
-  "browserExtension.install.step.add": "点「添加至 Chrome」（Edge 里同样是这个按钮）",
+  "browserExtension.install.step.add": "点「添加至 Chrome」",
   "browserExtension.install.step.addFirefox": "点「添加到 Firefox」，再在扩展按钮里允许访问网站",
   "browserExtension.install.step.connect": "装好后会自动连上，之后的任务就用你的浏览器",
   "browserExtension.install.open": "打开安装页",
@@ -226,15 +226,13 @@ export const botBrowserEn: { [K in keyof typeof botBrowserZh]: string } = {
   "botBrowser.notice.handBack": "{took} · Handed back to {name}",
   "botBrowser.notice.handBackSites": "{took} (visited {sites}) · Handed back to {name}",
   "botBrowser.notice.handBackSignedIn": "{took} (signed in to {sites}) · Handed back to {name}",
-  "botBrowser.notice.extensionFallback":
-    "The browser extension disconnected; Pi Bot switched to its own browser",
+  "browserExtension.install.edgeFallback":
+    "The extension is not yet listed in Microsoft Edge Add-ons. This task continues in the Bot browser.",
   "browserExtension.install.title": "Let the Bot use your {browser}?",
   "browserExtension.install.description":
     "With the Pi Bot extension, Bots work in your browser with the accounts you are signed in to. They stay in their own “Pi Bot” tab group and ask before submitting a form. This task continues in the Bot browser.",
   "browserExtension.install.step.open": "Open Pi Bot Browser’s store page in {browser}",
-  "browserExtension.install.step.edge":
-    "If a bar appears at the top, choose “Allow extensions from other stores”",
-  "browserExtension.install.step.add": "Choose “Add to Chrome” (Edge shows the same button)",
+  "browserExtension.install.step.add": "Choose “Add to Chrome”",
   "browserExtension.install.step.addFirefox":
     "Choose “Add to Firefox”, then allow website access from the extension button",
   "browserExtension.install.step.connect": "It connects by itself; later tasks use your browser",

@@ -2,7 +2,7 @@ import { useNavigation, useT } from "@pibot/renderer-kit";
 import { MemoryScopeView } from "../workspace/memory/settings/MemoryScopeView.tsx";
 import { ABOUT_YOU_DIALOG } from "../workspace/memory/use-open-memory.ts";
 import { AppDialog } from "./AppDialog.tsx";
-import { MemorySortIntoPlace } from "./MemorySortIntoPlace.tsx";
+import { MemoryDreamCards } from "./MemoryDreamCards.tsx";
 
 export function AboutYouDialog() {
   const { dialog, closeDialog } = useNavigation();
@@ -16,7 +16,7 @@ export function AboutYouDialog() {
       title={t("appMenu.aboutYou")}
       close={() => closeDialog(dialog.key)}
     >
-      <MemorySortIntoPlace />
+      <MemoryDreamCards />
       <MemoryScopeView owner={{ scope: "user", ownerId: "user" }} />
     </AppDialog>
   );

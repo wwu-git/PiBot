@@ -12,6 +12,7 @@ export {
 } from "./page/ConnectorFeedback.tsx";
 export { ConnectorsPage } from "./page/ConnectorsPage.tsx";
 export { useConnectionChoices } from "./page/connection-choices.ts";
+export { FacePicker } from "./page/connections/Faces.tsx";
 export { PendingImportedSkills } from "./page/PendingImportedSkills.tsx";
 export { TargetConnections } from "./page/TargetConnections.tsx";
 export { ImportPlugin } from "./setup/ImportPlugin.tsx";

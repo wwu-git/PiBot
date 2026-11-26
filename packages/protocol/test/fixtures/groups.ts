@@ -166,6 +166,21 @@ export const groupMethodCases = {
     badParams: { groupId: id, workflowRunId: id },
     badResult: { workflowRunId: id, status: "failed", stoppedReason: "Stopped!" },
   },
+  "groups.plan.choose": {
+    params: { groupId: id, workflowRunId: id, choice: "continue", confirmed: true },
+    result: {
+      workflowRunId: id,
+      status: "running",
+      stoppedReason: null,
+      steps: [{ stepId: "report", status: "ready", attempt: 0 }],
+      passed: 0,
+      total: 1,
+      costUsd: 0.12,
+      budgetUsd: null,
+    },
+    badParams: { groupId: id, workflowRunId: id, choice: "replan", confirmed: true },
+    badResult: { workflowRunId: id, status: "waiting", choice: { kind: "later", stepIds: [] } },
+  },
   "groups.plan.template": {
     params: { groupId: id, workflowRunId: id },
     result: {

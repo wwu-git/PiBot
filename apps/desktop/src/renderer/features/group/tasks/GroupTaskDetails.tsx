@@ -12,12 +12,14 @@ import styles from "../group.module.css";
 import { ExecutionTaskTree } from "./ExecutionTaskTree.tsx";
 import { GroupTaskHistory } from "./GroupTaskHistory.tsx";
 import { TaskActions } from "./TaskActions.tsx";
+import { TaskBriefCards, TaskBriefFlow } from "./TaskBrief.tsx";
 import { TaskHandoff } from "./TaskHandoff.tsx";
 import { TaskRecovery } from "./TaskRecovery.tsx";
 import { TaskSource } from "./TaskSource.tsx";
 import { TaskStatus } from "./TaskStatus.tsx";
 import { TaskSummary } from "./TaskSummary.tsx";
 import { TaskSupplement } from "./TaskSupplement.tsx";
+import { useTaskBrief } from "./use-task-brief.ts";
 import { useTaskExecution } from "./use-task-execution.ts";
 
 type TaskTab = "description" | "children" | "history";
@@ -37,6 +39,7 @@ export function GroupTaskDetails({
   const { navigate } = useNavigation();
   const [tab, setTab] = useState<TaskTab>("description");
   const execution = useTaskExecution(peer, task);
+  const brief = useTaskBrief(peer, task);
   const bot = data.bots.find((item) => item.id === task.assigneeBotId);
   const workspace = data.group?.memberWorkspaces?.find((item) => item.taskId === task.id);
   const runs = data.runs.filter(
@@ -90,6 +93,9 @@ export function GroupTaskDetails({
               {t(`group.workspace.${workspace.state}`)}
             </span>
           )}
+          {brief && (
+            <span>{t("group.brief.stepOf", { index: brief.step.index, total: brief.total })}</span>
+          )}
         </div>
         <TaskSource task={task} data={data} />
         {runs.map((run) => (
@@ -128,7 +134,9 @@ export function GroupTaskDetails({
           context={{ botName: bot?.name ?? t("group.member"), groupName: data.group?.name ?? "" }}
         />
       )}
-      <TaskHandoff task={task} />
+      {brief && <TaskBriefFlow brief={brief} bots={data.bots} />}
+      {/* A plan step's checks and files are in its brief cards below. */}
+      {!brief && <TaskHandoff task={task} />}
       {execution.page?.checkpoint && (
         <div className={styles.taskCheckpoint}>
           <TaskCheckpoint checkpoint={execution.page.checkpoint} />
@@ -163,7 +171,22 @@ export function GroupTaskDetails({
           {t("group.taskInternalHistory")}
         </Button>
       </div>
-      {tab === "description" && (
+      {tab === "description" && brief && (
+        <>
+          <TaskBriefCards peer={peer} brief={brief} bots={data.bots} task={task} />
+          <details className={styles.briefRaw}>
+            <summary>{t("group.brief.raw")}</summary>
+            <p className={styles.taskInstructions}>{visibleTaskText(task.instructions)}</p>
+          </details>
+          {task.status === "open" && <TaskSupplement peer={peer} task={task} refresh={refresh} />}
+        </>
+      )}
+      {tab === "description" && brief === undefined && (
+        <p role="status" className={styles.note}>
+          {t("common.loading")}
+        </p>
+      )}
+      {tab === "description" && brief === null && (
         <div className={styles.taskPanelCard}>
           <p className={styles.taskInstructions}>{visibleTaskText(task.instructions)}</p>
           {task.status === "open" && <TaskSupplement peer={peer} task={task} refresh={refresh} />}

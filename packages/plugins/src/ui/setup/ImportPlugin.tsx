@@ -1,55 +1,25 @@
-import {
-  CONNECTOR_IMPORT_MAX_BYTES,
-  type ConnectorAccess,
-  type MethodResults,
-  newConnectionDefaults,
-} from "@pibot/plugins-contract/full";
-import { hostPlatform, useRpc, useRpcEvent, useSettings } from "@pibot/renderer-kit";
-import { Button, Chip, Switch } from "@pibot/ui";
+import { CONNECTOR_IMPORT_MAX_BYTES, type ConnectorAccess } from "@pibot/plugins-contract/full";
+import { useRpc, useRpcEvent, useSettings } from "@pibot/renderer-kit";
+import { Button } from "@pibot/ui";
 import { useEffect, useId, useRef, useState } from "react";
-import { ConnectorAccessEditor } from "../page/ConnectorAccessEditor.tsx";
 import { ConnectorPanel } from "../page/ConnectorPanel.tsx";
+import drawerStyles from "../page/connections/drawer.module.css";
+import { localText } from "../page/connections/local-text.ts";
 import styles from "../page/connectors.module.css";
 import { connectorError } from "../shell/remote.ts";
+import {
+  fieldVisible,
+  ImportPreview,
+  type PreviewSummary,
+  previewSummary,
+} from "./ImportPreview.tsx";
 
-type Preview = MethodResults["plugins.previewImport"];
 // Previewing and importing a large package (13k files, minutes on a loaded
 // machine) is a long operation, not a hung request. A short fixed timeout aborted it mid-way
 // and left the user with a failure they could not retry; the bound only guards a real hang.
 const LONG_OPERATION_TIMEOUT_MS = 30 * 60_000;
-// Keep only reviewable, sanitized metadata, never a second copy of raw JSON or headers/env values.
-function summary(value: Preview) {
-  return {
-    previewId: value.previewId,
-    digest: value.digest,
-    expiresAt: value.expiresAt,
-    declaredVersion: value.declaredVersion,
-    name: value.manifest.name,
-    description: value.manifest.description,
-    plugin: value.plugin,
-    commandWarnings: value.commandWarnings,
-    servers: value.manifest.servers.map((server) => ({
-      id: server.id,
-      transport: server.transport,
-      auth: server.auth.kind,
-      secrets: server.auth.secretNames,
-      domains: server.networkDomains,
-      cwd: server.transport === "stdio" ? server.cwd : undefined,
-      startupTimeoutSec: server.startupTimeoutSec,
-      target:
-        server.transport === "http"
-          ? server.url
-          : server.transport === "stdio"
-            ? JSON.stringify([server.command, ...server.args])
-            : server.builtinId,
-      bundledNode:
-        value.plugin &&
-        server.transport === "stdio" &&
-        (server.command === "node" || server.command === "node.exe"),
-    })),
-  };
-}
-type Summary = ReturnType<typeof summary>;
+// Settings are re-checked once typing pauses, so each keystroke does not build a new preview.
+const SETTINGS_CHECK_DELAY_MS = 600;
 
 export function ImportPlugin({
   close,
@@ -57,12 +27,15 @@ export function ImportPlugin({
   initialText = "",
   initialSelectionId,
   presetTarget,
+  connected,
 }: {
   close(): void;
   changed(): void;
   initialText?: string;
   initialSelectionId?: string;
   presetTarget?: { kind: "bot" | "group"; id: string };
+  /** Opens the new connection's details after 连接, instead of only closing. */
+  connected?(connectorId: string): void;
 }) {
   const { peer } = useRpc();
   const { t, language } = useSettings();
@@ -73,10 +46,13 @@ export function ImportPlugin({
     groups: presetTarget?.kind === "group" ? [presetTarget.id] : [],
   }));
   const [text, setText] = useState(initialText);
-  const [preview, setPreview] = useState<Summary>();
+  const [preview, setPreview] = useState<PreviewSummary>();
   const [config, setConfig] = useState<Record<string, string | number | boolean>>({});
-  const [networkDomains, setNetworkDomains] = useState<Record<string, string[]>>({});
   const [configurationReviewed, setConfigurationReviewed] = useState(true);
+  // Bumped by every settings change; a check that started from older values is not a review.
+  const configVersion = useRef(0);
+  const [checking, setChecking] = useState(false);
+  const [settingsError, setSettingsError] = useState<ReturnType<typeof connectorError>>();
   const [busy, setBusy] = useState<"preview" | "import">();
   // A large import copies thousands of files; show real progress instead of a
   // spinner that looks hung for minutes.
@@ -126,8 +102,9 @@ export function ImportPlugin({
     setText("");
     setPreview(undefined);
     setPartialInstallation(undefined);
-    setNetworkDomains({});
     setConfigurationReviewed(true);
+    setSettingsError(undefined);
+    setChecking(false);
     setError("connectors.offline");
     setBusy(undefined);
     locked.current = false;
@@ -144,13 +121,7 @@ export function ImportPlugin({
   const nothingToImport = !preview?.servers.length && (preview?.plugin?.skillCount ?? 0) === 0;
   const missingRequired =
     preview?.plugin?.config.some((field) => {
-      if (field.visibleWhen) {
-        const controlling = preview.plugin?.config.find(
-          (candidate) => candidate.key === field.visibleWhen?.key,
-        );
-        const value = config[field.visibleWhen.key] ?? controlling?.default;
-        if (value !== field.visibleWhen.equals) return false;
-      }
+      if (!fieldVisible(field, preview.plugin?.config ?? [], config)) return false;
       if (!field.required) return false;
       const value = config[field.key];
       return (
@@ -193,8 +164,8 @@ export function ImportPlugin({
       setText("");
       imported.current = false;
       previewRef.current = { peer: receiving, id: value.previewId };
-      setPreview(summary(value));
-      setNetworkDomains({});
+      setPreview(previewSummary(value));
+      setSettingsError(undefined);
       setConfigurationReviewed((value.plugin?.config.length ?? 0) === 0);
       setConfig(
         Object.fromEntries(
@@ -220,12 +191,16 @@ export function ImportPlugin({
     openedSelection.current = true;
     void read(initialSelectionId);
   }, [peer, initialSelectionId]);
+  // The backend re-evaluates the package with the current settings (a changed service address
+  // changes what it may reach). It runs by itself once typing pauses. Only one check runs at a
+  // time because each replaces the preview it was given; a change made meanwhile checks again.
   const refreshConfiguration = async () => {
     if (!peer || !preview?.plugin || missingRequired || locked.current) return;
     const receiving = peer;
+    const version = configVersion.current;
     locked.current = true;
-    setBusy("preview");
-    setError(undefined);
+    setChecking(true);
+    setSettingsError(undefined);
     try {
       const value = await receiving.call(
         "plugins.previewImport",
@@ -246,19 +221,47 @@ export function ImportPlugin({
       }
       imported.current = false;
       previewRef.current = { peer: receiving, id: value.previewId };
-      setPreview(summary(value));
-      // A changed target is a new authorization snapshot; domain removals must be confirmed again.
-      setNetworkDomains({});
-      setConfigurationReviewed(true);
+      setPreview(previewSummary(value));
+      // Settings changed while this ran: the new preview id re-arms the check below.
+      setConfigurationReviewed(configVersion.current === version);
       setNow(Date.now());
     } catch (failure) {
-      if (active.current && currentPeer.current === receiving) setError(connectorError(failure));
+      if (active.current && currentPeer.current === receiving)
+        setSettingsError(connectorError(failure));
     } finally {
       if (active.current && currentPeer.current === receiving) {
         locked.current = false;
-        setBusy(undefined);
+        setChecking(false);
       }
     }
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-armed by each settings change and each new preview; the check reads the latest values itself.
+  useEffect(() => {
+    if (
+      !preview?.plugin ||
+      configurationReviewed ||
+      missingRequired ||
+      uncertain ||
+      busy ||
+      settingsError
+    )
+      return;
+    const timer = setTimeout(() => void refreshConfiguration(), SETTINGS_CHECK_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [
+    config,
+    preview?.previewId,
+    configurationReviewed,
+    missingRequired,
+    uncertain,
+    busy,
+    settingsError,
+  ]);
+  const setValue = (key: string, value: string | number | boolean) => {
+    configVersion.current += 1;
+    setConfigurationReviewed(false);
+    setSettingsError(undefined);
+    setConfig((current) => ({ ...current, [key]: value }));
   };
   const pick = async (kind: "file" | "directory") => {
     if (!peer || locked.current) return;
@@ -315,6 +318,7 @@ export function ImportPlugin({
             );
             return {
               installation: { id: partialInstallation },
+              connectors: [],
               unassignedSkillCount: assigned.unassignedCount,
               pendingSkillTargetCount: assigned.pendingTargetCount,
             };
@@ -326,7 +330,9 @@ export function ImportPlugin({
               expectedDigest: preview.digest,
               enable,
               config,
-              networkDomains,
+              // Narrowing the sites a connection may reach is done in its 高级 tab, with
+              // confirmation; the connect drawer shows them read-only.
+              networkDomains: {},
               skillTargets: { bots: targets.bots, groups: targets.groups },
             },
             { timeoutMs: LONG_OPERATION_TIMEOUT_MS },
@@ -334,10 +340,12 @@ export function ImportPlugin({
       imported.current = true;
       if (active.current && currentPeer.current === receiving) {
         changed();
+        const first = result.connectors[0];
         if ((result.pendingSkillTargetCount || result.unassignedSkillCount) && !noSkillTarget) {
           setError("connectors.skillsPartial");
           setPartialInstallation(result.installation.id);
-        } else close();
+        } else if (enable && first && connected) connected(first.id);
+        else close();
       }
     } catch (failure) {
       if (active.current && currentPeer.current === receiving) {
@@ -355,9 +363,59 @@ export function ImportPlugin({
       }
     }
   };
+  const canImport =
+    !!peer &&
+    !(expired && !partialInstallation) &&
+    !missingRequired &&
+    !targetRequired &&
+    !nothingToImport &&
+    configurationReviewed &&
+    !checking &&
+    !busy &&
+    !uncertain;
+  const name =
+    preview &&
+    (preview.plugin?.application?.name[language] || localText(preview.name[language], language));
   return (
-    <ConnectorPanel title={t("connectors.import")} close={close} busy={busy === "import"}>
-      <p className={styles.note}>{t("connectors.jsonNote")}</p>
+    <ConnectorPanel
+      title={name ? t("connections.drawer.connectTitle", { name }) : t("connectors.import")}
+      close={close}
+      busy={busy === "import"}
+      footer={
+        preview && (
+          <>
+            {preview.servers.length > 0 && !partialInstallation && (
+              <Button
+                variant="ghost"
+                className={drawerStyles.footStart}
+                disabled={!canImport}
+                onClick={() => void install(false)}
+              >
+                {t("connections.drawer.importOnly")}
+              </Button>
+            )}
+            <Button variant="secondary" disabled={busy === "import"} onClick={close}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              loading={busy === "import"}
+              disabled={
+                partialInstallation ? !peer || noSkillTarget || !!busy || uncertain : !canImport
+              }
+              onClick={() => void install(true)}
+            >
+              {t(
+                partialInstallation
+                  ? "common.retry"
+                  : preview.servers.length
+                    ? "connections.drawer.connect"
+                    : "connectors.importEnable",
+              )}
+            </Button>
+          </>
+        )
+      }
+    >
       {!peer && (
         <p role="alert" className={styles.error}>
           {t("connectors.offline")}
@@ -365,6 +423,7 @@ export function ImportPlugin({
       )}
       {!preview ? (
         <div className={styles.formCard}>
+          <p className={styles.note}>{t("connectors.jsonNote")}</p>
           <div className={styles.row}>
             {(["file", "directory"] as const).map((kind) => (
               <Button
@@ -398,309 +457,24 @@ export function ImportPlugin({
           </Button>
         </div>
       ) : (
-        <>
-          <h3>{preview.name[language]}</h3>
-          <p>{preview.description[language]}</p>
-          {preview.commandWarnings?.map((risk) => (
-            <p key={risk} role="alert" className={styles.warn}>
-              {t(
-                risk === "dangerous"
-                  ? "connectors.commandDangerous"
-                  : "connectors.commandUnverified",
-              )}
-            </p>
-          ))}
-          {preview.declaredVersion && (
-            <p className={styles.note}>
-              {t("connectors.importVersion", { version: preview.declaredVersion })}
-            </p>
-          )}
-          {preview.servers.length > 0 && (
-            <section className={styles.card}>
-              <h3>{t("connectors.previewConnections", { count: preview.servers.length })}</h3>
-              <p className={styles.note}>{t("connectors.previewToolsUnknown")}</p>
-            </section>
-          )}
-          {!!preview.plugin?.skillCount && (
-            <section className={styles.card}>
-              <h3>{t("connectors.previewSkills", { count: preview.plugin.skillCount })}</h3>
-              <ConnectorAccessEditor
-                access={targets}
-                disabled={!!busy || uncertain}
-                save={setTargets}
-              />
-              {noSkillTarget && (
-                <p className={styles.note}>{t("connectors.skillTargetRequired")}</p>
-              )}
-            </section>
-          )}
-          {preview.plugin && (
-            <>
-              <p>
-                {t("connectors.previewComponents", {
-                  count: preview.plugin.components.length,
-                  skills: preview.plugin.skillCount,
-                })}
-              </p>
-              {preview.plugin.components.map((component) => (
-                <section
-                  key={`${component.kind}:${component.path ?? component.name}`}
-                  className={styles.card}
-                >
-                  <strong>{component.name}</strong>
-                  <p>
-                    {t(
-                      component.status === "import"
-                        ? "connectors.componentImport"
-                        : "connectors.componentUnsupported",
-                    )}
-                    {component.reason
-                      ? ` · ${t(`connectors.unsupported.${component.reason}`)}`
-                      : ""}
-                  </p>
-                  {component.path && <p className={styles.note}>{component.path}</p>}
-                </section>
-              ))}
-              {preview.plugin.config.length > 0 && (
-                <div className={styles.formCard}>
-                  {preview.plugin.config.map((field) => {
-                    if (field.visibleWhen) {
-                      const controlling = preview.plugin?.config.find(
-                        (candidate) => candidate.key === field.visibleWhen?.key,
-                      );
-                      const visibleValue = config[field.visibleWhen.key] ?? controlling?.default;
-                      if (visibleValue !== field.visibleWhen.equals) return null;
-                    }
-                    const value = config[field.key] ?? "";
-                    const fieldId = `${inputId}-${field.key}`;
-                    return (
-                      <label key={field.key} className={styles.field} htmlFor={fieldId}>
-                        {field.title}
-                        {field.type === "boolean" ? (
-                          <Switch
-                            id={fieldId}
-                            label={field.title}
-                            checked={value === true}
-                            onCheckedChange={(checked) => {
-                              setConfigurationReviewed(false);
-                              setConfig((current) => ({ ...current, [field.key]: checked }));
-                            }}
-                          />
-                        ) : field.options?.length ? (
-                          <select
-                            id={fieldId}
-                            value={String(value)}
-                            required={field.required}
-                            onChange={(event) => {
-                              const selected = field.options?.find(
-                                (option) => String(option.value) === event.currentTarget.value,
-                              );
-                              if (!selected) return;
-                              setConfigurationReviewed(false);
-                              setConfig((current) => ({
-                                ...current,
-                                [field.key]: selected.value,
-                              }));
-                            }}
-                          >
-                            {field.options.map((option) => (
-                              <option key={String(option.value)} value={String(option.value)}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <input
-                            id={fieldId}
-                            type={
-                              field.sensitive
-                                ? "password"
-                                : field.type === "number"
-                                  ? "number"
-                                  : "text"
-                            }
-                            value={String(value)}
-                            required={field.required}
-                            autoComplete="off"
-                            onChange={(event) => {
-                              const raw = event.currentTarget.value;
-                              setConfigurationReviewed(false);
-                              setConfig((current) => ({
-                                ...current,
-                                [field.key]:
-                                  field.type === "number" && raw !== "" ? Number(raw) : raw,
-                              }));
-                            }}
-                          />
-                        )}
-                        <span className={styles.note}>
-                          {field.description ||
-                            t(
-                              field.sensitive
-                                ? "connectors.generatedSecret"
-                                : "connectors.generatedSetting",
-                            )}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-              {!configurationReviewed && (
-                <div className={styles.stack}>
-                  <p className={styles.note}>{t("connectors.configurationReviewNote")}</p>
-                  <Button
-                    variant="secondary"
-                    loading={busy === "preview"}
-                    disabled={missingRequired || !!busy}
-                    onClick={() => void refreshConfiguration()}
-                  >
-                    {t("connectors.reviewConfiguration")}
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-          <p className={styles.note}>{t("connectors.previewSanitized")}</p>
-          {preview.servers.map((server) => (
-            <section key={server.id} className={styles.card}>
-              <strong>
-                {server.id} · {t(`connectors.transport.${server.transport}`)}
-              </strong>
-              <pre>{server.target}</pre>
-              {server.bundledNode && <p className={styles.note}>{t("connectors.bundledNode")}</p>}
-              {server.cwd && (
-                <p className={styles.note}>{t("connectors.startup.cwd", { cwd: server.cwd })}</p>
-              )}
-              {server.startupTimeoutSec && (
-                <p className={styles.note}>
-                  {t("connectors.startup.timeout", { seconds: String(server.startupTimeoutSec) })}
-                </p>
-              )}
-              <p>{t(`connectors.auth.${server.auth}`)}</p>
-              <strong>{t("connectors.network")}</strong>
-              {(networkDomains[server.id] ?? server.domains).length ? (
-                <div className={styles.stack}>
-                  {(networkDomains[server.id] ?? server.domains).map((domain) => (
-                    <div key={domain} className={styles.row}>
-                      <Chip className={styles.grow}>{domain}</Chip>
-                      {server.transport === "stdio" && (
-                        <Button
-                          variant="ghost"
-                          disabled={!!busy}
-                          aria-label={t("connectors.removeNetworkDomain", { domain })}
-                          onClick={() =>
-                            setNetworkDomains((current) => ({
-                              ...current,
-                              [server.id]: (current[server.id] ?? server.domains).filter(
-                                (candidate) => candidate !== domain,
-                              ),
-                            }))
-                          }
-                        >
-                          {t("connectors.remove")}
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  {server.transport === "stdio" &&
-                    server.domains.some((domain) =>
-                      ["registry.npmjs.org", "pypi.org", "files.pythonhosted.org"].includes(domain),
-                    ) && <p className={styles.note}>{t("connectors.packageNetworkHint")}</p>}
-                </div>
-              ) : (
-                <p>{t("connectors.noNetwork")}</p>
-              )}
-              <strong>{t("connectors.requiredSecrets")}</strong>
-              {server.secrets.length ? (
-                <div className={styles.chipRow}>
-                  {server.secrets.map((secret) => (
-                    <Chip key={secret} tone="violet" className={styles.mono}>
-                      {secret}
-                    </Chip>
-                  ))}
-                </div>
-              ) : (
-                <p>{t("connectors.noSecrets")}</p>
-              )}
-            </section>
-          ))}
-          {hostPlatform() === "win32" &&
-            preview.servers.some((server) => server.transport === "stdio") && (
-              <p role="alert" className={styles.warn}>
-                {t("connectors.windowsWarning")}
-              </p>
-            )}
-          {preview.servers.length > 0 && (
-            <p>
-              {t("connectors.importDefaults", {
-                access: t(`connectors.access.${newConnectionDefaults.accessMode}`),
-                confirmation: t(
-                  `connectors.confirmation.${newConnectionDefaults.confirmationMode}`,
-                ),
-              })}
-            </p>
-          )}
-          {nothingToImport && <p className={styles.note}>{t("connectors.nothingToImport")}</p>}
-          <p className={styles.note}>{t("connectors.importNote")}</p>
-          <p role="status" className={expired ? styles.error : styles.note}>
-            {expired
-              ? t("connectors.expired")
-              : t("connectors.expires", {
-                  time: new Date(preview.expiresAt).toLocaleString(language),
-                })}
-          </p>
-          <div className={styles.row}>
-            <Button
-              variant="secondary"
-              disabled={!!busy || uncertain || !!partialInstallation}
-              onClick={() => {
-                void retire();
-                setPreview(undefined);
-                setConfig({});
-                setNetworkDomains({});
-                setConfigurationReviewed(true);
-                setError(undefined);
-              }}
-            >
-              {t("connectors.newPreview")}
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={
-                !peer ||
-                (expired && !partialInstallation) ||
-                missingRequired ||
-                targetRequired ||
-                nothingToImport ||
-                !!partialInstallation ||
-                !configurationReviewed ||
-                !!busy ||
-                uncertain
-              }
-              onClick={() => void install(false)}
-            >
-              {t("connectors.importOnly")}
-            </Button>
-            <Button
-              loading={busy === "import"}
-              disabled={
-                !peer ||
-                (expired && !partialInstallation) ||
-                missingRequired ||
-                targetRequired ||
-                nothingToImport ||
-                (!!partialInstallation && noSkillTarget) ||
-                !configurationReviewed ||
-                !!busy ||
-                uncertain
-              }
-              onClick={() => void install(true)}
-            >
-              {t(partialInstallation ? "common.retry" : "connectors.importEnable")}
-            </Button>
-          </div>
-        </>
+        <ImportPreview
+          preview={preview}
+          config={config}
+          setValue={setValue}
+          disabled={busy === "import" || uncertain || !!partialInstallation}
+          checking={checking || (!configurationReviewed && !missingRequired && !settingsError)}
+          settingsError={settingsError && t(settingsError)}
+          targets={targets}
+          setTargets={setTargets}
+        />
+      )}
+      {preview && nothingToImport && (
+        <p className={styles.note}>{t("connectors.nothingToImport")}</p>
+      )}
+      {preview && expired && !partialInstallation && (
+        <p role="alert" className={styles.error}>
+          {t("connectors.expired")}
+        </p>
       )}
       {busy === "import" && progress && (
         <p className={styles.note}>

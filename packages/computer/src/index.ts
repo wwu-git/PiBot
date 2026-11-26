@@ -1,3 +1,4 @@
+// Expose the platform-neutral computer driver factory.
 import type { ComputerDriver, Platform, SessionState } from "./core/types.ts";
 import type { Cua } from "./cua/loader.ts";
 import { createLinuxDriver } from "./drivers/linux.ts";
@@ -38,6 +39,7 @@ export function createPlatformDriver(options: {
   /** Idle seconds and lock state on Windows / Linux (macOS reads them itself). */
   session(signal?: AbortSignal): Promise<SessionState>;
   timeoutMs?: number;
+  windowsProgramFiles?: string;
 }): ComputerDriver {
   switch (options.platform) {
     case "darwin":

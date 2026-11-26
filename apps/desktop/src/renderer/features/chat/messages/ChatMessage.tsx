@@ -14,12 +14,14 @@ import {
   backgroundRestartUsage,
   isBackgroundRestart,
   type Message,
+  messageDispatch,
   messageFailureCode,
+  PI_DISPATCH_TOOLS,
 } from "@pibot/protocol";
 import { BotAvatar, botAvatarLook, useSettings, useT } from "@pibot/renderer-kit";
 import { MessageRoutineProposals } from "@pibot/routines/ui";
 import { MessageSkillProposals, TeachTrialReturn } from "@pibot/skills/ui";
-import { Button, Card } from "@pibot/ui";
+import { Button, Card, Icon } from "@pibot/ui";
 import { GitInstallCard, TurnCard } from "@pibot/workspaces/ui";
 import { type CSSProperties, memo, type ReactNode, useCallback, useMemo, useState } from "react";
 import { RunReceipt } from "../../receipt/RunReceipt.tsx";
@@ -31,6 +33,7 @@ import { ModelRecovery } from "../status/ModelRecovery.tsx";
 import { RunActivityLine } from "../status/RunActivityLine.tsx";
 import { useBackgroundRun } from "../status/use-background-run.ts";
 import type { ApprovalDecision } from "../tools/ApprovalCard.tsx";
+import { DispatchReceipts } from "../tools/DispatchReceipts.tsx";
 import type { ActivityState } from "../tools/local-activity.ts";
 import { ToolActivity } from "../tools/ToolActivity.tsx";
 import { MessageSelectionToggle, MessageTranslation } from "./MessageActionParts.tsx";
@@ -86,6 +89,7 @@ interface ChatMessageProps {
     attachments?: { messageId: string; attachments: Message["attachments"] }[];
     /** The user message that started this run (从这里重来 on a Bot reply retries from it). */
     origin?: Message;
+    receipt?: { messageId: string | null; message?: Message };
   };
 }
 
@@ -140,23 +144,25 @@ export const ChatMessage = memo(function ChatMessage({
   // changed files and the receipt together.
   const turnFiles = !preview && !!turn && !heading && !imageActor?.groupId;
   const endCard = turnFiles && !!turn?.last;
+  const receiptMessageId = turn?.receipt ? turn.receipt.messageId : message.id;
+  const receiptMessage = turn?.receipt?.message ?? message;
   const background = useBackgroundRun(message.botId ?? botId, runId);
   // An agent turn's own figures; parsed once so the memoised receipt keeps its props stable.
-  const agentFacts = useMemo(() => agentTurnFacts(message.usage), [message.usage]);
+  const agentFacts = useMemo(() => agentTurnFacts(receiptMessage.usage), [receiptMessage.usage]);
   // The run's work receipt, merged into the turn's changed-files card when there is one.
   const receipt = useCallback(
     (embedded: boolean) =>
-      runId ? (
+      runId && receiptMessageId ? (
         <RunReceipt
           runId={runId}
-          messageId={message.id}
+          messageId={receiptMessageId}
           embedded={embedded || endCard}
           files={!embedded}
           agent={agentFacts}
           onStoppedChange={onReceiptStoppedChange}
         />
       ) : null,
-    [runId, message.id, agentFacts, onReceiptStoppedChange, endCard],
+    [runId, receiptMessageId, agentFacts, onReceiptStoppedChange, endCard],
   );
   if (silentWake(message)) return null;
   // The restart notice is one model-facing message whose content also lists command ids;
@@ -206,27 +212,36 @@ export const ChatMessage = memo(function ChatMessage({
   if (message.role === "user") {
     // FORWARD-DISPLAY: a forward shows the user's note; its material lives in the card below.
     const text = messageBubbleText(message, t);
+    const dispatch = messageDispatch(message);
     return (
-      <article
-        {...replyMenu}
-        className={`${styles.user} ${highlighted ? styles.messageFocus : ""}`}
-        data-message-id={message.id}
-        data-selecting={(!preview && messageActions?.selecting) || undefined}
-        data-selected={messageActions?.selected.has(message.id) || undefined}
-        aria-label={t("chat.you")}
-      >
-        {!preview && <MessageSelectionToggle message={message} name={name} />}
-        <QuotedMessage message={message} />
-        {mentionNames ? mentionText(text, mentionNames, styles.mentionText ?? "") : text}
-        <MessageForwardCard message={message} />
-        <MessageAttachments
-          attachments={message.attachments}
-          messageId={message.id}
-          readOnly={preview}
-        />
-        {userFooter}
-        {!preview && <MessageTranslation message={message} />}
-      </article>
+      <>
+        {dispatch && (
+          <div className={styles.fromPi}>
+            <Icon name="arrow" size={12} />
+            {t("chat.fromPi", { name: dispatch.from })}
+          </div>
+        )}
+        <article
+          {...replyMenu}
+          className={`${styles.user} ${highlighted ? styles.messageFocus : ""}`}
+          data-message-id={message.id}
+          data-selecting={(!preview && messageActions?.selecting) || undefined}
+          data-selected={messageActions?.selected.has(message.id) || undefined}
+          aria-label={t("chat.you")}
+        >
+          {!preview && <MessageSelectionToggle message={message} name={name} />}
+          <QuotedMessage message={message} />
+          {mentionNames ? mentionText(text, mentionNames, styles.mentionText ?? "") : text}
+          <MessageForwardCard message={message} />
+          <MessageAttachments
+            attachments={message.attachments}
+            messageId={message.id}
+            readOnly={preview}
+          />
+          {userFooter}
+          {!preview && <MessageTranslation message={message} />}
+        </article>
+      </>
     );
   }
   const paidImage =
@@ -322,6 +337,8 @@ export const ChatMessage = memo(function ChatMessage({
             mentionNames={mentionNames}
             botId={botId}
             streaming={streaming}
+            // A run paused on a card is not typing: no caret on its own line under the text.
+            paused={!!waiting}
             generating={generating}
           />
         )}
@@ -373,6 +390,15 @@ export const ChatMessage = memo(function ChatMessage({
               messageId={message.id}
             />
           )}
+        {!preview &&
+          (message.tools?.some((tool) =>
+            (PI_DISPATCH_TOOLS as readonly string[]).includes(tool.tool),
+          ) ||
+            activity?.tools.some(
+              (tool) =>
+                tool.messageId === message.id &&
+                (PI_DISPATCH_TOOLS as readonly string[]).includes(tool.tool),
+            )) && <DispatchReceipts messageId={message.id} />}
         {!preview && runId && (message.botId ?? botId) && (
           <TeachTrialReturn botId={(message.botId ?? botId) as string} runId={runId} />
         )}
@@ -412,14 +438,14 @@ export const ChatMessage = memo(function ChatMessage({
               ))}
               <TurnCard
                 bare
-                message={turn?.tools ? { ...message, tools: turn.tools } : message}
+                message={turn?.tools ? { ...receiptMessage, tools: turn.tools } : receiptMessage}
                 activity={activity}
                 receipt={runId ? receipt : undefined}
               />
             </div>
           ) : (
             <TurnCard
-              message={turn?.tools ? { ...message, tools: turn.tools } : message}
+              message={turn?.tools ? { ...receiptMessage, tools: turn.tools } : receiptMessage}
               activity={activity}
               receipt={runId ? receipt : undefined}
             />

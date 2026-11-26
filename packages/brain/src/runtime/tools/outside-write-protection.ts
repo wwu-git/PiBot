@@ -1,4 +1,5 @@
-import { sensitiveReadBoundary } from "@pibot/execution";
+// Supply only trusted host paths to the command and outside-write policy.
+import { sensitiveReadBoundary, windowsSystemTrees } from "@pibot/execution";
 import type { ExecutionLocationTarget } from "@pibot/protocol-base";
 import { abortable } from "../../core/abort.ts";
 import type { LocalService } from "../../local-service.ts";
@@ -26,6 +27,10 @@ export function protectedWriteRoots(
       ),
       AbortSignal.any([signal, AbortSignal.timeout(20_000)]),
     );
-    return [...boundary.denyRead, local.deps.dataDir];
+    return [
+      ...boundary.denyRead,
+      local.deps.dataDir,
+      ...(local.deps.platform === "win32" ? windowsSystemTrees(local.deps.env) : []),
+    ];
   };
 }

@@ -21,6 +21,7 @@ import { useTimelineDay } from "../messages/MessageTime.tsx";
 import { usePlacedNotices } from "../status/ChatNotices.tsx";
 import type { ActivityState } from "../tools/local-activity.ts";
 import { useLocalActivity } from "../tools/local-activity.ts";
+import { useTopicTitle } from "../topics/use-topic-title.ts";
 import { useTopicWorkplace } from "../topics/useTopicWorkplace.ts";
 import { useWorkplaces } from "../topics/useWorkplaces.ts";
 import type { ConnectedChatProps } from "./chat-screen-model.ts";
@@ -122,6 +123,7 @@ export function useChatState({ peer, target, visible, disconnected }: ConnectedC
   feedbackTopic.current = state.conversationId;
   // A new-topic draft keeps its folder choice in the controller until the first message.
   const isDraft = !!draftId && !state.conversationId;
+  const topic = useTopicTitle(state.bot?.id ?? targetBotId, actualTopicId, isDraft);
   const setDraftWorkplace = useCallback(
     (selection: FolderSelection) => controller.setDraftWorkplace(selection),
     [controller],
@@ -204,6 +206,7 @@ export function useChatState({ peer, target, visible, disconnected }: ConnectedC
     [workplaces.data?.home, workplacePath],
   );
   const sendingBlocked =
+    topic.locked ||
     !retryDraft.ready ||
     disconnected ||
     state.loading ||
@@ -215,6 +218,7 @@ export function useChatState({ peer, target, visible, disconnected }: ConnectedC
     state.metadataError ||
     !!state.appendUncertain;
   const draftLocked =
+    topic.locked ||
     disconnected ||
     state.pending ||
     state.stopping ||
@@ -236,7 +240,7 @@ export function useChatState({ peer, target, visible, disconnected }: ConnectedC
     draftLocked,
     controller.pendingAddition()?.attachments,
   );
-  const attachmentDrop = useAttachmentDrop(attachments.add, visible);
+  const attachmentDrop = useAttachmentDrop(attachments.add, visible && !topic.locked);
   const agentBot = state.bot?.kind === "agent";
   const composerDisabled = disconnected || state.pending || state.loading || attachments.reading;
   const skillMenu = useSkillCommands({
@@ -307,6 +311,7 @@ export function useChatState({ peer, target, visible, disconnected }: ConnectedC
     workplaces,
     topicPlace,
     actualTopicId,
+    topic,
     feedbackTopic,
     isDraft,
     draftFolders,

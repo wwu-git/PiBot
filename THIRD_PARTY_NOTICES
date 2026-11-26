@@ -30,10 +30,10 @@ Code adapted into this repository
 npm dependencies modified by patches/ (applied at install time)
 -------------------------------------------------------------------------------
 
-3. @earendil-works/pi-ai 1.4.0
-   (patches/@earendil-works__pi-ai@1.4.0.patch)
-4. @earendil-works/pi-coding-agent 1.4.0
-   (patches/@earendil-works__pi-coding-agent@1.4.0.patch)
+3. @earendil-works/pi-ai 1.6.0
+   (patches/@earendil-works__pi-ai@1.6.0.patch)
+4. @earendil-works/pi-coding-agent 1.6.0
+   (patches/@earendil-works__pi-coding-agent@1.6.0.patch)
    Source:  https://github.com/earendil-works/pi
    License: MIT
    Copyright (c) Mario Zechner
@@ -50,6 +50,28 @@ npm dependencies modified by patches/ (applied at install time)
    License: MIT
    Copyright (c) 2017-present React Native WebRTC Community
    Copyright (c) 2015-2017 Howard Yang
+
+10. @google/genai 2.32.0
+    (patches/@google__genai@2.32.0.patch)
+    Source:  https://github.com/googleapis/js-genai
+    License: Apache License, Version 2.0
+    The patch marks its changes in the generated JavaScript files.
+
+-------------------------------------------------------------------------------
+Additional dependencies bundled with pi 1.6.0
+-------------------------------------------------------------------------------
+
+11. @earendil-works/pi-schema 1.6.0
+    Source:  https://github.com/earendil-works/pi/tree/v1.6.0/packages/schema
+    License: MIT (see the package's license file)
+
+12. @isaacs/nonrecursive-glob-match 1.1.0
+    Source:  https://www.npmjs.com/package/@isaacs/nonrecursive-glob-match
+    License: Blue Oak Model License 1.0.0
+
+13. lovely-mermaid 0.3.3
+    Source:  https://github.com/xl0/lovely-mermaid
+    License: Apache License, Version 2.0
 
 -------------------------------------------------------------------------------
 Bundled binaries and assets

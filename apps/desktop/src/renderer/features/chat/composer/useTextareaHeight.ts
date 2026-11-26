@@ -1,3 +1,4 @@
+import { useSettings } from "@pibot/renderer-kit";
 import { type RefObject, useLayoutEffect } from "react";
 
 function resize(input: HTMLTextAreaElement) {
@@ -7,10 +8,12 @@ function resize(input: HTMLTextAreaElement) {
 }
 
 export function useTextareaHeight(ref: RefObject<HTMLTextAreaElement | null>, text: string) {
+  // The chat text size changes the line height without changing the text or the width.
+  const fontSize = useSettings().settings?.chatFontSize;
   // biome-ignore lint/correctness/useExhaustiveDependencies: measure after the controlled value commits
   useLayoutEffect(() => {
     if (ref.current) resize(ref.current);
-  }, [ref, text]);
+  }, [ref, text, fontSize]);
 
   useLayoutEffect(() => {
     const input = ref.current;

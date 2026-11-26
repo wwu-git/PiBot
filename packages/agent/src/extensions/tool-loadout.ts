@@ -25,8 +25,9 @@ export class ToolLoadout {
   constructor(
     private readonly ports: LocalToolPorts,
     readonly mode: "grouped" | "eager",
+    registration?: readonly LocalToolDefinition[],
   ) {
-    const definitions = ports.definitions;
+    const definitions = registration ?? ports.definitions;
     this.registered = new Map(definitions.map((tool) => [tool.name, toolBinding(tool)]));
     if (
       this.registered.size !== definitions.length ||
@@ -47,18 +48,19 @@ export class ToolLoadout {
    * is still authorized by policy. Anything else is dropped and declared removed.
    */
   reset(transcript: readonly { role: string }[] = []) {
+    const definitions = this.currentDefinitions();
     this.loaded.clear();
     if (this.mode === "grouped") {
       const declared = new Set(getCurrentTools(transcript as never).map((tool) => tool.name));
       const recent = this.ports.initialToolGroups;
       const always = this.ports.initialToolGroupsAlways ?? [];
-      const legacy = this.ports.definitions
+      const legacy = definitions
         .filter((tool) => tool.loadGroup && declared.has(tool.name))
         .reverse()
         .flatMap((tool) => tool.loadGroup?.id ?? []);
       // `always` comes first so a role default (code navigation) survives the three-group cap.
       const groups = new Set([...new Set([...always, ...(recent ?? legacy)])].slice(0, 3));
-      for (const tool of this.ports.definitions)
+      for (const tool of definitions)
         if (
           tool.loadGroup &&
           groups.has(tool.loadGroup.id) &&
@@ -66,12 +68,20 @@ export class ToolLoadout {
         )
           this.loaded.add(tool.name);
     }
-    return this.synchronize();
+    return this.synchronizeCatalog(definitions);
   }
   synchronize(): ReadonlySet<string> {
+    return this.synchronizeCatalog(this.currentDefinitions());
+  }
+  private currentDefinitions() {
     this.ports.signal.throwIfAborted();
     if (this.failure) throw new AgentError(this.failure);
-    const current = this.ports.definitions.filter((tool) => this.registered.has(tool.name));
+    return this.ports.definitions;
+  }
+  private synchronizeCatalog(definitions: readonly LocalToolDefinition[]): ReadonlySet<string> {
+    this.ports.signal.throwIfAborted();
+    if (this.failure) throw new AgentError(this.failure);
+    const current = definitions.filter((tool) => this.registered.has(tool.name));
     if (
       new Set(current.map((tool) => tool.name)).size !== current.length ||
       new Set(current.map((tool) => localToolIdentity(tool).id)).size !== current.length
@@ -105,8 +115,9 @@ export class ToolLoadout {
     if (!parsed.success || !selection.success) this.changed();
     const names = parsed.data;
     const groups = selection.data;
+    const definitions = this.currentDefinitions();
     const allowed = new Set(
-      this.ports.definitions
+      definitions
         .filter(
           (tool) =>
             tool.loadGroup && groups.includes(tool.loadGroup.id) && this.registered.has(tool.name),
@@ -115,7 +126,7 @@ export class ToolLoadout {
     );
     if (names.some((name) => !allowed.has(name))) this.changed();
     for (const name of names) this.loaded.add(name);
-    this.synchronize();
+    this.synchronizeCatalog(definitions);
   }
   private changed(): never {
     this.failure = "tool_catalog_changed";
@@ -158,8 +169,9 @@ export class ToolLoadout {
     };
   }
   project(request: TranscriptContext): TranscriptContext {
-    const visible = this.synchronize();
-    const current = new Map(this.ports.definitions.map((tool) => [tool.name, tool]));
+    const definitions = this.currentDefinitions();
+    const visible = this.synchronizeCatalog(definitions);
+    const current = new Map(definitions.map((tool) => [tool.name, tool]));
     // tool_discover's description carries the connected-app index; the current one is what the
     // model may rely on.
     const messages = projectToolHistory(request.messages, visible, (tool) =>

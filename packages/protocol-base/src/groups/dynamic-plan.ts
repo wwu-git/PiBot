@@ -261,7 +261,7 @@ export const GroupPlanProgressSchema = z.strictObject({
         attempt: z.number().int().nonnegative().safe(),
         verdict: ReportVerdictSchema.optional(),
         verdictResolution: z
-          .strictObject({ kind: z.enum(["repaired", "skipped"]), stepId: key })
+          .strictObject({ kind: z.enum(["repaired", "skipped", "accepted"]), stepId: key })
           .optional(),
         /**
          * Maintainers 2026-11-14: where a writing step works. `own`: its own workspace; `merging`:
@@ -276,6 +276,17 @@ export const GroupPlanProgressSchema = z.strictObject({
     .max(GROUP_PLAN_MAX_STEPS),
   passed: z.number().int().min(0).max(GROUP_PLAN_MAX_STEPS),
   total: z.number().int().min(0).max(GROUP_PLAN_MAX_STEPS),
+  /**
+   * The plan waits for the user's choice on its card: `replan_limit` (no replans left: continue
+   * with the remaining steps or start a new plan) or `fix_skipped` (a repair was skipped, so the
+   * listed reviewed steps keep their FAIL verdict: accept them as they are or stop).
+   */
+  choice: z
+    .strictObject({
+      kind: z.enum(["replan_limit", "fix_skipped"]),
+      stepIds: z.array(key).max(GROUP_PLAN_MAX_STEPS),
+    })
+    .optional(),
   costUsd: z.number().finite().nonnegative().nullable(),
   pendingCostRequests: z.number().int().nonnegative().optional(),
   budgetUsd: z.number().positive().max(10_000).nullable(),
@@ -298,6 +309,21 @@ export const GroupPlanMethods = {
     params: z.strictObject({
       groupId: IdSchema,
       workflowRunId: IdSchema,
+      confirmed: z.literal(true),
+    }),
+    result: GroupPlanProgressSchema,
+  },
+  /**
+   * The user's answer to the plan's waiting `choice`: `continue` runs the remaining steps without
+   * another replan (verdicts still failing are kept as they are), `accept` keeps a skipped
+   * repair's FAIL verdicts as they are, `stop` and `new_plan` end the plan and keep its
+   * deliverables. Error `group_plan_choice_unavailable` when the plan no longer waits for it.
+   */
+  "groups.plan.choose": {
+    params: z.strictObject({
+      groupId: IdSchema,
+      workflowRunId: IdSchema,
+      choice: z.enum(["continue", "accept", "stop", "new_plan"]),
       confirmed: z.literal(true),
     }),
     result: GroupPlanProgressSchema,

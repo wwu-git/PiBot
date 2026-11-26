@@ -74,6 +74,7 @@ export const AuditKindSchema = z.enum([
   "grant.revoked",
   "policy.denied",
   "oauth.changed",
+  "provider.imported",
   "network.changed",
   "permissions.changed",
   "search.sent",
@@ -189,6 +190,11 @@ export const AuditKindSchema = z.enum([
   "external_agent.prewarmed",
   "external_agent.permission",
   "external_agent.finished",
+  // The default Pi created, changed, archived or restored a Bot or group (action code, names,
+  // changed field names), or handed work to one (target name, the task's short title and the
+  // receipt's status). Never personas, task text or replies.
+  "pi.managed",
+  "pi.dispatched",
 ]);
 export const AuditAuthEventSchema = z.enum([
   "oauth.connected",
@@ -212,6 +218,15 @@ export const AuditDetailSchema = z.strictObject({
       state: z.enum(["completed", "cancelled", "failed", "undone"]),
       topics: count,
       messages: count,
+      memories: count.optional(),
+      persona: z.literal(true).optional(),
+      // Single-file fields of earlier batches stay readable in the audit log.
+      projectFile: z.literal("AGENTS.md").optional(),
+      keptProjectFile: z.literal("AGENTS.md").optional(),
+      projectFiles: count.optional(),
+      folders: count.optional(),
+      keptProjectFiles: count.optional(),
+      keptFolders: count.optional(),
     })
     .optional(),
   pluginInstall: z
@@ -279,7 +294,7 @@ export const AuditDetailSchema = z.strictObject({
   /** Which external agent, how it ran and what kind of action it asked for; no content. */
   externalAgent: z
     .strictObject({
-      agentId: z.enum(["codex", "claude", "cursor", "opencode", "custom"]),
+      agentId: z.enum(["codex", "claude", "cursor", "opencode", "antigravity", "custom"]),
       isolation: z.enum(["sandbox", "unisolated"]).optional(),
       actionKind: z
         .string()

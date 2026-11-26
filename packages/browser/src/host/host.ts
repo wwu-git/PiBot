@@ -144,8 +144,8 @@ export function registerBrowserHost(
         extension: "unsupported" as const,
       },
   );
-  handle("host.browser.extensionRegister", async ({ enabled }) => {
-    await host?.userBrowser?.register(enabled);
+  handle("host.browser.extensionRegister", async ({ enabled, explicit, takeOver }) => {
+    await host?.userBrowser?.register(enabled, { explicit, takeOver });
     return null;
   });
   handle("host.browser.configure", async ({ botId, runId, rules }) => {

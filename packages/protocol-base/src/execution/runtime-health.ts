@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LiveActivitySchema } from "../app/live-island.ts";
 import { IdSchema } from "../core/ids.ts";
 
 const _botId = z.strictObject({ botId: IdSchema });
@@ -42,6 +43,8 @@ export const RuntimeMethods = {
 export const RuntimeEvents = {
   /** Authoritative snapshot, including parked approvals, deduplicated by run ID. */
   "runtime.activeRuns": z.strictObject({ count: z.number().int().nonnegative().safe() }),
+  /** Busy Bots for the live island: a full snapshot, throttled and sent only when it changed. */
+  "runtime.liveActivity": LiveActivitySchema,
   // A drain failure is sticky; `botIds` names the Bots whose sessions stayed open.
   "runtime.health": RuntimeHealthSchema,
   "runtime.commands": CommandPauseSchema,

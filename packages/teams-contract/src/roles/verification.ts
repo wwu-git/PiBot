@@ -15,6 +15,11 @@ export const ROLE_VERIFICATION_KINDS: Readonly<Record<string, readonly Verificat
   translator: ["content", "research"],
   "video-scriptwriter": ["content"],
   "product-manager": ["content", "research", "data"],
+  // One-person company: the chief of staff checks every member's report; finance checks figures.
+  "chief-of-staff": ["content", "research", "data"],
+  "finance-assistant": ["data"],
+  "operations-manager": ["content", "data"],
+  "customer-support": ["content"],
 };
 
 export function canVerifyKind(

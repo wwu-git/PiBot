@@ -90,6 +90,8 @@ const settings: PermissionsSettings = {
   levels: {
     connector: "ask",
     agent_delegation: "ask",
+    bot_management: "ask",
+    work_dispatch: "ask",
     run_command: "ask",
     computer: "never",
     read_file: "always",

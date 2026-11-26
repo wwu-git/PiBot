@@ -23,7 +23,7 @@ import { useTimeText } from "../../ui/time.ts";
 import { useToast } from "../../ui/toast.tsx";
 import { ApprovalHeader, CodeBlock } from "../chat/messages/cards.tsx";
 import { useApprovals } from "./approvals-context.tsx";
-import { approvalTarget } from "./card-facts.ts";
+import { approvalLead, approvalTarget, isPiManagerApproval, piRememberText } from "./card-facts.ts";
 import { RiskTag } from "./RiskTag.tsx";
 import { canRemember, desktopOnly } from "./use-approvals.ts";
 import { useApprovalSource } from "./where.ts";
@@ -63,11 +63,11 @@ function Facts({ approval }: { approval: Approval }) {
     <View style={{ marginHorizontal: 16, marginBottom: 12, gap: 6 }}>
       {facts.map((fact) => (
         <View
-          key={`${fact.kind}:${fact.value}`}
+          key={`${fact.label ?? fact.kind}:${fact.value}`}
           style={{ flexDirection: "row", alignItems: "baseline", gap: 14 }}
         >
           <Text style={{ width: 64, fontSize: 13, lineHeight: 20, color: colors.text2 }}>
-            {shared(`facts.${fact.kind}`)}
+            {fact.label ?? shared(`facts.${fact.kind}`)}
           </Text>
           <Text
             selectable
@@ -193,6 +193,18 @@ function Detail({ approval }: { approval: Approval }) {
                   title={approvalText(approval, language).title}
                 />
                 {!!target && <CodeBlock text={target} />}
+                {!!approvalLead(approval, language) && (
+                  <Text
+                    style={{
+                      marginHorizontal: 16,
+                      fontSize: 13,
+                      lineHeight: 19,
+                      color: colors.text2,
+                    }}
+                  >
+                    {approvalLead(approval, language)}
+                  </Text>
+                )}
                 <Facts approval={approval} />
                 <Why approval={approval} />
                 {canRemember(approval) && !desktop ? (
@@ -217,11 +229,13 @@ function Detail({ approval }: { approval: Approval }) {
                   >
                     <CheckMark on={remembered} />
                     <Text style={{ flex: 1, fontSize: 14, lineHeight: 21, color: colors.text }}>
-                      {approval.grantScope?.kind === "paid_image"
-                        ? shared("approval.rememberPaidImage", {
-                            model: `${approval.grantScope.provider} / ${approval.grantScope.model}`,
-                          })
-                        : t("remember")}
+                      {isPiManagerApproval(approval)
+                        ? piRememberText(approval, shared)
+                        : approval.grantScope?.kind === "paid_image"
+                          ? shared("approval.rememberPaidImage", {
+                              model: `${approval.grantScope.provider} / ${approval.grantScope.model}`,
+                            })
+                          : t("remember")}
                     </Text>
                   </Pressable>
                 ) : (

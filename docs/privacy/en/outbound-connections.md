@@ -18,7 +18,7 @@ This page lists every network connection Pi Bot can make: the desktop app, the A
 | [Update checks](#update-checks) | `pibot.space` | Yes |
 | [Role library](#role-library) | `roles.pibot.space` | Only when you use it |
 | [Model providers](#model-providers) | The provider you configure | Only after you set up a model |
-| [ChatGPT plan](#chatgpt-plan) | `auth.openai.com`, `chatgpt.com` | Only after you sign in |
+| [ChatGPT plan](#chatgpt-plan) | `auth.openai.com`, `api.openai.com` or `chatgpt.com` | When signing in, refreshing sign-in or using a signed-in model |
 | [Web search](#web-search) | DuckDuckGo, Bing, Brave, Tavily or your SearXNG | Yes, asks on first use |
 | [Websites Bots visit](#websites-bots-visit) | The sites themselves | Yes |
 | [Commands Bots run](#commands-bots-run) | Package registries, your allowed sites, your SSH hosts | Yes, limited |
@@ -45,6 +45,8 @@ Pi Bot's own servers are reached only over HTTPS or WSS. STUN is a small UDP que
 - **Default:** on, in the installed app.
 - **To stop it:** there is no setting for automatic checks. They only ever read version information; if you want none at all, block `pibot.space` in your firewall and update by downloading new versions yourself.
 
+**Android phone app (from 0.0.4).** The app sends a plain HTTPS GET to `https://pibot.space/updates/android.json` without account, device or installation identifiers. The server can see your IP address. Automatic checks are on by default and run at app startup, at most once a day. You can also check on demand from **Devices**. Offline mode skips these checks. The app downloads the APK from `pibot.space` only when you choose to download and install the update.
+
 ### Role library
 
 - **Receiver:** `roles.pibot.space`.
@@ -61,7 +63,7 @@ The relay (`relay.pibot.space`) and `auth.pibot.space` are described under [Phon
 
 - **Receiver:** the provider you set up in Settings › Models & API keys: OpenAI, Anthropic, Google, DeepSeek, OpenRouter, a cloud platform (Amazon Bedrock, Azure, Google Vertex AI, Cloudflare), a custom gateway, and so on. Each Bot can use a different one.
 - **What is sent:** what the model needs to reply: the conversation, the Bot's persona and instructions, the memories it uses, file excerpts and web content it has read, tool results, and the images you attach. Your API key goes only to that provider. Requests name the app as "Pi Bot" (with the address pibot.space) for the provider's app attribution; no user identifier is added. For providers that support it, Pi Bot asks for longer prompt caching (up to 24 hours on some OpenAI models, 1 hour on Anthropic), which makes replies faster and cheaper; the provider's own terms govern that cache.
-- **Auxiliary model:** context compaction, handoffs, translation, persona drafts and web page extraction send the relevant content to the auxiliary model's provider. By default this is the main model.
+- **Auxiliary model:** Context compaction, handoffs, translation, persona drafts, and extracting information from web pages or memories from conversations send the relevant content to the auxiliary model’s provider. By default this is the main model.
 - **When:** every time a Bot replies or uses a model. **Save & test** sends one short test request; **Fetch models** asks that provider (or your custom address) for its model list. Cloud platforms also contact their sign-in service, for example `oauth2.googleapis.com` for Google Vertex AI.
 - **OpenRouter model list:** **Refresh model list** on the OpenRouter page downloads OpenRouter's public model list from `openrouter.ai`, without your key.
 - **Default:** nothing is sent until you set up a model.
@@ -70,10 +72,10 @@ The relay (`relay.pibot.space`) and `auth.pibot.space` are described under [Phon
 
 ### ChatGPT plan
 
-- **Receiver:** OpenAI: `auth.openai.com` for sign-in and token refresh, `chatgpt.com` for conversations.
-- **What is sent:** you sign in on OpenAI's page in your browser. After that, conversations of Bots that use a ChatGPT plan model go straight to OpenAI, with no other server in between. Sign-in tokens are encrypted on this computer.
-- **When / default:** only after you click **Continue with ChatGPT** and sign in.
-- **To stop it:** click **Disconnect** on the ChatGPT plan page.
+- **Receiver:** Both options use `auth.openai.com` for sign-in and token refresh. **ChatGPT plan** model requests go to `api.openai.com`. **ChatGPT (Codex sign-in)** model requests go to `chatgpt.com`.
+- **What is sent:** You sign in on OpenAI’s website. When you use a model, the conversation content it needs goes directly to OpenAI. Sign-in tokens are encrypted on this computer.
+- **When:** When you choose to sign in, use a signed-in model, or the app refreshes the sign-in.
+- **To stop it:** Open the relevant subscription under **Models & API keys** and choose **Disconnect**. You can disconnect each sign-in separately.
 
 ## What Bots do while working
 
@@ -100,9 +102,9 @@ The relay (`relay.pibot.space`) and `auth.pibot.space` are described under [Phon
 ### Commands Bots run
 
 - **Receiver:** package registries (`registry.npmjs.org`, `pypi.org`, `files.pythonhosted.org`), the sites on your **Allowed websites** list, and servers you set up yourself: SSH hosts in the command environment, and Git remotes when you push or pull from the Changes panel.
-- **What is sent:** whatever the command sends. On macOS and Linux commands run in a sandbox: commands that run without asking can reach only the package registries and your list; with **Commands run by bots can access the network** turned on, commands you approve can use the network more widely. Windows has no command isolation yet, so every command needs your approval and isn't network-limited.
+- **What is sent:** whatever the command sends. On macOS and Linux commands run in a sandbox: commands that run without asking can reach only the package registries and your list; with **Commands run by bots can access the network** turned on, commands you approve can use the network more widely. Windows has no command sandbox. Verified read-only commands within your permissions can run without asking, and ordinary commands can run in YOLO topics after you consent. The sandbox network list does not limit the commands themselves.
 - **Default:** on, within these limits.
-- **To stop it:** turn off **Commands run by bots can access the network** in Settings › Permissions; commands can then reach only the Allowed websites list.
+- **To limit it:** On macOS and Linux, turn off **Commands run by bots can access the network** to narrow what commands can reach from the sandbox. On Windows, you can withdraw YOLO command consent or restrict **Run commands**. See [Approvals and permissions](../../guide/en/05-approvals-and-permissions.md#command-isolation-sandbox).
 
 ## Apps, MCP and skills
 
@@ -191,4 +193,4 @@ The Gmail plugin has two sign-in methods:
 
 ## Using Pi Bot fully offline
 
-Choose a local model, set **Visit websites** to **Never** and turn off **Commands run by bots can access the network**; conversations and files then stay on this computer. Update checks and anything you start yourself (role library, skill imports, plugins) still connect as described above. See [Privacy and security](../../guide/en/13-privacy-and-security.md#fully-offline-use).
+Choose a local model, set **Visit websites** to **Never** and turn off **Commands run by bots can access the network**; conversations and files then stay on this computer. Desktop update checks and anything you start yourself (role library, skill imports, plugins) still connect as described above. See [Privacy and security](../../guide/en/13-privacy-and-security.md#fully-offline-use).

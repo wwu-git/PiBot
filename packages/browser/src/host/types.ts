@@ -43,6 +43,8 @@ export interface BrowserFrame {
 
 export interface BotBrowserOptions {
   platform: BrowserPlatform;
+  /** Host-only seam for isolated transport acceptance; production uses checked literal sockets. */
+  privateNetworkDial?: import("./private-network/destination.ts").PrivateNetworkDial;
   /** `<data>/bots/<id>/browser`. */
   profileDir(botId: string, groupId?: string): string;
   groupProfilesDir?(groupId: string): string;

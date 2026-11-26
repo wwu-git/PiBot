@@ -179,7 +179,8 @@ export async function executeFileTool(
   )
     runtime.observeProjectNotes?.(prepared, result.path, input.args.content, true);
   const formatting =
-    prepared.call.tool === "project_notes"
+    prepared.call.tool === "project_notes" ||
+    prepared.result.reason === "project_notes_confirmation"
       ? undefined
       : await runtime.postWrite(prepared.call, signal);
   if (formatting) await runtime.afterWrite(before, result.path, root);

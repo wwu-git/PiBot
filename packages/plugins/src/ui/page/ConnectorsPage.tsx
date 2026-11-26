@@ -14,16 +14,8 @@ import {
   useSettings,
   useWorkspace,
 } from "@pibot/renderer-kit";
-import { Button, Chip, Icon, PageHeading, pageTone } from "@pibot/ui";
-import {
-  type CSSProperties,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { Button, Chip, Icon, PageHeading, pageTone, Tabs } from "@pibot/ui";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AppSetup } from "../setup/AppSetup.tsx";
 import { CustomMcp } from "../setup/CustomMcp.tsx";
 import { ImportPlugin } from "../setup/ImportPlugin.tsx";
@@ -45,6 +37,7 @@ import {
 import { ConnectionPanel, needsKey } from "./connections/ConnectionPanel.tsx";
 import styles from "./connections/connections.module.css";
 import { Faces, letterTone, monogram, resolveAccess } from "./connections/Faces.tsx";
+import { localText } from "./connections/local-text.ts";
 import { SkillImportDialog } from "./connections/SkillImport.tsx";
 import { SkillsTab } from "./connections/SkillsTab.tsx";
 import { TokensDialog, type TokensSlot } from "./connections/TokensDialog.tsx";
@@ -347,6 +340,25 @@ export function ConnectorsPage({
     // rather than the size of the first page.
     knowledge: knowledge.value && !knowledge.next ? knowledge.value.items.length : undefined,
   };
+  // A package with one connection opens that connection's drawer directly; one with several (or
+  // only skills) opens the package panel that lists them.
+  const openInstallation = (installationId: string) => {
+    const rows = connectorsOf(installationId);
+    if (rows.length === 1 && rows[0]) setManage(rows[0].id);
+    else setPanel(installationId);
+  };
+  const startUninstall = (summary: PluginSummary) => {
+    const installation = installations.find((row) => row.id === summary.installationId);
+    setPanel(undefined);
+    setManage(undefined);
+    setRemovedName(undefined);
+    if (installation)
+      setUninstalling({
+        installation,
+        name: localText(summary.name[language], language),
+        skillCount: summary.skillCount,
+      });
+  };
   const access = (installationId: string) =>
     summaries.find((summary) => summary.installationId === installationId)?.access;
   const choose = (choice: AddChoice) => {
@@ -446,7 +458,7 @@ export function ConnectorsPage({
       <span className={styles.note}>{t("connectors.appUnsupported")}</span>
     ) : (
       (faces(summary.installationId) ?? (
-        <Button variant="secondary" onClick={() => setPanel(summary.installationId)}>
+        <Button variant="secondary" onClick={() => openInstallation(summary.installationId)}>
           {t("connections.action.give")}
         </Button>
       ))
@@ -464,11 +476,14 @@ export function ConnectorsPage({
             <Chip tone={connectorTone(active)}>{t(`connectors.status.${active.status}`)}</Chip>
           ) : undefined
         }
-        name={summary.name[language]}
-        description={[t("connections.fromPackage"), summary.description[language]]
+        name={localText(summary.name[language], language)}
+        description={[
+          t("connections.fromPackage"),
+          localText(summary.description[language], language),
+        ]
           .filter(Boolean)
           .join(" · ")}
-        open={() => setPanel(summary.installationId)}
+        open={() => openInstallation(summary.installationId)}
         right={right}
       />
     );
@@ -477,7 +492,7 @@ export function ConnectorsPage({
     const rows = connectorsOf(summary.installationId);
     const missing = rows.find(needsKey);
     const failed = rows.find((connector) => connector.status === "error");
-    const open = () => setPanel(summary.installationId);
+    const open = () => openInstallation(summary.installationId);
     const right = missing ? (
       <Button variant="secondary" onClick={() => setManage(missing.id)}>
         {t("connections.action.addKey")}
@@ -493,8 +508,8 @@ export function ConnectorsPage({
         </Button>
       ))
     );
-    const name = summary.name[language];
-    const description = summary.description[language];
+    const name = localText(summary.name[language], language);
+    const description = localText(summary.description[language], language);
     const outside = rows.some((connector) => runsOutsideSandbox(connector, hostPlatform()));
     return (
       <Row
@@ -557,6 +572,11 @@ export function ConnectorsPage({
   const panelSummary =
     foundPanelSummary ??
     (lastPanelSummary.current?.installationId === panel ? lastPanelSummary.current : undefined);
+  // Removing a connection from its drawer removes the package it came from (not built-in apps).
+  const manageInstallation = connectors.find((row) => row.id === manage)?.pluginInstallationId;
+  const manageSummary = summaries.find(
+    (summary) => summary.installationId === manageInstallation && summary.sourceKind !== "builtin",
+  );
   const uninstallTarget =
     installations.find((row) => row.id === uninstalling?.installation.id) ??
     uninstalling?.installation;
@@ -587,45 +607,17 @@ export function ConnectorsPage({
         </div>
       </header>
       {showSecrets && <TokensDialog secrets={secrets} close={() => setShowSecrets(false)} />}
-      <div
+      <Tabs
         className={styles.tabs}
-        role="tablist"
-        aria-label={t("connectors.title")}
-        style={
-          {
-            "--seg-count": TABS.length,
-            "--seg-index": Math.max(0, TABS.indexOf(tab)),
-          } as CSSProperties
-        }
-        onKeyDown={(event) => {
-          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-          event.preventDefault();
-          const index = TABS.indexOf(tab);
-          const next =
-            event.key === "Home"
-              ? 0
-              : event.key === "End"
-                ? TABS.length - 1
-                : (index + (event.key === "ArrowRight" ? 1 : TABS.length - 1)) % TABS.length;
-          setTab(TABS[next] as Tab);
-          event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
-        }}
-      >
-        {TABS.map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            tabIndex={tab === value ? 0 : -1}
-            className={styles.tab}
-            onClick={() => setTab(value)}
-          >
-            {t(`connections.tab.${value}`)}
-            {counts[value] !== undefined && <span className={styles.count}>{counts[value]}</span>}
-          </button>
-        ))}
-      </div>
+        label={t("connectors.title")}
+        value={tab}
+        onValueChange={setTab}
+        tabs={TABS.map((value) => ({
+          value,
+          label: t(`connections.tab.${value}`),
+          count: counts[value],
+        }))}
+      />
       <div className={styles.scroll}>
         <div className={styles.body} role="tabpanel">
           {results && <BringOverSummary results={results} rows={discovery.rows()} />}
@@ -729,6 +721,10 @@ export function ConnectorsPage({
           initialText={importing.text}
           close={() => setImporting(undefined)}
           changed={changed}
+          connected={(connectorId) => {
+            setImporting(undefined);
+            setManage(connectorId);
+          }}
         />
       )}
       {writingSkill && (
@@ -758,19 +754,7 @@ export function ConnectorsPage({
           operations={operations}
           changed={changed}
           manage={(id) => setManage(id)}
-          remove={() => {
-            const installation = installations.find(
-              (row) => row.id === panelSummary.installationId,
-            );
-            setPanel(undefined);
-            setRemovedName(undefined);
-            if (installation)
-              setUninstalling({
-                installation,
-                name: panelSummary.name[language],
-                skillCount: panelSummary.skillCount,
-              });
-          }}
+          remove={() => startUninstall(panelSummary)}
           close={() => setPanel(undefined)}
         />
       )}
@@ -783,6 +767,7 @@ export function ConnectorsPage({
           apps={appItems}
           snapshot={snapshot}
           operations={operations}
+          remove={manageSummary && (() => startUninstall(manageSummary))}
           changed={changed}
           close={() => setManage(undefined)}
         />

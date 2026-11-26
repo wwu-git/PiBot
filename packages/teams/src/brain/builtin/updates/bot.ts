@@ -130,7 +130,7 @@ export async function snapshotBot(
     thinkingLevel: bot.thinkingLevel,
     permissionOverrides: Object.fromEntries(
       Object.entries(bot.permissionOverrides ?? {}).filter(
-        (pair): pair is [string, Level] => !!pair[1],
+        (pair): pair is [string, Level] => pair[0] !== "confirmEverySend" && !!pair[1],
       ),
     ),
     skills: packages.map((pkg) => ({

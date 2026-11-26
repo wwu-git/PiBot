@@ -92,8 +92,11 @@ export function networkErrorClass(value: unknown): string {
     if (code === "ECONNRESET" || code === "EPIPE" || code === "ECONNABORTED") return "reset";
     if (UNREACHABLE.has(code)) return "unreachable";
     if (TIMEOUT.has(code)) return "timeout";
-    if (/^(ERR_TLS|ERR_SSL|EPROTO$|CERT_|UNABLE_TO|DEPTH_ZERO|SELF_SIGNED)/.test(code))
-      return "tls";
+    // An untrusted or mismatched certificate needs a different fix (install the relay's CA)
+    // than a handshake that fails outright, so it is its own class.
+    if (/^(CERT_|UNABLE_TO|DEPTH_ZERO|SELF_SIGNED|ERR_TLS_CERT_ALTNAME)/.test(code))
+      return "certificate";
+    if (/^(ERR_TLS|ERR_SSL|EPROTO$)/.test(code)) return "tls";
   }
   if (/timed out/i.test(message)) return "timeout";
   if (/closed before the connection was established/i.test(message)) return "cancelled";

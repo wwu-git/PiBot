@@ -58,7 +58,14 @@ export function createModelsOperations({
       try {
         const { runtime } = await buildRuntime();
         const models = opts?.availableOnly ? await runtime.getAvailable() : runtime.getModels();
-        return models.filter((model) => !isRetiredModel(model.provider, model.id)).map(modelInfo);
+        const added = deps.addedModels?.() ?? {};
+        return models
+          .filter((model) => !isRetiredModel(model.provider, model.id))
+          .map((model) =>
+            added[model.provider]?.includes(model.id)
+              ? { ...modelInfo(model), addedByUser: true as const }
+              : modelInfo(model),
+          );
       } catch (error) {
         throw new AgentError(mapAgentError(error));
       }

@@ -1370,3 +1370,48 @@ button.stepText {
   font-size: 12px;
   cursor: pointer;
 }
+
+/* A decision inside another card (the inbox): the host owns frame, shadow and edge; the content
+   lines up with its text column and the actions sit left in one wrapping row. */
+.embeddedDecision {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px 12px 12px;
+  font-size: 13px;
+}
+.embeddedDecision > .cardHead {
+  padding: 0;
+  border-bottom: 0;
+}
+.embeddedText {
+  margin: 0;
+  color: var(--text2);
+}
+.embeddedDecision > small.hint {
+  margin: 0;
+}
+.embeddedResolved {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.embeddedActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 2px;
+}
+.embeddedActions select {
+  min-height: 32px;
+  max-width: 100%;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--tert);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}

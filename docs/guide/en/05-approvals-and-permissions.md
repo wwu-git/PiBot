@@ -24,11 +24,11 @@ Each item has three levels: **Never**, **Ask**, **Always** (some have only the f
 
 | Group | Item | Default behaviour |
 |---|---|---|
-| Local operations | Run commands | Commands run in an isolated environment, approved per level |
+| Local operations | Run commands | Approval follows the permission level. For Windows rules, see Command isolation below |
 | | Read files | Files outside the work location ask first |
 | | List folders | See what is in a folder, find files, search file contents |
 | | Write files | Writes outside the work location are confirmed each time |
-| Network | Visit websites | Allowed by default; the first automatic sign-in and the first form submission on each site still ask |
+| Network | Visit websites | Visiting and reading public pages are allowed by default. Choose Ask for prompts. The first automatic sign-in or form submission on each site still asks |
 | | Commands run by bots can access the network | When off, commands can only reach the Allowed websites list |
 | Use computer | Use computer | Each task asks with an approval card first |
 | Connections and sending | Use plugins | Read-only tools follow this level; writes go through a draft |
@@ -84,15 +84,17 @@ Turn on **YOLO mode** from "…" at the top right of a chat. Actions YOLO can ap
 - It only affects this conversation: a new topic starts with it off, and other conversations and routines are not affected.
 - **Allowed without asking**: running commands (including configured Docker), reading and writing files, visiting sites and submitting forms, first-use search prompts, operating the computer, sending things out, logging in with a single saved account.
 - **Still asks or refuses**: paid image generation, permissions set to Never, privilege escalation (such as sudo), dangerous operations, writes outside working folders, apps that can't be operated, unauthorized local network and loopback addresses, protected skill and data folders, read-only reference folders.
-- Commands still run isolated. YOLO remembers nothing: turning it off asks again right away, and every action it allowed is in the activity records.
+- YOLO auto-approvals appear in the activity records. Turning YOLO off restores the usual permission rules. On macOS and Linux, commands still run in the sandbox.
 
 ## Command isolation (sandbox)
 
-Commands Bots run are isolated by default: they can write only the working folders, and network access is limited by the Allowed websites list.
+On platforms with command isolation, Bots’ commands run in the sandbox by default. They can write only to working folders, and network access is limited by the Allowed websites list.
 
 - **macOS**: uses the system's built-in sandbox; nothing to install.
 - **Linux**: needs `bubblewrap` and `socat` (see [1 · Install](01-getting-started.md#linux)).
-- **Windows**: command isolation isn't supported yet. Each command runs directly as you only after you approve it, and Run commands can't be set to Always. YOLO doesn't auto-approve Windows commands either unless you separately turn on YOLO auto-approval for commands without isolation (you confirm before it turns on).
+- **Windows**: Commands run directly as your Windows user without a command sandbox. Pi Bot can run commands without asking when it can verify they are read-only and within your file permissions. Examples in the work location include listing files with `dir` or `Get-ChildItem`, reading a file with `type`, and searching files with `Select-String`. Other ordinary commands normally ask.
+
+The first time you turn on YOLO for a topic on Windows, Pi Bot explains that there is no command sandbox and asks for your consent. After that, topics with YOLO on can run ordinary commands automatically. Dangerous commands or commands that touch network shares or protected locations still require confirmation or can be blocked. To withdraw consent, go to **Settings › Permissions** and choose **Withdraw** next to **YOLO runs commands automatically on Windows**. Ordinary commands then ask again. Use the usual stop button for a command that is already running.
 
 When the sandbox blocks a command, the Bot explains why and can ask you to confirm running it once outside the sandbox. If you never want that offer, turn on **Strict sandbox** in Settings › Permissions › Advanced.
 
@@ -134,7 +136,7 @@ Windows (PowerShell; adjust the installation path; the pipeline waits for the re
 & "$env:LOCALAPPDATA\Programs\Pi Bot\Pi Bot.exe" --sandbox-doctor | Out-String
 ```
 
-Linux (from the extracted app directory, or substitute your downloaded AppImage filename):
+Linux (`pi-bot` after installing the `.deb`; otherwise from the extracted app directory, or substitute your downloaded AppImage filename):
 
 ```sh
 ./pi-bot --sandbox-doctor

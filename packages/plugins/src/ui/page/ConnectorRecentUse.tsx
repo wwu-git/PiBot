@@ -1,13 +1,12 @@
 import { failureReasonKey } from "@pibot/i18n";
 import type { ConnectionUse } from "@pibot/plugins-contract/full";
 import type { Peer } from "@pibot/renderer-kit";
-import { useRpcEvent, useT } from "@pibot/renderer-kit";
-import { Button } from "@pibot/ui";
+import { SettingsLine, SettingsRow, SettingsSection, useRpcEvent, useT } from "@pibot/renderer-kit";
+import { Button, Chip } from "@pibot/ui";
 import { useCallback, useState } from "react";
 import { useConnectorsPorts } from "../shell/ports.tsx";
 import { useConnectorPage } from "../shell/remote.ts";
 import { ConnectorFeedback, ConnectorPagination } from "./ConnectorFeedback.tsx";
-import styles from "./connectors.module.css";
 import { connectionUseReasonKey } from "./use-reason-text.ts";
 
 const PAGE = 10;
@@ -26,18 +25,17 @@ export function ConnectorRecentUse({ id, snapshot }: { id: string; snapshot: num
   useRpcEvent("approval.resolved", page.refresh);
   useRpcEvent("drafts.changed", page.refresh);
   return (
-    <section className={styles.stack}>
-      <h3>{t("connectors.recentUse")}</h3>
-      <p className={styles.note}>{t("connectors.recentUseNote")}</p>
+    <SettingsSection title={t("connections.drawer.recent")}>
+      <SettingsLine>{t("connectors.recentUseNote")}</SettingsLine>
       <ConnectorFeedback loading={page.loading} error={page.error} retry={page.refresh} />
       {page.value?.items.map((use) => (
         <UseRow key={use.id} use={use} />
       ))}
       {page.value && !page.value.items.length && (
-        <p className={styles.note}>{t("connectors.noRecentUse")}</p>
+        <SettingsLine>{t("connectors.noRecentUse")}</SettingsLine>
       )}
       <ConnectorPagination previous={page.previous} next={page.next} disabled={page.loading} />
-    </section>
+    </SettingsSection>
   );
 }
 
@@ -61,20 +59,21 @@ function UseRow({ use }: { use: ConnectionUse }) {
           code: use.reasonCode,
         });
   return (
-    <div className={styles.stack}>
-      <div className={styles.row}>
-        <span className={styles.grow}>
-          {new Date(use.at).toLocaleString()} · {who} ·{" "}
-          {use.tool ?? t("connectors.use.unknownTool")} · {t(`connectors.use.${use.kind}`)}
-        </span>
-        <span className={use.outcome === "failed" ? styles.warn : styles.note}>{result}</span>
+    <>
+      <SettingsRow
+        icon={use.outcome === "failed" ? "warning" : use.outcome === "denied" ? "stop" : "clock"}
+        tone={use.outcome === "failed" ? "red" : use.outcome === "denied" ? "orange" : "teal"}
+        label={`${use.tool ?? t("connectors.use.unknownTool")} · ${t(`connectors.use.${use.kind}`)}`}
+        note={`${new Date(use.at).toLocaleString()} · ${who}`}
+      >
+        <Chip tone={use.outcome === "failed" ? "danger" : "neutral"}>{result}</Chip>
         {receipt && (
           <Button variant="ghost" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
             {t(open ? "connectors.use.hideReceipt" : "connectors.use.receipt")}
           </Button>
         )}
-      </div>
+      </SettingsRow>
       {receipt && open && <receipt.Receipt runId={receipt.runId} />}
-    </div>
+    </>
   );
 }

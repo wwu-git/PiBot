@@ -96,6 +96,23 @@ export class RunFileChangesRepo {
         .map((row) => String(row.path)),
     );
   }
+  /**
+   * When each path the runs wrote was last written, bounded. A command observation counts (a
+   * script that renders a chart writes only through a command); tool deletes do not.
+   */
+  lastWrites(runIds: readonly string[]): { root: string; path: string; at: string }[] {
+    const ids = runIds.slice(0, 50).map((id) => IdSchema.parse(id));
+    if (!ids.length) return [];
+    return this.db
+      .prepare(
+        `SELECT root,path,max(created_at) AS at FROM run_file_changes
+        WHERE run_id IN (${ids.map(() => "?").join(",")})
+        AND (kind='command' OR (kind IN ('add','modify') AND after_ref IS NOT NULL))
+        GROUP BY root,path ORDER BY at DESC LIMIT ?`,
+      )
+      .all(...ids, RUN_FILE_CHANGE_LIMIT)
+      .map((row) => ({ root: String(row.root), path: String(row.path), at: String(row.at) }));
+  }
   botOf(runId: string): string | undefined {
     const row = this.db
       .prepare("SELECT bot_id AS botId FROM run_file_changes WHERE run_id=? LIMIT 1")

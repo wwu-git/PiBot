@@ -17,11 +17,15 @@ function localDrivePath(path: string) {
   return /^[a-z]:[\\/]/i.test(path) && windowsLiteralPath(path);
 }
 
-async function approvedPath(path: string, context: PathContext, roots: readonly string[]) {
+type Protection = { roots: readonly string[]; own: readonly string[] };
+
+async function approvedPath(path: string, context: PathContext, protection: Protection) {
+  const { roots, own } = protection;
   const absolute = win32.resolve(context.cwd, path);
-  if (!localDrivePath(absolute) || windowsProtectedCommandPath(absolute, roots)) return undefined;
+  if (!localDrivePath(absolute) || windowsProtectedCommandPath(absolute, roots, own))
+    return undefined;
   const resolved = await canonicalPath(absolute, context);
-  if (!localDrivePath(resolved.path) || windowsProtectedCommandPath(resolved.path, roots))
+  if (!localDrivePath(resolved.path) || windowsProtectedCommandPath(resolved.path, roots, own))
     return undefined;
   return resolved;
 }
@@ -35,7 +39,7 @@ export async function proveWindowsReadOnly(
   input: CommandInput,
   context: PathContext,
   cwd: string | undefined,
-  protectedRoots: readonly string[],
+  protectedRoots: Protection,
   readPolicy: ReadPolicy,
 ): Promise<ApprovalFact[] | undefined> {
   if (!cwd || !localDrivePath(cwd) || input.request.stdin || input.request.outsideSandbox) return;
@@ -77,7 +81,7 @@ export async function proveWindowsReadOnly(
 async function readFacts(
   reads: readonly (FileRead & { recurse?: boolean; readEntries?: boolean })[],
   context: PathContext,
-  protectedRoots: readonly string[],
+  protectedRoots: Protection,
   readPolicy: ReadPolicy,
 ): Promise<ApprovalFact[] | undefined> {
   const facts: ApprovalFact[] = [];
@@ -110,7 +114,7 @@ async function entriesAllowed(
   path: string,
   read: { recurse?: boolean; readEntries?: boolean },
   context: PathContext,
-  protectedRoots: readonly string[],
+  protectedRoots: Protection,
   readPolicy: ReadPolicy,
 ) {
   const enumerate = context.fs.windowsReadEntries;
@@ -121,7 +125,9 @@ async function entriesAllowed(
         path,
         read.recurse === true,
         context.signal,
-        (entry) => localDrivePath(entry) && !windowsProtectedCommandPath(entry, protectedRoots),
+        (entry) =>
+          localDrivePath(entry) &&
+          !windowsProtectedCommandPath(entry, protectedRoots.roots, protectedRoots.own),
       ),
     context.signal,
   );

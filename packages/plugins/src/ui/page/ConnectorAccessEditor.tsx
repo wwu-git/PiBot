@@ -1,6 +1,5 @@
 import type { Bot, ConnectorAccess, Group } from "@pibot/plugins-contract/full";
 import { type Peer, useT, useWorkspace } from "@pibot/renderer-kit";
-import { Button } from "@pibot/ui";
 import { useCallback } from "react";
 import { useConnectorPage } from "../shell/remote.ts";
 import { ConnectorFeedback, ConnectorPagination } from "./ConnectorFeedback.tsx";
@@ -100,6 +99,15 @@ export function ConnectorAccessEditor({
       unavailable={unavailable}
       requestedTarget={requestedTarget}
       disabled={disabled}
+      all={
+        resolveAndSave
+          ? {
+              on: access.mode === "all",
+              disabled,
+              toggle: (on) => save({ mode: on ? "all" : "selected", bots: [], groups: [] }),
+            }
+          : undefined
+      }
       isDisabled={(kind, id) =>
         (kind === "bot" ? bots.loading : groups.loading) ||
         (selected &&
@@ -125,15 +133,6 @@ export function ConnectorAccessEditor({
         next={groups.next}
         disabled={groups.loading || disabled}
       />
-      {resolveAndSave && (
-        <Button
-          variant="secondary"
-          disabled={disabled}
-          onClick={() => save({ mode: selected ? "all" : "selected", bots: [], groups: [] })}
-        >
-          {t(selected ? "connectors.access.all" : "connectors.access.selected")}
-        </Button>
-      )}
     </WhoCanUse>
   );
 }

@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { startBrain } from "@pibot/brain";
-import { createPeer, Events, Methods, type Port } from "@pibot/protocol";
-import { capabilities } from "../../brain-app/src/index.ts";
+import { createPeer, Events, InboxItemSchema, Methods, type Port } from "@pibot/protocol";
+import { capabilities, productCapabilityTools } from "../../brain-app/src/index.ts";
 import { createOrchestrationFactory } from "../../orchestration/src/index.ts";
 import { SkillsRepo } from "../../skills/src/store/index.ts";
 import { PhoneBrowser } from "../src/brain/browser/phone-browser.ts";
@@ -41,6 +41,12 @@ export async function startSettingsDesktop() {
       remoteKernel: bridge.kernel,
       isPhoneRequest: bridge.isPhoneRequest,
     }),
+    composition: {
+      methods: Methods,
+      events: Events,
+      tools: productCapabilityTools,
+      inboxItemSchema: InboxItemSchema,
+    },
     host: {
       secrets: {
         isAvailable: async () => true,

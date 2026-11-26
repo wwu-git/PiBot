@@ -109,6 +109,48 @@ export const PiBotPluginManifestSchema = z.strictObject({
     .optional(),
 });
 
+/**
+ * User-facing text in plugin.json `userConfig` (title, description, option labels): a plain string,
+ * "中文 / English", or `{ "zh": …, "en": … }`. Pi Bot shows the reader's language either way.
+ */
+export const PluginTextSchema = z.union([
+  z.string().max(4096),
+  z.strictObject({ zh: z.string().max(2000), en: z.string().max(2000) }),
+]);
+export type PluginText = z.output<typeof PluginTextSchema>;
+export const ClaudePluginUserConfigFieldSchema = z
+  .object({
+    type: z.enum(["string", "number", "boolean", "directory", "file"]).optional(),
+    title: PluginTextSchema.optional(),
+    description: PluginTextSchema.optional(),
+    sensitive: z.boolean().optional(),
+    required: z.boolean().optional(),
+    default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+    options: z
+      .array(
+        z.object({
+          value: z.union([z.string(), z.number(), z.boolean()]),
+          label: PluginTextSchema,
+        }),
+      )
+      .optional(),
+  })
+  .loose();
+
+/**
+ * One stored string for either form. A localized object becomes "中文 / English", the form older
+ * Pi Bot versions and existing packages already use, so stored settings keep one shape.
+ */
+export function pluginText(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  const parsed = PluginTextSchema.safeParse(value);
+  if (!parsed.success || typeof parsed.data === "string") return undefined;
+  const zh = parsed.data.zh.trim();
+  const en = parsed.data.en.trim();
+  if (!zh || !en || zh === en) return zh || en;
+  return `${zh} / ${en}`;
+}
+
 /** Claude-compatible public manifest. Unknown official fields stay available to the importer. */
 export const ClaudePluginManifestSchema = z
   .object({

@@ -2,8 +2,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { MemoryDraftRequest, MemoryDraftUsage } from "@pibot/agent";
 import type { BrainRedactor } from "@pibot/brain/kit";
+import type { Message } from "@pibot/protocol-base";
 import {
-  AuditRepo,
   BackgroundTaskHealthRepo,
   BotsRepo,
   correctionTopic,
@@ -11,14 +11,17 @@ import {
   type MemoryExtractionsRepo,
   memoryMaintenanceUsage,
   SettingsRepo,
+  transaction,
 } from "@pibot/storage";
+import { correctionBody, correctionSource, ordinarySource } from "./memory-correction.ts";
 import {
   type ExtractionSource,
   extractionPrompt,
-  extractionSource,
   groupExtractionInstruction,
 } from "./memory-extraction.ts";
-import { applyExtractionCandidates, extractionErrorCode } from "./memory-extraction-result.ts";
+import { extractionErrorCode } from "./memory-extraction-result.ts";
+import { settleExtraction } from "./memory-extraction-settlement.ts";
+import { logMemoryAttempt } from "./memory-maintenance-log.ts";
 import type { MemoryService } from "./memory-service.ts";
 
 interface Model {
@@ -31,7 +34,9 @@ export interface MemoryExtractionAttemptDeps {
   logger: { warn(message: string): void; info?(message: string): void };
   memory: MemoryService;
   healthChanged?(): void;
-  isBotIdle(botId: string): boolean;
+  statusChanged?(botId: string): void;
+  isBotIdle(botId: string, correction?: boolean): boolean;
+  publishReply?(message: Message, botId: string): void;
   isPaused(): boolean;
   draftMemories?: (
     request: MemoryDraftRequest,
@@ -75,10 +80,11 @@ export class MemoryExtractionAttempt {
     // An image Bot's own model only draws (e.g. seedream), so it is never among the text models
     // extraction can run on and every attempt failed with no_model (maintainers 2026-11-18, 小图). It
     // uses the default model its sibling Bots chat with instead.
-    if (bot?.imageMode) return this.settings.get().defaultModel ?? undefined;
+    const { defaultModel, auxiliaryModel } = this.settings.get();
+    if (bot?.imageMode) return defaultModel ?? auxiliaryModel ?? undefined;
     return bot?.modelProvider && bot.modelId
       ? { provider: bot.modelProvider, id: bot.modelId }
-      : (this.settings.get().defaultModel ?? undefined);
+      : (defaultModel ?? auxiliaryModel ?? undefined);
   }
   private permitted(row: MemoryExtraction): boolean {
     const bot = this.bots.get(row.botId);
@@ -97,10 +103,13 @@ export class MemoryExtractionAttempt {
       : topic.bot_id === row.botId;
   }
   async process(row: MemoryExtraction, signal: AbortSignal) {
+    const start = performance.now();
     try {
       await this.extract(row, signal);
     } catch (error) {
       this.failed(row, signal, error);
+    } finally {
+      logMemoryAttempt(this.deps, "extraction", row, start);
     }
   }
   private async extract(row: MemoryExtraction, signal: AbortSignal) {
@@ -115,11 +124,20 @@ export class MemoryExtractionAttempt {
       skip(automated, this.repo.watermark(row.conversationId)?.messageId);
       return;
     }
-    if (
-      row.reason === "correction" &&
-      (!row.sourceMessageId ||
-        !correctionTopic(this.deps.db, row.conversationId, row.sourceMessageId))
-    ) {
+    const urgent = row.reason === "correction";
+    const correction =
+      urgent &&
+      row.sourceMessageId &&
+      correctionTopic(this.deps.db, row.conversationId, row.sourceMessageId)
+        ? correctionSource(
+            this.deps.db,
+            row.conversationId,
+            row.sourceMessageId,
+            row.botId,
+            row.groupId,
+          )
+        : undefined;
+    if (urgent && !correction) {
       skip("correction_source_unavailable");
       return;
     }
@@ -132,18 +150,7 @@ export class MemoryExtractionAttempt {
       skip("already_covered");
       return;
     }
-    const prior = this.deps.db
-      .prepare(
-        `SELECT coverage_message_id AS id FROM memory_extractions WHERE conversation_id=? AND status='done' AND coverage_message_id IS NOT NULL ORDER BY finished_at DESC LIMIT 1`,
-      )
-      .get(row.conversationId);
-    const source = extractionSource(
-      this.deps.db,
-      row.conversationId,
-      prior?.id == null ? null : String(prior.id),
-      12_000,
-      row.groupId ?? undefined,
-    );
+    const source = correction ?? ordinarySource(this.deps.db, row);
     if (!source) {
       skip("no_new_human_content");
       return;
@@ -158,7 +165,7 @@ export class MemoryExtractionAttempt {
     }
     const result = await this.draft(row, source, model, draftMemories, signal);
     signal.throwIfAborted();
-    if (!this.deps.isBotIdle(row.botId)) {
+    if (!this.deps.isBotIdle(row.botId, urgent)) {
       this.repo.defer(row, "bot_busy");
       return;
     }
@@ -166,11 +173,57 @@ export class MemoryExtractionAttempt {
       skip("extraction_disabled_or_scope_changed");
       return;
     }
-    if (this.repo.watermark(row.conversationId)?.messageId !== source.watermarkId) {
-      this.repo.defer(row, "source_changed");
-      return;
+    this.finish(row, source, result, correction);
+  }
+  private finish(
+    row: MemoryExtraction,
+    source: ExtractionSource,
+    result: { draft: unknown; tokens: number; costUsd?: number },
+    correction?: ReturnType<typeof correctionSource>,
+  ) {
+    if (correction) {
+      const current = correctionSource(
+        this.deps.db,
+        row.conversationId,
+        correction.subjectMessageId,
+        row.botId,
+        row.groupId,
+      );
+      if (current?.replyId !== correction.replyId || current.text !== correction.text) {
+        this.repo.defer(row, "source_changed");
+        return;
+      }
+      const message = transaction(this.deps.db, () =>
+        settleExtraction(
+          this.deps,
+          this.repo,
+          this.health,
+          row,
+          source,
+          result,
+          correction.replyId,
+        ),
+      );
+      if (message) this.publishReply(message, row.botId);
+    } else {
+      if (this.repo.watermark(row.conversationId)?.messageId !== source.watermarkId) {
+        this.repo.defer(row, "source_changed");
+        return;
+      }
+      transaction(this.deps.db, () =>
+        settleExtraction(this.deps, this.repo, this.health, row, source, result),
+      );
     }
-    this.apply(row, source, result);
+  }
+  private publishReply(message: Message, botId: string) {
+    try {
+      this.deps.publishReply?.(message, botId);
+    } catch {
+      // The receipt is already durable and can be recovered by reading history.
+      this.deps.logger.warn(
+        JSON.stringify({ module: "memory", reasonCode: "memory_receipt_publish_failed" }),
+      );
+    }
   }
   private draft(
     row: MemoryExtraction,
@@ -179,15 +232,15 @@ export class MemoryExtractionAttempt {
     draftMemories: NonNullable<MemoryExtractionAttemptDeps["draftMemories"]>,
     signal: AbortSignal,
   ) {
-    const text = this.deps.redactor.redact(
-      extractionPrompt(
-        this.deps.memory.extractionCatalog(row.botId, row.groupId),
-        source.text,
-        source.truncated,
-      ),
-    );
+    const catalog = this.deps.memory.extractionCatalog(row.botId, row.groupId);
+    const redact = (value: string) => this.deps.redactor.redact(value);
+    const text =
+      row.reason === "correction"
+        ? correctionBody(redact(source.text), redact(catalog))
+        : redact(extractionPrompt(catalog, source.text, source.truncated));
     const used = memoryMaintenanceUsage(this.deps.db, dayStart());
     const limit = this.limit();
+    let reserved = false;
     const draft = (chosen: Model) =>
       draftMemories({
         model: chosen,
@@ -198,16 +251,19 @@ export class MemoryExtractionAttempt {
           tokens: Math.max(0, limit.tokens - used.tokens),
           costUsd: Math.max(0, limit.costUsd - used.costUsd),
         },
-        onUsage: (usage: MemoryDraftUsage) => this.repo.recordUsage(row.id, usage),
+        onUsage: (usage: MemoryDraftUsage) => {
+          this.repo.recordUsage(row.id, usage);
+          reserved = true;
+        },
       });
     // The Bot's own model may be gone or its key invalid while the main model in Settings still
-    // works; one retry there keeps the job alive (maintainers 2026-11-18). Both fail before any
-    // request is dispatched, so nothing is billed twice.
+    // works. A reservation means dispatch may have occurred, so never retry that call.
     const fallback = this.settings.get().defaultModel ?? undefined;
     return draft(model).catch((error: unknown) => {
       const code = extractionErrorCode(error);
       if (
         (code !== "no_model" && code !== "auth_failed") ||
+        reserved ||
         !fallback ||
         (fallback.provider === model.provider && fallback.id === model.id) ||
         signal.aborted
@@ -215,58 +271,6 @@ export class MemoryExtractionAttempt {
         throw error;
       return draft({ provider: fallback.provider, id: fallback.id });
     });
-  }
-  private apply(
-    row: MemoryExtraction,
-    source: ExtractionSource,
-    result: { draft: unknown; tokens: number; costUsd?: number },
-  ) {
-    const counts = applyExtractionCandidates(
-      this.deps.memory,
-      row,
-      source.subjectMessageId,
-      result.draft,
-      source.groupSourceIds,
-      source.groupSourceTexts,
-    );
-    this.repo.diagnostics(row.id, counts);
-    const accepted = counts.applied + counts.proposed;
-    this.deps.logger.info?.(
-      JSON.stringify({
-        module: "memory",
-        reasonCode: "extraction_result",
-        botId: row.botId,
-        extractionId: row.id,
-        ...counts,
-      }),
-    );
-    this.audit(row, source.messageCount, accepted);
-    const failed = counts.raw && !accepted && !counts.reasons.candidate_duplicate;
-    this.repo.finish(row.id, {
-      status: failed ? "failed" : "done",
-      coverageMessageId: source.watermarkId,
-      tokens: result.tokens,
-      costUsd: result.costUsd,
-      candidates: accepted,
-      error: !counts.raw
-        ? "no_candidates"
-        : !counts.valid
-          ? "candidates_invalid"
-          : !accepted
-            ? "candidates_not_applied"
-            : null,
-    });
-    // Wanted repeated zero results noticed, but "nothing worth remembering" is the normal
-    // outcome of short task chats (run a command, make a page): as a card it told users to check
-    // their models and keys for a working job (v0.0.2 test, 2026-11-14). It stays in the log line
-    // above; only invalid or unapplied candidates, a real fault, count against health.
-    if (failed)
-      this.health.fail(
-        "memory_extraction",
-        row.botId,
-        !counts.valid ? "candidates_invalid" : "candidates_not_applied",
-      );
-    else this.health.recover("memory_extraction", row.botId);
   }
   private failed(row: MemoryExtraction, signal: AbortSignal, error: unknown) {
     const code = extractionErrorCode(error);
@@ -283,25 +287,7 @@ export class MemoryExtractionAttempt {
       this.repo.finish(row.id, { status: "skipped", error: code });
       return;
     }
-    this.deps.logger.warn(
-      JSON.stringify({ module: "memory", reasonCode: "memory_extraction_failed", error: code }),
-    );
     this.health.fail("memory_extraction", row.botId, code);
     this.repo.finish(row.id, { status: "failed", error: code });
-  }
-  private audit(row: MemoryExtraction, messages: number, applied: number) {
-    new AuditRepo(this.deps.db, this.deps.redactor).append({
-      botId: row.botId,
-      kind: "memory.changed",
-      summary: "Memory extracted automatically / 自动提炼记忆",
-      detail: {
-        actor: "automatic",
-        reasonCode: "memory_extracted",
-        conversationId: row.conversationId,
-        messageCount: Math.min(messages, 50),
-        ...(row.groupId ? { groupId: row.groupId } : {}),
-        revision: applied,
-      },
-    });
   }
 }

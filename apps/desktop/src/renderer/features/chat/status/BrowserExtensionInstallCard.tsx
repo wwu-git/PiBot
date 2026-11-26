@@ -1,12 +1,8 @@
-/**
- * A run fell back to the Bot browser because the user's browser has no Pi Bot extension.
- * The card opens the extension's store page in that browser and turns into "connected" once the
- * extension says hello; installing is the user's one click in the store, never done for them.
- */
+// Helps users connect their browser after a run falls back to the Bot browser.
 import type { BrowserExtensionStatusSchema, ChatNotice } from "@pibot/protocol";
 import { useRpc, useRpcEvent, useT } from "@pibot/renderer-kit";
 import { Button, Icon } from "@pibot/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { z } from "zod";
 import styles from "../chat.module.css";
 import lively from "../tools/lively.module.css";
@@ -16,15 +12,13 @@ type BrowserId = NonNullable<Status["defaultBrowser"]>["id"];
 
 const CHROME_STORE = "https://chromewebstore.google.com/detail/jfaelafpdicbnlnbngicngehehafpmbk";
 const FIREFOX_STORE = "https://addons.mozilla.org/firefox/addon/pibot-browser/";
-// Edge, Brave and Chromium install Chrome Web Store items; only Firefox has its own listing.
 const STORES: Partial<Record<BrowserId, string>> = {
   chrome: CHROME_STORE,
-  edge: CHROME_STORE,
-  brave: CHROME_STORE,
-  chromium: CHROME_STORE,
   firefox: FIREFOX_STORE,
 };
 const WAIT_MS = 3 * 60_000;
+const STATUS_POLL_MS = 2_000;
+const STATUS_TIMEOUT_MS = 5_000;
 const dismissedKey = "pibot.browser-extension.install.dismissed";
 
 export function BrowserExtensionInstallCard({
@@ -38,7 +32,7 @@ export function BrowserExtensionInstallCard({
   const [phase, setPhase] = useState<"ready" | "waiting" | "success" | "failed" | "closed">(
     "ready",
   );
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [deadline, setDeadline] = useState(0);
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(dismissedKey) === "1";
@@ -48,39 +42,59 @@ export function BrowserExtensionInstallCard({
     }
   });
 
+  const optedOut = status?.preference === "bot";
   useEffect(() => {
-    if (!peer) return;
-    let active = true;
-    void peer
-      .call("browserExtension.status", {})
-      .then((value) => {
-        if (active) setStatus(value);
-      })
-      // Without a status the card stays hidden; the changed event fills it in later.
-      .catch(() => undefined);
-    return () => {
-      active = false;
+    if (!peer || dismissed || optedOut || (phase !== "ready" && phase !== "waiting")) return;
+    const lifetime = new AbortController();
+    let poll: ReturnType<typeof setTimeout> | undefined;
+    const expire =
+      phase === "waiting"
+        ? setTimeout(() => setPhase("failed"), Math.max(0, deadline - Date.now()))
+        : undefined;
+    const refresh = async () => {
+      const signal = AbortSignal.any([lifetime.signal, AbortSignal.timeout(STATUS_TIMEOUT_MS)]);
+      try {
+        const value = await peer.call("browserExtension.status", {}, { signal });
+        if (lifetime.signal.aborted) return;
+        setStatus(value);
+        if (phase === "waiting" && value.extension === "connected") {
+          setPhase("success");
+          return;
+        }
+      } catch {
+        // The renderer may reconnect while the store is open; keep waiting for a fresh status.
+      }
+      if (phase === "waiting" && !lifetime.signal.aborted)
+        poll = setTimeout(() => void refresh(), STATUS_POLL_MS);
     };
-  }, [peer]);
+    void refresh();
+    return () => {
+      lifetime.abort();
+      clearTimeout(poll);
+      clearTimeout(expire);
+    };
+  }, [peer, phase, dismissed, optedOut, deadline]);
   useRpcEvent("browserExtension.changed", (value) => {
     setStatus(value);
-    if (value.extension === "connected")
-      setPhase((current) => (current === "waiting" || current === "failed" ? "success" : current));
+    setPhase((current) => {
+      if (value.extension === "connected" && (current === "waiting" || current === "failed"))
+        return "success";
+      if (value.extension !== "connected" && current === "success") return "ready";
+      return current;
+    });
   });
-  useEffect(() => () => clearTimeout(timer.current), []);
 
-  if (!status || dismissed || phase === "closed") return null;
+  if (!status || optedOut || dismissed || phase === "closed") return null;
   const id = status.defaultBrowser?.id;
   const store = id ? STORES[id] : undefined;
-  // Installed but not connected right now (browser closed, extension switched off): the old line.
-  if (phase === "ready" && status.extension === "installed")
+  if (phase === "ready" && status.extension === "connected") return null;
+  if (phase === "ready" && id === "edge")
     return (
       <p className={styles.systemLine} role="note">
-        {t("botBrowser.notice.extensionFallback")}
+        {t("browserExtension.install.edgeFallback")}
       </p>
     );
-  // Already connected before this card was seen, or a browser the extension does not support.
-  if (phase === "ready" && (status.extension === "connected" || !store)) return null;
+  if (!store) return null;
   const browser = status.defaultBrowser?.name ?? "";
 
   const install = () => {
@@ -88,11 +102,7 @@ export function BrowserExtensionInstallCard({
     // The main process hands https links to the system browser, which is this default browser.
     window.open(store, "_blank", "noopener,noreferrer");
     setPhase("waiting");
-    clearTimeout(timer.current);
-    timer.current = setTimeout(
-      () => setPhase((current) => (current === "waiting" ? "failed" : current)),
-      WAIT_MS,
-    );
+    setDeadline(Date.now() + WAIT_MS);
   };
   const neverAsk = () => {
     try {
@@ -125,7 +135,6 @@ export function BrowserExtensionInstallCard({
             <p>{t("browserExtension.install.description")}</p>
             <ol>
               <li>{t("browserExtension.install.step.open", { browser })}</li>
-              {id === "edge" && <li>{t("browserExtension.install.step.edge")}</li>}
               <li>
                 {t(
                   id === "firefox"

@@ -117,6 +117,7 @@ export function createCompactionOperations({
         sessionManager: manager,
         settingsManager: pi.SettingsManager.inMemory({
           enableInstallTelemetry: false,
+          cacheWarming: "off",
           compaction: { enabled: false },
         }),
         resourceLoader: staticResourceLoader("", pi.createExtensionRuntime()),

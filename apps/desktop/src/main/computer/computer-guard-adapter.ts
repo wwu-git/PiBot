@@ -1,7 +1,10 @@
 import { createComputerGuard as createGuard, createGuardWindow } from "@pibot/computer-use/host";
 import { BrowserWindow, globalShortcut, ipcMain, nativeTheme, screen, session } from "electron";
 export function createComputerGuard(
-  options: Pick<Parameters<typeof createGuard>[0], "logger" | "outputDir" | "platform">,
+  options: Pick<
+    Parameters<typeof createGuard>[0],
+    "logger" | "outputDir" | "platform" | "visibilityChanged"
+  >,
 ) {
   return createGuard({
     ...options,

@@ -448,6 +448,12 @@ export async function authorizeStep(
     resumed !== true &&
     !(prepared.confirmedNow && mustAskNow(prepared.result));
   if (carded) {
+    const invalid = this.local.toolCards.get(call.tool)?.(
+      this.context,
+      call.input,
+      this.context.language,
+    ).invalid;
+    if (invalid) return refuse(invalid.code, invalid.text);
     const original = prepared;
     const approvedFingerprint = fingerprint(original);
     let receipt: SearchConsentReceipt | undefined;
@@ -724,6 +730,12 @@ function connectorCardDisplay(
 /** First-login card title with the Bot's (redacted) display name. */
 export function consentCardStep(this: LocalRunOperations, prepared: PreparedTool) {
   const { login, searchRecipient, result } = prepared;
+  const describe = this.local.toolCards.get(prepared.call.tool);
+  if (describe) {
+    const context = this.context;
+    const input = prepared.call.input;
+    return { text: (language: "zh" | "en") => describe(context, input, language) };
+  }
   if (prepared.browserSecretUses?.length) {
     const sources = prepared.browserSecretUses
       .map((use) =>

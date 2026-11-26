@@ -213,8 +213,17 @@ export async function prepareRequestFacts(
         ? input.workplace.home
         : input.workplace.folders.find((folder) => folder.id === input.workplace.currentId)?.path);
     const protectedRoots = [...(extra ?? []), ...(input.sensitiveReadRoots ?? [])];
+    // The Bot's own folder on this computer is its normal workspace even though it sits in the
+    // data directory; a runner or editor terminal keeps the whole protection.
+    const ownRoots =
+      !runner &&
+      !input.boundary?.location?.target.startsWith("acp:") &&
+      scope.writeRoots.some((root) => containsPath(root, input.workplace.home, "win32"))
+        ? await ownWorkRoots(input.workplace.home, context)
+        : [];
     const scan = await prepareWindowsCommandScan(request.command, {
       protectedRoots,
+      ownRoots,
       scope,
       cwd,
       writePaths: request.writePaths,
@@ -244,7 +253,7 @@ export async function prepareRequestFacts(
           { ...input, request },
           context,
           cwd,
-          protectedRoots,
+          { roots: protectedRoots, own: ownRoots },
           async (file) => {
             const fileTrace = createPolicyTrace();
             const fileInput = { ...input, request: file };
@@ -702,4 +711,16 @@ async function resolveCommandPaths(
     facts.push({ kind, value: path.path });
   }
   return result;
+}
+
+/** The lexical and the canonical spelling, so a drive-letter case or 8.3 alias still matches. */
+async function ownWorkRoots(home: string, context: PathContext) {
+  try {
+    const canonical = await canonicalPath(home, context);
+    return canonical.exists ? [...new Set([home, canonical.path])] : [];
+  } catch {
+    // An unresolvable own folder keeps the data-directory protection.
+    context.signal.throwIfAborted();
+    return [];
+  }
 }

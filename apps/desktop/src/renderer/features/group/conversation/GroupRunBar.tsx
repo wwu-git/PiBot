@@ -120,7 +120,8 @@ export function GroupRunBar({
   } else if (planLive && progress) {
     const running = progress.steps.filter((step) => step.status === "running");
     const first = running[0];
-    lead = t("group.bar.runningLead");
+    // A plan waiting for the user's choice on its card is not running anything.
+    lead = t(progress.choice ? "group.plan.choice.title" : "group.bar.runningLead");
     if (running.length === 1 && first)
       detail = t("group.bar.runningOne", {
         index: indexOf(first.stepId),

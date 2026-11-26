@@ -1,6 +1,6 @@
 import type { GrantScope } from "@pibot/protocol-base";
 import { matchesGrant } from "../grants/grants.ts";
-import { PRIVATE_NETWORK_REASON } from "./confirmation-reasons.ts";
+import { BOT_SEND_CONFIRMATION_REASON, PRIVATE_NETWORK_REASON } from "./confirmation-reasons.ts";
 import {
   CONNECTION_CONFIRMATION_REASON,
   CONNECTION_READ_ONLY_REASON,
@@ -30,6 +30,14 @@ export function serviceDecision(
   if (privateNetwork && !privateNetwork.approved) {
     result.decision = "ask";
     result.reason = PRIVATE_NETWORK_REASON;
+    result.canRemember = false;
+    delete result.grantScope;
+    return trace.result(result, "boundary");
+  }
+  // Before the identity rule and every grant: whichever identity sends, this Bot asks each time.
+  if (input.request.category === "send_out" && input.confirmEverySend) {
+    result.decision = "ask";
+    result.reason = BOT_SEND_CONFIRMATION_REASON;
     result.canRemember = false;
     delete result.grantScope;
     return trace.result(result, "boundary");

@@ -5,6 +5,7 @@ The phone app lets you chat with your Bots, check tasks and handle approvals whi
 On this page:
 
 - [Install](#install)
+- [Update the Android app](#update-the-android-app)
 - [Turn on remote access on the computer](#turn-on-remote-access-on-the-computer)
 - [Pair](#pair)
 - [Chats, tasks and approvals](#chats-tasks-and-approvals)
@@ -15,7 +16,18 @@ On this page:
 
 ## Install
 
-The phone app is currently available as an Android package (APK) from the [download page](https://pibot.space/en/download/). The desktop app updates itself; on the phone, download and install the new APK to update. An iOS version isn't available for download yet. After installing it, open Pi Bot and start pairing from the first-launch screen.
+Download the Android app package (APK) from the [official download page](https://pibot.space/en/download/). After installation, open Pi Bot and pair it from the first-launch screen. An iOS version isn’t available for download yet.
+
+## Update the Android app
+
+The app checks for updates at startup, with at least 24 hours between automatic checks, and skips the check while your phone is offline. You can also tap **Check for updates** on the **Devices** page to check manually.
+
+1. Open **Devices** in Pi Bot on your phone. When you see “New version,” tap **Download and install**.
+2. After the download, Pi Bot checks the package size and checksum automatically. If verification fails, Pi Bot deletes the downloaded package. Tap **Retry** to download it again.
+3. If you see “Allow installation,” tap **Open settings**, allow Pi Bot to install apps in Android settings, then return to Pi Bot. If the update card is still waiting, follow its prompt to continue.
+4. Confirm the update in the Android system installer. An official update signed with the same key keeps your chats and pairings when installed over your existing copy. Leave Pi Bot installed while updating.
+
+If your version has no in-app update option, you can download the new APK from the official download page above, open it on your phone, and follow Android’s prompts to update your existing installation.
 
 ## Turn on remote access on the computer
 

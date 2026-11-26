@@ -25,6 +25,7 @@ export * from "../chat/external-images.ts";
 export * from "../chat/file-preview.ts";
 export * from "../chat/media.ts";
 export * from "../chat/message-actions.ts";
+export * from "../chat/message-dispatch.ts";
 export * from "../chat/message-failure.ts";
 export * from "../chat/message-forward.ts";
 export * from "../chat/message-quote.ts";

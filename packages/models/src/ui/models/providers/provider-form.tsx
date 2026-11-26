@@ -1,4 +1,10 @@
-import { CHATGPT_CODEX_PROVIDER, type Provider, providerPlan } from "@pibot/models-contract/full";
+// Presents the setup and management controls for a selected provider.
+import {
+  CHATGPT_CODEX_PROVIDER,
+  MAGPIE_PROVIDER,
+  type Provider,
+  providerPlan,
+} from "@pibot/models-contract/full";
 import type { useTask } from "@pibot/renderer-kit";
 import { setupStyles as styles, TaskStatus, useRpc, useT } from "@pibot/renderer-kit";
 import { Button, Chip, TextField } from "@pibot/ui";
@@ -9,6 +15,7 @@ import { ChatGPTSignIn } from "./ChatGPTSignIn.tsx";
 import { ClaudePlanNote } from "./ClaudePlanNote.tsx";
 import { CloudProviderForm } from "./cloud-provider.tsx";
 import { CustomProviderForm } from "./custom-provider.tsx";
+import { MagpieProviderForm } from "./magpie.tsx";
 import { modelCountText } from "./model-count.ts";
 import detailStyles from "./provider-detail.module.css";
 import { providerMonogram } from "./provider-monogram.ts";
@@ -22,9 +29,12 @@ export function ProviderForm({
   onDirtyChange,
   compact = false,
   saved,
+  addModelIds,
 }: {
   provider: Provider;
   testModelId?: string;
+  /** Offered model ids to preselect in a custom provider's list (unsaved until the user saves). */
+  addModelIds?: string[];
   task: Task;
   refresh(): Promise<void>;
   onDirtyChange?(dirty: boolean): void;
@@ -191,10 +201,18 @@ export function ProviderForm({
             </p>
           }
         />
+      ) : provider.id === MAGPIE_PROVIDER.id ? (
+        <MagpieProviderForm
+          provider={provider}
+          refresh={refresh}
+          task={task}
+          onDirtyChange={onDirtyChange}
+        />
       ) : provider.auth === "custom" ? (
         <CustomProviderForm
           provider={provider}
           testModelId={testModelId}
+          addModelIds={addModelIds}
           task={task}
           refresh={refresh}
           onDirtyChange={onDirtyChange}

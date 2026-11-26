@@ -512,7 +512,19 @@ export async function executeTool(
       input.tool === "write_file" ||
       input.tool === "edit_file"
     )
-      return await executeFileTool(run, prepared, input, auditFields, signal, started);
+      return await executeFileTool(
+        run,
+        prepared,
+        input.tool === "write_file" && prepared.projectNotesWrite
+          ? {
+              ...input,
+              args: { ...input.args, expectedHash: prepared.projectNotesWrite.expectedHash },
+            }
+          : input,
+        auditFields,
+        signal,
+        started,
+      );
     if (!path) throw new ExecError("invalid_input");
     throw new ExecError("invalid_input");
   } catch (error) {

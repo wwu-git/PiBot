@@ -120,14 +120,17 @@ export function tightenTemplate(
 ): { template: TeamTemplate; notes: NonNullable<TeamPreview["permissionNotes"]> } {
   const notes: NonNullable<TeamPreview["permissionNotes"]> = [];
   const bots = template.bots.map((bot) => {
-    const { network, ...supplied } = bot.permissionOverrides;
+    const { network, confirmEverySend, ...supplied } = bot.permissionOverrides;
     const { overrides, lowered } = tightenOverrides(levels, supplied);
     const relaxed = (Object.keys(supplied) as (keyof typeof supplied)[]).filter(
       (category) => overrides[category] === undefined && !lowered.includes(category),
     );
     if (lowered.length || relaxed.length || network)
       notes.push({ ref: bot.ref, lowered, relaxed, network: !!network });
-    return { ...bot, permissionOverrides: overrides };
+    return {
+      ...bot,
+      permissionOverrides: confirmEverySend ? { ...overrides, confirmEverySend } : overrides,
+    };
   });
   return { template: { ...template, bots }, notes };
 }

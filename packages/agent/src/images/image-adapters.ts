@@ -3,7 +3,9 @@ import { getAttributionHeaders } from "@earendil-works/pi-ai/utils/identity";
 import type { ImageContent } from "@pibot/protocol-base";
 import { z } from "zod";
 import { AgentError, mapAgentError } from "../core/errors.ts";
+import type { ImageUrlFetch } from "../core/types.ts";
 import { checkedImage, imageJson, standardImages } from "./image-response.ts";
+import { imageFromUrl } from "./image-url.ts";
 
 export type ImageWire =
   | "openai-images"
@@ -98,7 +100,10 @@ const responsesImageResponse = z.object({
 // Responses example; the selected image model remains the tool's `model`.
 const CHATGPT_RESPONSES_MODEL = "gpt-6-astra";
 
-export function imageAdapter(wire: ImageWire): ImagesFunction {
+export function imageAdapter(
+  wire: ImageWire,
+  ports: { fetchImageUrl?: ImageUrlFetch } = {},
+): ImagesFunction {
   return async (model, context, options) => {
     const timestamp = Date.now();
     try {
@@ -280,7 +285,16 @@ export function imageAdapter(wire: ImageWire): ImagesFunction {
           .map((part) => part.text ?? "")
           .join("");
         result = { images: outputs, text };
-      } else result = standardImages(value);
+      } else
+        result = await standardImages(value, (link) =>
+          imageFromUrl(link, {
+            providerOrigin: new URL(base).origin,
+            providerHeaders: headers,
+            providerFetch: fetch,
+            fetchPublic: ports.fetchImageUrl,
+            signal,
+          }),
+        );
       // The complete response has been decoded and validated. Brain retains its paid bytes,
       // then enforces cancellation before any workspace export or follow-up action.
       return {

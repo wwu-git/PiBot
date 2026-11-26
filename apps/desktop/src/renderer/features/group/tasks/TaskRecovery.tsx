@@ -74,10 +74,13 @@ export function TaskRecovery({
   const [dialog, setDialog] = useState(false);
   const { peer: receiptPeer } = useRpc();
   const failure = task.status === "open" ? task.activity?.failure : undefined;
+  const stop = task.status === "open" ? task.activity?.stop : undefined;
   const receipt = useRunReceipt(
     receiptPeer,
     failure?.code === "budget_exhausted" ? failure.runId : undefined,
   );
+  if (!failure && stop)
+    return <ContextFullRecovery peer={peer} task={task} stop={stop} refresh={refresh} />;
   if (!failure) return null;
   return (
     <section className={styles.taskFailure} role="alert" aria-label={t("group.taskFailed")}>
@@ -120,6 +123,81 @@ export function TaskRecovery({
           />,
           document.body,
         )}
+    </section>
+  );
+}
+
+/**
+ * The member's turn stopped because what it read no longer fit its context. A plan step offers
+ * the step's narrower retry (the same choice as its card in the group chat); the brief of that
+ * retry tells the member to search large files first.
+ */
+function ContextFullRecovery({
+  peer,
+  task,
+  stop,
+  refresh,
+}: {
+  peer: ChatPeer;
+  task: GroupTask;
+  stop: NonNullable<NonNullable<GroupTask["activity"]>["stop"]>;
+  refresh(): Promise<void>;
+}) {
+  const t = useT();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const lifetime = useRef(new AbortController());
+  useEffect(() => {
+    lifetime.current = new AbortController();
+    return () => lifetime.current.abort();
+  }, []);
+  const { workflowRunId, stepId } = stop;
+  const retry = async () => {
+    if (!workflowRunId || !stepId || busy) return;
+    const signal = lifetime.current.signal;
+    setBusy(true);
+    setError(false);
+    try {
+      await peer.call(
+        "groups.workflow.resolve",
+        { groupId: task.groupId, workflowRunId, stepId, action: "retry", confirmed: true },
+        { signal, timeoutMs: 30_000 },
+      );
+      if (!signal.aborted) await refresh();
+    } catch {
+      if (!signal.aborted) {
+        setError(true);
+        void refresh();
+      }
+    } finally {
+      if (!signal.aborted) setBusy(false);
+    }
+  };
+  return (
+    <section
+      className={styles.taskFailure}
+      role="alert"
+      aria-label={t("group.taskState.contextFull")}
+    >
+      <strong>
+        <Icon name="warning" size={15} />
+        {t("group.taskContextFull", {
+          files: stop.reading || t("group.workflow.contextFullFiles"),
+        })}
+      </strong>
+      <span className={styles.taskFailureTitle}>{task.title}</span>
+      {workflowRunId && stepId && (
+        <div className={styles.taskActions}>
+          <Button variant="secondary" loading={busy} disabled={busy} onClick={() => void retry()}>
+            {t("group.workflow.retryNarrower")}
+          </Button>
+        </div>
+      )}
+      {error && (
+        <p role="alert" className={styles.error}>
+          {t("group.workflow.decisionError")}
+        </p>
+      )}
     </section>
   );
 }

@@ -257,18 +257,36 @@ export class GroupWorkflowsRepo {
       .map(step);
   }
 
-  /** Scalar facts only: retries and inherited passed steps count once per logical step. */
+  /**
+   * Open tasks of every attempt of one step. Each attempt's first run carries the step's trigger
+   * (`group-workflow:<run>:<step>:<attempt>[:<previous run>]`); later runs of a task share its id.
+   */
+  openStepTasks(workflowRunId: string, stepId: string): string[] {
+    return this.db
+      .prepare(`SELECT DISTINCT t.id FROM runs r JOIN group_tasks t ON t.id=r.task_id
+        WHERE r.trigger_key GLOB ? AND t.status='open' ORDER BY t.created_at,t.id LIMIT 50`)
+      .all(`group-workflow:${workflowRunId}:${stepId}:*`)
+      .map((row) => String(row.id));
+  }
+
+  /**
+   * Scalar facts only: retries and inherited passed steps count once per logical step. A plan the
+   * user stopped before a later plan of the same request is not part of what this reply did.
+   */
   executionSummary(groupId: string, conversationId: string, cycleId: string) {
     const row = this.db
       .prepare(`SELECT COUNT(DISTINCT w.id) AS plans,
         MAX(w.status IN ('running','waiting')) AS active,
         MAX(json_extract(w.workflow_json,'$.acceptanceRelaxed')=1) AS acceptanceRelaxed,
-        COUNT(DISTINCT CASE WHEN r.started_at IS NOT NULL OR EXISTS (
+        COUNT(DISTINCT CASE WHEN (r.started_at IS NOT NULL OR EXISTS (
           SELECT 1 FROM group_task_handoffs h JOIN runs a ON a.task_id=h.task_id
           WHERE json_extract(h.spec,'$.workflowStep.workflowRunId')=w.id
             AND json_extract(h.spec,'$.workflowStep.stepId')=s.step_id
             AND a.started_at IS NOT NULL
-        ) THEN s.step_id END) AS steps,
+        )) AND NOT (json_extract(w.workflow_json,'$.progress.stoppedReason')='user_stopped'
+          AND EXISTS (SELECT 1 FROM group_workflow_runs later WHERE later.group_id=w.group_id
+            AND later.cycle_id=w.cycle_id AND later.created_at>w.created_at))
+        THEN s.step_id END) AS steps,
         EXISTS(SELECT 1 FROM runs d WHERE d.group_id=? AND d.cycle_id=?
           AND ((d.kind='group_task' AND d.task_id IS NOT NULL)
             OR (d.kind='wake' AND d.trigger_key GLOB '*:ask_bot'))) AS delegated

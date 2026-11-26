@@ -1,3 +1,4 @@
+import { attachmentContinuationOf } from "@pibot/protocol";
 import { FolderPicker } from "@pibot/renderer-kit";
 import { Button, Card, IconButton } from "@pibot/ui";
 import { ExecutionPanel } from "../../execution/ExecutionPanel.tsx";
@@ -26,7 +27,9 @@ import type { ChatScreenModel } from "./chat-screen-model.ts";
 const compactionFailures = new Set(["compaction_failed", "compaction_timeout", "context_overflow"]);
 
 function compactionFailure(messages: ChatScreenModel["state"]["messages"]): string | undefined {
-  const last = messages.findLast((message) => message.role === "assistant");
+  const last = messages.findLast(
+    (message) => message.role === "assistant" && !attachmentContinuationOf(message),
+  );
   return last?.errorCode && compactionFailures.has(last.errorCode) ? last.id : undefined;
 }
 
@@ -34,6 +37,7 @@ export function renderChatComposer(screen: ChatScreenModel) {
   const {
     peer,
     disconnected,
+    brainStarting,
     t,
     draftId,
     controller,
@@ -82,10 +86,16 @@ export function renderChatComposer(screen: ChatScreenModel) {
     state.messages.some((message) => message.role === "assistant");
   return (
     <div className={styles.composerArea}>
-      {disconnected && (
-        <p className={styles.band} data-tone="warn" role="status">
-          {t("workspace.brainUnavailable")}
+      {brainStarting ? (
+        <p className={styles.band} data-tone="info" role="status">
+          {t("workspace.brainStarting")}
         </p>
+      ) : (
+        disconnected && (
+          <p className={styles.band} data-tone="warn" role="status">
+            {t("workspace.brainUnavailable")}
+          </p>
+        )
       )}
       <SubscriptionAuthNotice
         bot={state.bot}

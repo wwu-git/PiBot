@@ -1,3 +1,4 @@
+// Compare Windows path names and guard the runner’s system roots.
 import { win32 } from "node:path";
 
 /**
@@ -48,8 +49,10 @@ export function windowsPathName(
 ): WindowsPathName {
   // Win32 accepts `/` as a separator, and both device prefixes open the same files without them.
   let path = value.replaceAll("/", "\\");
-  if (/^\\\\[?.]\\/u.test(path)) path = path.slice(4);
-  if (/^unc\\/iu.test(path)) path = `\\\\${path.slice(4)}`;
+  if (/^\\\\[?.]\\/u.test(path)) {
+    path = path.slice(4);
+    if (/^unc\\/iu.test(path)) path = `\\\\${path.slice(4)}`;
+  }
   const normalized = win32.normalize(path);
   if (normalized.startsWith("\\\\")) {
     const [host = "", share = "", ...rest] = normalized.slice(2).split("\\");
@@ -65,7 +68,7 @@ export function windowsPathName(
   }
   // `C:` without a separator is the process's current directory on that drive, not an absolute path.
   if (/^[a-z]:\\/iu.test(normalized)) {
-    const drive = trimmed(normalized, 3);
+    const drive = normalized.charAt(0).toUpperCase() + trimmed(normalized, 3).slice(1);
     return { path: drive, key: drive.toLowerCase(), kind: "drive" };
   }
   return { path: normalized, key: normalized.toLowerCase(), kind: "device" };
@@ -82,10 +85,14 @@ export function windowsWithin(root: WindowsPathName, path: WindowsPathName): boo
  * A root no folder may use as a workplace: a drive root and the Windows install trees, matching the
  * Linux refusal of `/`. A workplace there hands the Bot writes to the whole system.
  */
-export function windowsReservedRoot(name: WindowsPathName): boolean {
+export function windowsReservedRoot(
+  name: WindowsPathName,
+  systemTrees: readonly string[],
+): boolean {
   if (name.kind !== "drive") return false;
   if (/^[a-z]:\\$/u.test(name.key)) return true;
-  return ["c:\\windows", "c:\\program files", "c:\\program files (x86)"].some((tree) =>
-    windowsWithin({ path: tree, key: tree, kind: "drive" }, name),
-  );
+  return systemTrees.some((tree) => {
+    const system = windowsPathName(tree);
+    return windowsWithin(system, name) || windowsWithin(name, system);
+  });
 }

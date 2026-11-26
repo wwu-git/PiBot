@@ -12,7 +12,7 @@ export interface ModelSettingsPort {
 
 /** Secrets stay behind the brain's model adapter; no DTO carries this port to a client. */
 export interface ModelProvidersPort
-  extends Pick<AgentRuntimeDeps, "hasApiKey" | "getApiKey" | "customProviders"> {
+  extends Pick<AgentRuntimeDeps, "hasApiKey" | "getApiKey" | "customProviders" | "addedModels"> {
   /** Capability-owned UI invalidation; the kernel never names the provider event. */
   changed(): void;
   readonly auth: AgentAuthPorts;

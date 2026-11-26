@@ -15,6 +15,12 @@ export interface CapabilityToolSpec {
   group?: string;
   /** Offered only inside an unattended run (a scheduled task's own bookkeeping). */
   unattendedOnly?: boolean;
+  /**
+   * Offered and allowed only in the default Pi's own direct chat, typed by the person on this
+   * computer (owner decision 2026-11-24). The kernel decides this, never the capability: the
+   * catalog hides the tool everywhere else and policy refuses a call that reaches it anyway.
+   */
+  mainBotOnly?: true;
   /** Product-managed role eligibility; executors must also recheck at dispatch. */
   roleIds?: readonly string[];
   /** Returns an image to the model: offered only to models that accept image input. */

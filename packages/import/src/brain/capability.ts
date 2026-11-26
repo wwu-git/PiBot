@@ -9,9 +9,11 @@ export function importCapability(): BrainCapability {
   return {
     id: "import",
     register(ctx) {
-      const jobs = new ImportJobs(ctx, new ImportStore(ctx.db, ctx.redactor));
-      if (!ctx.host.pickFile) return { start: () => jobs.recover() };
+      const store = new ImportStore(ctx.db, ctx.redactor, ctx.local.workplaces.repo);
+      const jobs = new ImportJobs(ctx, store);
+      const lifecycle = { start: () => jobs.recover(), stop: () => jobs.stop() };
       ctx.sleep.participate({ idle: () => jobs.idle() });
+      if (!ctx.host.pickFile) return lifecycle;
       const handle = ctx.rpc.handle;
       const desktop = (source?: "acp") => {
         if (source === "acp") throw new RpcError(RpcErrorCodes.unsupported, "import_desktop_only");
@@ -24,10 +26,36 @@ export function importCapability(): BrainCapability {
         desktop(request.source);
         return jobs.preview(source, request.signal);
       });
-      handle("import.start", ({ importId, botId }: ImportParams<"import.start">, request) => {
+      handle("import.reviewMemories", (params: ImportParams<"import.reviewMemories">, request) => {
         desktop(request.source);
-        return jobs.start(importId, botId);
+        return jobs.reviews.review(params, request.signal);
       });
+      handle(
+        "import.estimateDistillation",
+        (params: ImportParams<"import.estimateDistillation">, request) => {
+          desktop(request.source);
+          return jobs.reviews.estimateDistillation(params);
+        },
+      );
+      handle("import.history", (params: ImportParams<"import.history">, request) => {
+        desktop(request.source);
+        return jobs.history(params);
+      });
+      handle("import.reviewPlan", ({ importId }: ImportParams<"import.reviewPlan">, request) => {
+        desktop(request.source);
+        return jobs.reviews.plan(importId, request.signal);
+      });
+      handle("import.reviewProject", (params: ImportParams<"import.reviewProject">, request) => {
+        desktop(request.source);
+        return jobs.reviews.reviewProject(params, request.signal);
+      });
+      handle(
+        "import.start",
+        ({ importId, botId, ...options }: ImportParams<"import.start">, request) => {
+          desktop(request.source);
+          return jobs.start(importId, botId, options);
+        },
+      );
       handle("import.status", ({ importId }: ImportParams<"import.status">, request) => {
         desktop(request.source);
         return jobs.status(importId);
@@ -40,7 +68,7 @@ export function importCapability(): BrainCapability {
         desktop(request.source);
         return jobs.undo(importId);
       });
-      return { start: () => jobs.recover(), stop: () => jobs.stop() };
+      return lifecycle;
     },
   };
 }

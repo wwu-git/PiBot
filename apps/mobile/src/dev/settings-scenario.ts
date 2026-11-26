@@ -52,12 +52,21 @@ function gatewayLink(desktop: SettingsDesktop): MobileLink {
     id: desktop.desktopId,
     name: "Probe computer",
     relay: "wss://invalid.example",
-    publicKey: "development-public-key",
+    publicKey: "A".repeat(43),
     safetyCode: "123456",
   };
   return {
     async pair(_qr, name) {
-      return { computer: { ...computer, name }, credential: "DEVELOPMENT-ONLY-OPAQUE-CREDENTIAL" };
+      return {
+        computer: { ...computer, name },
+        credential: JSON.stringify({
+          version: 1,
+          seed: "A".repeat(43),
+          roomKey: "A".repeat(43),
+          publicKey: computer.publicKey,
+          relay: computer.relay,
+        }),
+      };
     },
     async connect(_computer, _credential, signal) {
       signal.throwIfAborted();

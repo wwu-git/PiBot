@@ -8,7 +8,7 @@ import {
   silentWake,
 } from "@pibot/client-core";
 import { type TranslationKey, zh } from "@pibot/i18n";
-import { chatAddition, type Message, messageForward } from "@pibot/protocol";
+import { chatAddition, type Message, messageDispatch, messageForward } from "@pibot/protocol";
 import { type ComponentProps, memo, type ReactNode, useCallback, useRef } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useSharedText, useText } from "../../../runtime/context.tsx";
@@ -193,9 +193,17 @@ function MessageBody({
         onPress={onPress}
       />
     );
-    if (!message.attachments?.length && !forward) return bubble;
+    // A message the default Pi sent here on the person's request: a quiet label above it.
+    const dispatch = messageDispatch(message);
+    const from = dispatch && (
+      <Text style={[type.small, { color: colors.text2, alignSelf: "flex-end" }]}>
+        {shared("chat.fromPi", { name: dispatch.from })}
+      </Text>
+    );
+    if (!message.attachments?.length && !forward && !from) return bubble;
     return (
       <View style={{ gap: 6 }}>
+        {from}
         {(!!text || steering) && bubble}
         {forward && <ForwardCard forward={forward} />}
         {!!message.attachments?.length && (

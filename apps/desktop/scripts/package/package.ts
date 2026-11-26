@@ -4,7 +4,7 @@ import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { Arch, build, Platform } from "electron-builder";
+import { Arch, build, type Configuration, Platform } from "electron-builder";
 import { runAsNodeProblems } from "../../../../tools/dev/run-as-node-check.ts";
 import installLinuxLauncher from "./linux-launcher.mjs";
 import { configurePackageFuses, packagedElectron, verifyPackageFuses } from "./package-fuses.ts";
@@ -17,7 +17,7 @@ import {
 import prepareResources from "./prepare-resources.mjs";
 import { writeReleaseRecord } from "./release-record.ts";
 import { signNodeHelper, verifyNodeHelper } from "./sign-node-helper.ts";
-import { rewriteUpdateFeeds } from "./update-feed.ts";
+import { readUpdateFeeds, restoreUpdateFeeds, rewriteUpdateFeeds } from "./update-feed.ts";
 import { verifyMacPackage } from "./verify-mac-package.ts";
 import { verifyTargetPackage } from "./verify-target-package.ts";
 
@@ -113,89 +113,113 @@ async function packageTargets(jobs: ReturnType<typeof packageOptions>) {
     // A failed rebuild must not leave a previous build's publication approval behind.
     if (release) await rm(join(output, "release-package.json"), { force: true });
     let application: string | undefined;
+    let unpacked: string | undefined;
     console.info(`Packaging ${job.mode} ${job.platform}-${job.arch}: ${job.targets.join(", ")}`);
+    // Builder archives the tar.gz in the background while the .deb target writes its package-type
+    // marker and AppArmor profile into the same unpacked folder, so one run could ship them in the
+    // tarball. The .deb is made in a second run from the folder the first run verified.
+    const later = job.targets.filter((target) => target === "deb");
+    const first = job.targets.filter((target) => target !== "deb");
     // Let builder download the target Electron. A host Electron is never relabelled as foreign.
-    const artifacts = await build({
-      projectDir,
-      targets: platform.createTarget(job.targets, targetArch),
-      publish: "never",
-      config: {
-        extends: join(projectDir, "electron-builder.yml"),
-        beforePack: prepareResources,
-        files: packageFiles(job.platform, job.arch),
-        // Child entries and their dependencies run on the helper Node.
-        asarUnpack: [...BASE_ASAR_UNPACK, ...childNodeUnpack(projectDir)],
-        artifactName: `PiBot-\${version}-\${os}-\${arch}${release ? "" : "-test"}.\${ext}`,
-        extraMetadata: {
-          ...(job.platform === "win" ? { name: "pi-bot" } : {}),
-          pibotBuildMode: job.mode,
-        },
-        mac: { extendInfo: { PiBotBuildMode: job.mode } },
-        // Builder embeds the ASAR header hash in macOS Info.plist / Windows PE resources.
-        disableAsarIntegrity: false,
-        ...(native && existsSync(binary) ? { electronDist } : {}),
-        // Keep the legacy host package location used by app:run. Foreign targets have their own root.
-        directories: { output },
-        afterPack: async (context) => {
-          await installLinuxLauncher(context);
-          const { appOutDir } = context;
-          application = packagedElectron(appOutDir, platform.nodeName);
-          await configurePackageFuses(application, job.mode);
-          if (job.platform !== "mac")
-            await verifyTargetPackage(appOutDir, platform.nodeName, job.arch, job.mode);
-        },
-        afterSign: async ({ appOutDir }) => {
-          if (job.platform === "mac") {
-            const app = join(appOutDir, "Pi Bot.app");
-            // Its own identifier and entitlements; then the bundle seal below covers it again.
-            await signNodeHelper(app, identity ?? "-", projectDir);
-            if (!identity)
+    const config: Configuration = {
+      extends: join(projectDir, "electron-builder.yml"),
+      beforePack: prepareResources,
+      files: packageFiles(job.platform, job.arch),
+      // Child entries and their dependencies run on the helper Node.
+      asarUnpack: [...BASE_ASAR_UNPACK, ...childNodeUnpack(projectDir)],
+      artifactName: `PiBot-\${version}-\${os}-\${arch}${release ? "" : "-test"}.\${ext}`,
+      extraMetadata: {
+        ...(job.platform === "win" ? { name: "pi-bot" } : {}),
+        pibotBuildMode: job.mode,
+      },
+      mac: { extendInfo: { PiBotBuildMode: job.mode } },
+      // Builder embeds the ASAR header hash in macOS Info.plist / Windows PE resources.
+      disableAsarIntegrity: false,
+      ...(native && existsSync(binary) ? { electronDist } : {}),
+      // Keep the legacy host package location used by app:run. Foreign targets have their own root.
+      directories: { output },
+      afterPack: async (context) => {
+        await installLinuxLauncher(context);
+        const { appOutDir } = context;
+        unpacked = appOutDir;
+        application = packagedElectron(appOutDir, platform.nodeName);
+        await configurePackageFuses(application, job.mode);
+        if (job.platform !== "mac")
+          await verifyTargetPackage(appOutDir, platform.nodeName, job.arch, job.mode);
+      },
+      afterSign: async ({ appOutDir }) => {
+        if (job.platform === "mac") {
+          const app = join(appOutDir, "Pi Bot.app");
+          // Its own identifier and entitlements; then the bundle seal below covers it again.
+          await signNodeHelper(app, identity ?? "-", projectDir);
+          if (!identity)
+            await execute(
+              "/usr/bin/codesign",
+              [
+                "--force",
+                "--sign",
+                "-",
+                "--preserve-metadata=identifier,entitlements,flags,runtime",
+                app,
+              ],
+              { timeout: 120_000, killSignal: "SIGKILL" },
+            );
+          if (identity) {
+            // Resources is not a standard nested-code directory; sign it explicitly first.
+            for (const target of [join(app, "Contents", "Resources", "cua-driver"), app])
               await execute(
                 "/usr/bin/codesign",
                 [
                   "--force",
+                  "--deep",
                   "--sign",
-                  "-",
+                  identity,
+                  "--timestamp=none",
                   "--preserve-metadata=identifier,entitlements,flags,runtime",
-                  app,
+                  target,
                 ],
                 { timeout: 120_000, killSignal: "SIGKILL" },
               );
-            if (identity) {
-              // Resources is not a standard nested-code directory; sign it explicitly first.
-              for (const target of [join(app, "Contents", "Resources", "cua-driver"), app])
-                await execute(
-                  "/usr/bin/codesign",
-                  [
-                    "--force",
-                    "--deep",
-                    "--sign",
-                    identity,
-                    "--timestamp=none",
-                    "--preserve-metadata=identifier,entitlements,flags,runtime",
-                    target,
-                  ],
-                  { timeout: 120_000, killSignal: "SIGKILL" },
-                );
-              console.info(`Signed ${app} with ${identityName}.`);
-            }
-            await verifyMacPackage(app, undefined, job.arch, job.mode);
-            console.info(
-              JSON.stringify({
-                event: "package.node_helper.verified",
-                version: await verifyNodeHelper(app, native),
-                launched: native,
-              }),
-            );
-          } else {
-            await verifyPackageFuses(packagedElectron(appOutDir, platform.nodeName), job.mode);
+            console.info(`Signed ${app} with ${identityName}.`);
           }
-        },
+          await verifyMacPackage(app, undefined, job.arch, job.mode);
+          console.info(
+            JSON.stringify({
+              event: "package.node_helper.verified",
+              version: await verifyNodeHelper(app, native),
+              launched: native,
+            }),
+          );
+        } else {
+          await verifyPackageFuses(packagedElectron(appOutDir, platform.nodeName), job.mode);
+        }
       },
+    };
+    const artifacts = await build({
+      projectDir,
+      targets: platform.createTarget(first, targetArch),
+      publish: "never",
+      config,
     });
     // Unsigned targets skip afterSign; always re-read the final binary after build as well.
     if (!application) throw new Error("Packager did not produce an application");
     await verifyPackageFuses(application, job.mode);
+    if (later.length) {
+      if (!unpacked) throw new Error("Packager did not report the unpacked application");
+      const feeds = await readUpdateFeeds(output, version);
+      // Prepackaged: builder skips packing, hooks and signing and only wraps the folder.
+      artifacts.push(
+        ...(await build({
+          projectDir,
+          prepackaged: unpacked,
+          targets: platform.createTarget(later, targetArch),
+          publish: "never",
+          config,
+        })),
+      );
+      await restoreUpdateFeeds(output, version, feeds);
+      await verifyPackageFuses(application, job.mode);
+    }
     if (release) {
       for (const feed of await rewriteUpdateFeeds(output, version))
         console.info(`Update manifest ${feed} now points at the release download folder.`);

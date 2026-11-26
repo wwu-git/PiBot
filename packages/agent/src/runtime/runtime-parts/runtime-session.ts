@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
+// Open and configure a managed pi session for a Bot run.
 import { join } from "node:path";
+import { setImmediate as yieldToLoop } from "node:timers/promises";
 import { sanitizeBrainEnv } from "../../core/env.ts";
 import { AgentError, mapAgentError } from "../../core/errors.ts";
 import type { AgentRuntime } from "../../core/types.ts";
@@ -24,24 +25,9 @@ import { skillsPrompt } from "../skills-prompt.ts";
 import { toolVersion } from "../tool-identity.ts";
 import { modelInfo, sessionPaths } from "./runtime-shared.ts";
 
-async function warmSessionFile(path: string, signal?: AbortSignal) {
-  const deadline = AbortSignal.timeout(15_000);
-  const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
-  combined.throwIfAborted();
-  // pi still owns parsing and persistence. This read moves disk and antivirus work before the
-  // synchronous SDK call, so the common cache-hit path does not wait on storage.
-  try {
-    await readFile(path, { signal: combined });
-  } catch (error) {
-    // A lazily created session has no file until its first response; pi's open handles that
-    // case itself, so a missing file only means there is nothing to warm.
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
-  combined.throwIfAborted();
-}
-
 export function createSessionOperations({
   dataDir,
+  deps,
   checkpointCache,
   cacheDiagnosticsMemory,
   catalog,
@@ -91,10 +77,11 @@ export function createSessionOperations({
         const sessionFile = await sessionPaths(dataDir, opts);
         opts.signal?.throwIfAborted();
         phase("session_load");
-        if (sessionFile) await warmSessionFile(sessionFile, opts.signal);
-        // pi reads and parses the whole JSONL synchronously here; it grows with the session.
+        const { openSessionAsync } = await import("@earendil-works/pi-coding-agent/async-session");
+        const deadline = AbortSignal.timeout(15_000);
+        const loadSignal = opts.signal ? AbortSignal.any([opts.signal, deadline]) : deadline;
         const manager = sessionFile
-          ? pi.SessionManager.open(sessionFile, opts.sessionDir, opts.homeDir)
+          ? await openSessionAsync(sessionFile, opts.sessionDir, opts.homeDir, loadSignal)
           : pi.SessionManager.create(opts.homeDir, opts.sessionDir);
         const budget = contextBudget(model.contextWindow);
         const settings = pi.SettingsManager.inMemory({
@@ -130,7 +117,10 @@ export function createSessionOperations({
         let retryBound = false;
         const additions = opts.localTools ? new SessionAdditions() : undefined;
         const context = opts.context;
-        const accounting = new RequestAccounting(opts.requestObserver);
+        const accounting = new RequestAccounting(
+          opts.requestObserver,
+          deps.network?.observeRequest,
+        );
         const compaction: CompactionState | undefined = opts.localTools
           ? {
               signal: opts.signal,
@@ -285,6 +275,8 @@ export function createSessionOperations({
         };
         if (opts.context && !opts.localTools) throw new AgentError("internal");
         phase("extensions");
+        // Registration can follow the last JSONL batch in the same microtask drain.
+        if (opts.localTools) await yieldToLoop(undefined, { signal: opts.signal });
         const extensions = await loadLocalExtensions(
           opts.homeDir,
           join(dataDir, "pi"),
@@ -331,7 +323,10 @@ export function createSessionOperations({
         try {
           opts.signal?.throwIfAborted();
           phase("bind");
-          if (opts.localTools) await session.bindExtensions({});
+          if (opts.localTools) {
+            await yieldToLoop(undefined, { signal: opts.signal });
+            await session.bindExtensions({});
+          }
           // Tool groups the transcript still declares stay loaded when still allowed.
           extensions.loadout?.reset(session.messages);
           await session.setModel(model);

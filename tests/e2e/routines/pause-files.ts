@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { lstat, mkdir, rename, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
-import type { Routine, RoutineDraftInput } from "../../../packages/protocol/src/index.ts";
+import type {
+  Routine,
+  RoutineDraftInput,
+  RoutineRun,
+} from "../../../packages/protocol/src/index.ts";
 import { until } from "../chat/harness.ts";
 import type { M3Fixture } from "./fixture.ts";
 import { draft, terminal, watermark } from "./shared.ts";
@@ -33,12 +37,25 @@ async function pause(f: M3Fixture, atMs: number) {
 }
 /** Wait until that persisted deadline has really passed; real timers, but read back from the store. */
 async function waitPast(deadline: number, marginMs = 700) {
-  for (let left = deadline + marginMs - Date.now(); left > 0; left = deadline + marginMs - Date.now())
+  for (
+    let left = deadline + marginMs - Date.now();
+    left > 0;
+    left = deadline + marginMs - Date.now()
+  )
     await wait(left);
 }
 /** The first real minute boundary at least `leadMs` away; cron fire times are never faked here. */
 function cronBoundary(leadMs: number) {
   return (Math.floor((Date.now() + leadMs) / 60_000) + 1) * 60_000;
+}
+/** This UTC minute is the only occurrence within the acceptance window. */
+function cronForUtcOccurrence(at: number): RoutineDraftInput["triggers"][number] {
+  const date = new Date(at);
+  return {
+    kind: "cron",
+    expr: `${date.getUTCMinutes()} ${date.getUTCHours()} ${date.getUTCDate()} ${date.getUTCMonth() + 1} *`,
+    timezone: "UTC",
+  };
 }
 /** Facts meant to happen *during* the pause must land inside it; say so instead of failing later. */
 function assertDuringPause(deadline: number, step: string) {
@@ -157,25 +174,43 @@ export async function pauseFolderAcceptance(f: M3Fixture) {
 
   for (const policy of ["catchup", "skip", "ask"] as const) {
     await f.rpc.call("routines.settings.set", { missedPolicy: policy });
-    const mixed = policy === "ask";
+    // Leave room for fixture creation and pause-time writes before the intended occurrence.
+    const cronAt = policy === "ask" ? cronBoundary(PAUSE_WINDOW_MS + 7_000) : null;
     const { directory, routine } = await folderTask(
       f,
       `expired-${policy}`,
-      mixed ? [{ kind: "cron", expr: "* * * * *", timezone: "UTC" }] : [],
+      cronAt === null ? [] : [cronForUtcOccurrence(cronAt)],
     );
-    // Cross a real cron boundary after expiration once; no wall-clock substitution or fake cron callback.
-    // The boundary also has to leave room for the pause-time writes: an expiry 0.5 s before it did
-    // not survive a loaded machine.
-    const expires = await pause(
-      f,
-      mixed ? cronBoundary(PAUSE_WINDOW_MS + 2_000) - 2_000 : Date.now() + PAUSE_WINDOW_MS,
-    );
+    const assertSingleRun = (rows: RoutineRun[], stage: string) => {
+      if (rows.length === 1) return;
+      // Put reasons first because the supervisor truncates failure lines.
+      const runs = rows
+        .slice(0, 3)
+        .map(({ reason, triggerId, scheduledFor, dedupeKey }) => [
+          reason,
+          triggerId?.slice(-8),
+          scheduledFor?.slice(11, 19),
+          dedupeKey?.slice(-12),
+        ]);
+      assert.equal(
+        rows.length,
+        1,
+        `恢复和native不能重复消费同一批事实 ${JSON.stringify({
+          policy,
+          stage,
+          "runs[reason,trigger,timeUTC,key]": runs,
+          cronAt: cronAt === null ? null : new Date(cronAt).toISOString(),
+        })}`,
+      );
+    };
+    const expires = await pause(f, cronAt === null ? Date.now() + PAUSE_WINDOW_MS : cronAt - 2_000);
     await writeFile(join(directory, "during-new.txt"), "during");
     await writeFile(join(directory, "during-existing.txt"), "changed during");
     assertDuringPause(expires, "暂停期写入");
-    if (mixed) watermark(f, routine, new Date(Date.now() - 600000).toISOString());
+    if (cronAt !== null) watermark(f, routine, new Date(cronAt - 600_000).toISOString());
     await f.stop();
-    await waitPast(expires);
+    // Recovery must see both the eligible folder facts and the same real cron occurrence.
+    await waitPast(cronAt ?? expires);
     const lateNames =
       policy === "catchup" ? Array.from({ length: 60 }, (_, i) => `late-${i}.txt`) : ["late.txt"];
     await Promise.all(lateNames.map((name) => writeFile(join(directory, name), "after expiry")));
@@ -184,13 +219,17 @@ export async function pauseFolderAcceptance(f: M3Fixture) {
     await f.boot();
     const [run] = await until(
       "重启后暂停到期事实",
-      async () => f.service.runs.list(routine.id),
+      async () => {
+        const rows = f.service.runs.list(routine.id);
+        if (rows.length > 1) assertSingleRun(rows, "recovery");
+        return rows;
+      },
       (rows) => rows.length === 1,
     );
     assert(run);
     assert.equal((await terminal(f, run.id)).status, "done");
     assert.equal(run.reason, "folder");
-    assert.equal(f.service.runs.list(routine.id).length, 1);
+    assertSingleRun(f.service.runs.list(routine.id), "after-folder-completed");
     const trigger = metadata(f, run.triggerMessageId);
     assert(trigger.paths.length <= 50);
     assert.equal(trigger.paths.length + trigger.extraCount, lateNames.length + 1);
@@ -207,15 +246,14 @@ export async function pauseFolderAcceptance(f: M3Fixture) {
     if (policy !== "catchup") assert(input.includes("later-existing.txt"));
     assert(!input.includes("during-new.txt"));
     assert(!input.includes("during-existing.txt"));
-    if (mixed)
+    if (cronAt !== null) {
+      const cron = f.service.require(routine.id).triggers.find((t) => t.config.kind === "cron");
+      const lastScheduledAt = cron?.state.lastScheduledAt;
       assert(
-        routine.triggers.some(
-          (t) =>
-            t.config.kind === "cron" &&
-            f.service.require(routine.id).triggers.find((x) => x.id === t.id)?.state
-              .lastScheduledAt,
-        ),
+        lastScheduledAt && Date.parse(lastScheduledAt) >= cronAt,
+        `恢复必须消费指定 UTC cron 时点 ${new Date(cronAt).toISOString()}，实际 ${lastScheduledAt ?? "无"}`,
       );
+    }
     // The recovery scan and the live watcher must not consume the same facts twice. Waiting for the
     // fired trigger state (facts consumed, live baseline advanced) proves the consumption happened,
     // then the full native window has to pass: a duplicate event was already pending at that point
@@ -226,18 +264,20 @@ export async function pauseFolderAcceptance(f: M3Fixture) {
       (row) => {
         const folder = row.triggers.find((t) => t.config.kind === "folder");
         return (
-          folder?.state.snapshot?.entries.some(
-            (entry) => entry.relativePath === "later-existing.txt",
-          ) === true && !folder.state.pendingCount
+          folder?.state.snapshot?.entries.some((entry) => entry.relativePath === lateNames[0]) ===
+            true && !folder.state.pendingCount
         );
       },
     );
     await wait(NATIVE_QUIET_MS + WATCH_TICK_MS + 500);
-    assert.equal(f.service.runs.list(routine.id).length, 1, "恢复和native不能重复消费同一批事实");
+    assertSingleRun(f.service.runs.list(routine.id), "after-native-quiet-window");
+    const folder = f.service.require(routine.id).triggers.find((t) => t.config.kind === "folder");
+    assert(folder);
+    assert.equal(folder.state.pendingCount ?? 0, 0, `${policy} 已消费的文件批次不能重新待处理`);
     await f.rpc.call("routines.setEnabled", { id: routine.id, enabled: false });
     await f.stop();
     await f.boot();
-    assert.equal(f.service.runs.list(routine.id).length, 1);
+    assertSingleRun(f.service.runs.list(routine.id), "after-second-restart");
   }
 
   const empty = await folderTask(f, "no-snapshot");

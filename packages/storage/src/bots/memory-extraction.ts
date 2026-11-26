@@ -2,6 +2,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "../database/database.ts";
+import { nonNegativeCost } from "./memory-dream.ts";
 import { legacyDueTopics, memoryExtractionCadence } from "./memory-extraction-boundaries.ts";
 import { extractionAutomatedReason } from "./memory-extraction-origin.ts";
 
@@ -38,7 +39,7 @@ export interface MemoryExtraction {
 
 const columns = `id, bot_id AS botId, conversation_id AS conversationId, group_id AS groupId,
   status, reason, source_message_id AS sourceMessageId, coverage_message_id AS coverageMessageId, model_provider AS modelProvider,
-  model_id AS modelId, tokens, cost_usd AS costUsd, candidates, error, created_at AS createdAt,
+  model_id AS modelId, tokens, MAX(COALESCE(cost_usd,0),0) AS costUsd, candidates, error, created_at AS createdAt,
   started_at AS startedAt, finished_at AS finishedAt`;
 
 function row(value: Record<string, unknown>): MemoryExtraction {
@@ -155,7 +156,7 @@ export class MemoryExtractionsRepo {
       const value = row(found);
       const changed = this.db
         .prepare(
-          `UPDATE memory_extractions SET status='running', started_at=?
+          `UPDATE memory_extractions SET status='running', started_at=?, finished_at=NULL
           WHERE id=? AND status='queued'`,
         )
         .run(now, value.id);
@@ -177,7 +178,7 @@ export class MemoryExtractionsRepo {
     this.db
       .prepare(`UPDATE memory_extractions SET tokens=?, cost_usd=?, model_provider=?, model_id=?
       WHERE id=? AND status='running'`)
-      .run(usage.tokens, usage.costUsd ?? 0, usage.modelProvider, usage.modelId, id);
+      .run(usage.tokens, nonNegativeCost(usage.costUsd), usage.modelProvider, usage.modelId, id);
   }
 
   diagnostics(
@@ -214,9 +215,9 @@ export class MemoryExtractionsRepo {
         .get(value.conversationId);
       if (!Number(usage?.tokens) && !successor) {
         this.db
-          .prepare(`UPDATE memory_extractions SET status='queued', started_at=NULL,
+          .prepare(`UPDATE memory_extractions SET status='queued', started_at=NULL, finished_at=?,
           error=? WHERE id=? AND status='running'`)
-          .run(reason, value.id);
+          .run(reason === "budget_exhausted" ? new Date().toISOString() : null, reason, value.id);
         return;
       }
       if (Number(usage?.tokens)) this.finish(value.id, { status: "failed", error: reason });
@@ -224,9 +225,13 @@ export class MemoryExtractionsRepo {
       this.enqueue(value, value.createdAt);
       this.db
         .prepare(
-          "UPDATE memory_extractions SET error=? WHERE conversation_id=? AND status='queued' AND error IS NULL",
+          "UPDATE memory_extractions SET error=?, finished_at=? WHERE conversation_id=? AND status='queued' AND error IS NULL",
         )
-        .run(reason, value.conversationId);
+        .run(
+          reason,
+          reason === "budget_exhausted" ? new Date().toISOString() : null,
+          value.conversationId,
+        );
     });
   }
 
@@ -259,7 +264,7 @@ export class MemoryExtractionsRepo {
         patch.modelProvider ?? null,
         patch.modelId ?? null,
         patch.tokens ?? null,
-        patch.costUsd ?? null,
+        patch.costUsd === undefined ? null : nonNegativeCost(patch.costUsd),
         patch.candidates ?? 0,
         patch.error ?? null,
         new Date().toISOString(),
@@ -267,11 +272,32 @@ export class MemoryExtractionsRepo {
       );
   }
 
+  pendingCorrection(options?: {
+    botId: string;
+    destinationConversationId: string | undefined;
+    since: string;
+  }) {
+    const match = this.db
+      .prepare(
+        `SELECT status FROM memory_extractions WHERE reason='correction'
+        AND status IN ('queued','running') AND error IS NOT 'budget_exhausted'
+        ${options ? "AND bot_id=? AND conversation_id IS NOT ? AND created_at>=?" : ""}
+        ORDER BY CASE status WHEN 'running' THEN 0 ELSE 1 END LIMIT 1`,
+      )
+      .get(
+        ...(options
+          ? [options.botId, options.destinationConversationId ?? null, options.since]
+          : []),
+      );
+    const status = match?.status;
+    return status === "queued" || status === "running" ? status : undefined;
+  }
+
   covered(conversationId: string, messageId: string) {
     return !!this.db
       .prepare(
         `SELECT 1 FROM memory_extractions WHERE conversation_id=? AND status='done'
-        AND coverage_message_id=?`,
+        AND reason<>'correction' AND coverage_message_id=?`,
       )
       .get(conversationId, messageId);
   }
@@ -315,7 +341,9 @@ export class MemoryExtractionsRepo {
 
   costSince(since: string): number {
     const value = this.db
-      .prepare("SELECT IFNULL(SUM(cost_usd),0) AS cost FROM memory_extractions WHERE started_at>=?")
+      .prepare(
+        "SELECT IFNULL(SUM(MAX(cost_usd,0)),0) AS cost FROM memory_extractions WHERE started_at>=?",
+      )
       .get(since);
     return Number(value?.cost ?? 0);
   }
@@ -325,7 +353,7 @@ export class MemoryExtractionsRepo {
     const value = this.db
       .prepare(
         `SELECT COUNT(*) AS topics, IFNULL(SUM(tokens),0) AS tokens,
-        IFNULL(SUM(cost_usd),0) AS costUsd, IFNULL(SUM(candidates),0) AS candidates
+        IFNULL(SUM(MAX(cost_usd,0)),0) AS costUsd, IFNULL(SUM(candidates),0) AS candidates
         FROM memory_extractions WHERE started_at>=? AND status IN ('done','failed')`,
       )
       .get(since);

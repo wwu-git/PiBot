@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { appArmorExecutable } from "@pibot/execution/isolation-remedy";
 import {
   linuxUserNamespaceRestriction,
@@ -94,6 +94,17 @@ async function chromiumWorks(signal: AbortSignal): Promise<boolean> {
   }
 }
 
+/**
+ * electron-builder marks the .deb's resources with its package type. Only that package installs
+ * the AppArmor profile, so its refusal names the profile instead of sending the user to the .deb.
+ */
+async function installedFromDeb(): Promise<boolean> {
+  const marker = join(dirname(appBinary()), "resources", "package-type");
+  // The AppImage and the tarball have no marker; a missing file only means "not the .deb".
+  const type = await readFile(marker, "utf8").catch(() => "");
+  return type.trim() === "deb";
+}
+
 async function failure(signal: AbortSignal): Promise<TranslationKey | undefined> {
   if (
     process.env.ELECTRON_DISABLE_SANDBOX ||
@@ -110,7 +121,8 @@ async function failure(signal: AbortSignal): Promise<TranslationKey | undefined>
   if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return "linuxStartup.runtime";
   if (await chromiumWorks(signal)) return undefined;
   // A profile may allow userns with the sysctl still set. Only explain it after a real failure.
-  return settings.apparmor === 1 ? "linuxStartup.apparmor" : "linuxStartup.runtime";
+  if (settings.apparmor !== 1) return "linuxStartup.runtime";
+  return (await installedFromDeb()) ? "linuxStartup.apparmorDeb" : "linuxStartup.apparmor";
 }
 
 async function explain(key: TranslationKey, signal: AbortSignal) {
@@ -120,6 +132,8 @@ async function explain(key: TranslationKey, signal: AbortSignal) {
     .map((language) =>
       [
         "linuxStartup.intro",
+        // The AppImage and tarball cannot carry a profile; the .deb installs one.
+        ...(key === "linuxStartup.apparmor" ? ["linuxStartup.useDeb"] : []),
         key,
         ...(["linuxStartup.clone", "linuxStartup.max"].includes(key)
           ? ["linuxStartup.persistence"]
@@ -144,7 +158,7 @@ async function explain(key: TranslationKey, signal: AbortSignal) {
           ? "linux_userns_disabled"
           : key === "linuxStartup.max"
             ? "linux_userns_limit_zero"
-            : key === "linuxStartup.apparmor"
+            : key === "linuxStartup.apparmor" || key === "linuxStartup.apparmorDeb"
               ? "linux_userns_restricted"
               : "sandbox_dependencies_or_runtime_unavailable",
       detail: key,

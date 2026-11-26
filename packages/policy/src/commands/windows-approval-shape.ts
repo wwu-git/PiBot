@@ -58,6 +58,27 @@ function pathRead(program: string, args: string[]): Read | undefined {
   return { path, category, enumerates, recurse };
 }
 
+/**
+ * `Select-String` with named parameters reads the same way as its positional form: one literal
+ * pattern and, unless piped, one literal path. Only plain matching switches are accepted.
+ */
+function namedSelectString(args: string[], piped: boolean) {
+  let pattern: string | undefined;
+  let path: string | undefined;
+  for (let index = 0; index < args.length; index++) {
+    const name = args[index]?.toLowerCase() ?? "";
+    if (/^-(?:simplematch|casesensitive)$/.test(name)) continue;
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith("-") || !windowsLiteralToken(value)) return;
+    index++;
+    if (name === "-pattern" && pattern === undefined) pattern = value;
+    else if (/^-(?:path|literalpath)$/.test(name) && path === undefined && !piped) path = value;
+    else return;
+  }
+  if (pattern === undefined || (!piped && path === undefined)) return;
+  return { path };
+}
+
 function readSegment(program: string, args: string[], piped: boolean): Read[] | undefined {
   if (piped) {
     if (/^(?:measure-object|measure)$/.test(program) && !args.length) return [];
@@ -67,6 +88,8 @@ function readSegment(program: string, args: string[], piped: boolean): Read[] | 
       windowsLiteralToken(args[0] ?? "") &&
       !args[0]?.startsWith("-")
     )
+      return [];
+    if (program === "select-string" && args[0]?.startsWith("-") && namedSelectString(args, true))
       return [];
     return undefined;
   }
@@ -98,6 +121,11 @@ function readSegment(program: string, args: string[], piped: boolean): Read[] | 
     !args[0]?.startsWith("-")
   ) {
     const read = pathRead(program, args.slice(1));
+    return read ? [read] : undefined;
+  }
+  if (program === "select-string" && args[0]?.startsWith("-")) {
+    const named = namedSelectString(args, false);
+    const read = named?.path === undefined ? undefined : pathRead(program, [named.path]);
     return read ? [read] : undefined;
   }
   return undefined;

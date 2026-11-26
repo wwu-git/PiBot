@@ -252,3 +252,29 @@
     width: 160px;
   }
 }
+/* A saved provider that lists models not yet added: one quiet line under its tile. */
+.tileWithHint {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.newModels {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 4px 0 12px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.newModels span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.newModels button {
+  min-height: 0;
+  padding: 2px 6px;
+  font-size: 12px;
+}

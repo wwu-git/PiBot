@@ -1,7 +1,9 @@
+// Combines localized provider display names with the setup catalog.
 import {
   CHATGPT_CODEX_PROVIDER,
   CHATGPT_PLAN_PROVIDER,
   isChatGPTPlanProvider,
+  MAGPIE_PROVIDER,
   type ModelInfo,
   type Provider,
   providerFamily,
@@ -49,13 +51,16 @@ export function namedProviders<T extends Provider>(
   providers: readonly T[],
   planName: string,
   codexName: string,
+  magpieName: string,
 ): T[] {
   return providers.map((provider) =>
     provider.id === CHATGPT_PLAN_PROVIDER
       ? { ...provider, name: planName }
       : provider.id === CHATGPT_CODEX_PROVIDER
         ? { ...provider, name: codexName }
-        : provider,
+        : provider.id === MAGPIE_PROVIDER.id
+          ? { ...provider, name: magpieName }
+          : provider,
   );
 }
 

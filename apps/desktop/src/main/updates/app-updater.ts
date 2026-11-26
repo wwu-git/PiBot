@@ -65,6 +65,7 @@ export function createAppUpdater(options: AppUpdaterOptions) {
   // 「稍后」 on the first prompt holds for this launch only.
   const dismissed = new Set<string>();
   let token: CancellationToken | undefined;
+  let downloadExceptionGuard: ((error: Error) => void) | undefined;
   let disposed = false;
   let timers: ReturnType<typeof setTimeout>[] = [];
   const cleanups: (() => void)[] = [];
@@ -79,6 +80,19 @@ export function createAppUpdater(options: AppUpdaterOptions) {
     error instanceof Error && "code" in error && typeof error.code === "string"
       ? error.code.replace(/[^A-Z0-9_]/gi, "").slice(0, 60)
       : "unexpected";
+  const isUpdaterNetworkException = (error: unknown) => {
+    if (!(error instanceof Error)) return false;
+    const text = `${error.message}\n${error.stack ?? ""}`;
+    return (
+      /net::ERR_[A-Z0-9_]+/.test(text) &&
+      /(electron-updater|builder-util-runtime|DifferentialDownloader)/.test(text)
+    );
+  };
+  const stopDownloadExceptionGuard = () => {
+    if (!downloadExceptionGuard) return;
+    process.removeListener("uncaughtException", downloadExceptionGuard);
+    downloadExceptionGuard = undefined;
+  };
 
   // Dev runs have nothing installed to replace; electron-updater is not even loaded there.
   const loaded: Promise<UpdaterModule | undefined> =
@@ -113,8 +127,13 @@ export function createAppUpdater(options: AppUpdaterOptions) {
     };
     instance.on("download-progress", progress);
     if (options.proxyLogin) instance.on("login", options.proxyLogin);
-    // Errors also reject the awaited call; the listener keeps the emitter from throwing.
-    const error = () => {};
+    // Errors also reject the awaited call. Keep the emitter from throwing and publish the same
+    // retryable state when an updater error arrives after its promise has settled.
+    const error = (reason?: unknown) => {
+      if (state.phase !== "downloading") return;
+      logger.warn(`Update download failed (${failure(reason)})`);
+      set({ phase: "error", error: "download", percent: undefined });
+    };
     instance.on("error", error);
     const remove = () => {
       instance.removeListener("download-progress", progress);
@@ -214,6 +233,21 @@ export function createAppUpdater(options: AppUpdaterOptions) {
     const current = new module.CancellationToken();
     token = current;
     set({ phase: "downloading", percent: 0, error: undefined });
+    const uncaught = (error: Error) => {
+      if (isUpdaterNetworkException(error) && state.phase === "downloading") {
+        logger.warn(`Update download failed (${failure(error)})`);
+        set({ phase: "error", error: "download", percent: undefined });
+        return;
+      }
+      stopDownloadExceptionGuard();
+      // Let Electron's default handler own unrelated exceptions after our guard is gone.
+      setImmediate(() => {
+        if (process.listenerCount("uncaughtException") > 0) return;
+        throw error;
+      });
+    };
+    downloadExceptionGuard = uncaught;
+    process.on("uncaughtException", uncaught);
     void Promise.resolve()
       .then(() => options.prepare?.(instance))
       .then(() => {
@@ -239,6 +273,7 @@ export function createAppUpdater(options: AppUpdaterOptions) {
       })
       .finally(() => {
         if (token === current) token = undefined;
+        if (downloadExceptionGuard === uncaught) stopDownloadExceptionGuard();
       });
   }
 
@@ -319,6 +354,7 @@ export function createAppUpdater(options: AppUpdaterOptions) {
       for (const timer of timers) clearTimeout(timer);
       timers = [];
       token?.cancel();
+      stopDownloadExceptionGuard();
       for (const cleanup of cleanups.splice(0)) cleanup();
       listeners.clear();
     },

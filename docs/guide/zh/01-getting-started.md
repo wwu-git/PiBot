@@ -16,7 +16,7 @@ Pi Bot 是一个桌面应用：一群有名字的 Bot 在你自己的电脑上�
 |---|---|---|
 | macOS | `.dmg`（Apple 芯片 / Intel 各一个） | 需要 macOS 13 Ventura 或更高版本；应用内更新要求 Pi Bot 放在「应用程序」文件夹 |
 | Windows | 安装程序 `.exe` | 64 位 Windows 10 / 11 |
-| Linux | `.AppImage`（另有 `.tar.gz`） | 命令隔离需要 `bubblewrap` 和 `socat`；只有 AppImage 能在应用内更新 |
+| Linux | `.deb`（Debian / Ubuntu）、`.AppImage`（另有 `.tar.gz`） | 64 位 x86；Ubuntu 24.04 及以上请用 `.deb`。命令隔离需要 `bubblewrap` 和 `socat`；只有 AppImage 能在应用内更新 |
 
 你还需要一个能用的模型：在线模型的 API Key、ChatGPT 计划，或在本机运行的模型（如 Ollama）。详见 [9 · 模型与密钥](09-models-and-keys.md)。
 
@@ -43,13 +43,22 @@ Pi Bot 平时没有程序坞图标，关掉窗口后在菜单栏的托盘图标�
 
 ### Linux
 
+**Debian / Ubuntu（`.deb`，Ubuntu 24.04 及以上推荐）**
+
+1. 用 apt 安装，命令隔离依赖（`bubblewrap`、`socat`）会一起装上：`sudo apt install ./PiBot-*.deb`
+2. 从应用菜单打开 Pi Bot，或以普通用户运行 `pi-bot`（不要用 `sudo` 或 root）。
+
+安装包装到 `/opt/Pi Bot`，并加一个 AppArmor 配置 `/etc/apparmor.d/pi-bot`。Ubuntu 24.04 及以后默认限制非特权用户命名空间；这个配置让 Pi Bot（以及它启动的程序）可以创建进程沙箱需要的用户命名空间，做法和 Chrome、VS Code 的配置相同，不改任何系统设置。`sudo apt remove pibot` 会连同配置一起删掉，你的数据保留。`.deb` 不能在应用内更新，新版本照同样方式安装新的 `.deb`。
+
+**AppImage（其他发行版）**
+
 1. 给 AppImage 加上可执行权限：`chmod +x PiBot-*.AppImage`，然后运行它。
 2. 安装命令隔离依赖（Bot 跑命令时用）：
    - Debian / Ubuntu：`sudo apt install bubblewrap socat`
    - Fedora：`sudo dnf install bubblewrap socat`
 3. 用普通用户运行，不要用 `sudo` 或 root，也不要加 `--no-sandbox`。
 
-在 Ubuntu 24.04 及以后，系统默认限制非特权用户命名空间。如果 Pi Bot 无法安全启动，会显示一个说明页，给出需要执行的 AppArmor 配置；照着做完再打开即可。
+如果 AppImage 因为用户命名空间限制无法安全启动，会显示一个说明页：建议改用 `.deb`，也给出可以手动添加的 AppArmor 配置；照其中一种做完再打开即可。
 
 ## 第一次打开：欢迎流程
 
@@ -133,6 +142,18 @@ Pi 是你的主 Bot。点一个建议开始，或点「和 Pi 聊聊」进入主
 ### 托盘与后台
 
 关闭窗口后，Pi Bot 继续在后台运行（例行任务照常跑），可以从托盘（Windows / Linux）或菜单栏（macOS）重新打开。要完全退出，用托盘菜单里的「完全退出（例行任务也停止）」。在 设置 › 通用 › 启动 里可以选择登录这台电脑时「不启动」「打开窗口」或「只在后台运行」，也可以关掉托盘图标。
+
+### 灵动岛
+
+Pi Bot 窗口不在最前面时（切到别的应用、最小化或关掉了窗口），Bot 干活时屏幕顶部中间会出现一条小胶囊：显示 Bot 的头像、名字、正在做的事和已经做了多久。几个 Bot 同时干活时，用上下箭头或滚轮 / 触控板上下翻；点一下就打开那个对话、群任务、例行任务或等你确认的卡片。它只显示名字和简短的标题（计划步骤、群任务名、例行任务名、确认卡标题），不显示消息内容或文件内容。
+
+在 设置 › 通用 › 灵动岛 里可以：
+
+- 打开或关闭灵动岛（默认打开）；
+- 选择「头像和在做的事」或「只显示头像」（只显示头像时更小，鼠标移上去再展开）；
+- 勾选显示哪些：私聊在干活、群任务步骤、例行任务、等你处理（默认全选）。
+
+回到 Pi Bot 窗口时灵动岛自动收起。Bot 操作电脑时，顶部的操作提示优先，灵动岛暂时收起。灵动岛只在桌面端（macOS、Windows、Linux X11）提供，手机 App 没有；Linux 的 Wayland 会话不能把小窗固定在屏幕顶部，设置里会说明暂时用不了。
 
 ## 下一步
 

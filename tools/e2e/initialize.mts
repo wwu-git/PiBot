@@ -20,8 +20,8 @@ export async function initialize(c: Context, url: string) {
   if (onboarding) {
     await c.ui.segment("language.label", "language.zh");
     await c.page.click("common.getStarted");
-    // The provider list sits behind the "other providers" segment; the recommended one opens first.
-    await c.ui.segment("welcome.model.route", "welcome.model.connect");
+    // The welcome step offers model sources as cards; the provider list is behind "Use my API key".
+    await c.ui.segment("welcome.model.route", "welcome.model.apiKey");
     await c.ui.combo("models.provider", "setup.customLabel");
   } else {
     if (await c.page.has("chat.goToSettings")) await c.page.click("chat.goToSettings");

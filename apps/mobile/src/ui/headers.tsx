@@ -1,9 +1,12 @@
+/** Shared navigation headers keep compatibility actions consistent across screens. */
+
 import { PHONE_COMPAT_LEVEL, PIBOT_WEBSITE_URL } from "@pibot/protocol";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAndroidUpdate } from "../features/updates/AndroidUpdateProvider.tsx";
 import { compatNotice } from "../runtime/compat.ts";
 import { useLinkState, useMobileSelector, useText } from "../runtime/context.tsx";
 import { usePageTint } from "../theme/page-tint.tsx";
@@ -190,7 +193,7 @@ export function HeaderPill({
   );
 }
 /**
- * The desktop updates itself, the phone app does not. When the two compatibility levels
+ * When the two compatibility levels
  * differ, every tab says which side to update; equal levels (even with different versions) say
  * nothing. The download page is the fixed official site, never a link from the computer.
  */
@@ -200,11 +203,18 @@ function CompatBanner() {
     showLink = useShowLink();
   const about = mobile.desktop?.computerId === mobile.selectedId ? mobile.desktop : undefined;
   const notice = compatNotice(PHONE_COMPAT_LEVEL, about);
+  const androidUpdate = useAndroidUpdate();
   if (!notice) return null;
   const version = about?.version ?? "";
-  const download = () =>
-    // No browser or a refused hand-off: show the address to copy instead.
-    void Linking.openURL(PIBOT_WEBSITE_URL).catch(() => showLink(PIBOT_WEBSITE_URL));
+  const download = () => {
+    if (Platform.OS !== "android" || !androidUpdate.state.update) {
+      void Linking.openURL(PIBOT_WEBSITE_URL).catch(() => showLink(PIBOT_WEBSITE_URL));
+      return;
+    }
+    if (androidUpdate.state.phase === "unknown_sources") void androidUpdate.settings();
+    else if (androidUpdate.state.phase === "downloading") androidUpdate.cancel();
+    else if (androidUpdate.state.phase !== "installed") void androidUpdate.start();
+  };
   return (
     <View style={{ marginHorizontal: space.page, marginBottom: 10 }}>
       {notice === "update_phone" ? (
@@ -212,7 +222,22 @@ function CompatBanner() {
           tone="warn"
           icon="info"
           text={t("compatUpdatePhone", { version })}
-          action={{ title: t("compatDownload"), onPress: download }}
+          action={
+            androidUpdate.state.phase === "installed" || androidUpdate.state.phase === "installing"
+              ? undefined
+              : {
+                  title: t(
+                    androidUpdate.state.phase === "downloading"
+                      ? "updateCancel"
+                      : androidUpdate.state.phase === "unknown_sources"
+                        ? "updateOpenSettings"
+                        : androidUpdate.state.update
+                          ? "updateInstall"
+                          : "compatDownload",
+                  ),
+                  onPress: download,
+                }
+          }
         />
       ) : (
         <Banner tone="warn" icon="info" text={t("compatUpdateDesktop", { version })} />

@@ -47,6 +47,12 @@ export class GroupData {
   private failures = new Set<ReadKind>();
   private revisions = { group: 0, members: 0, tasks: 0, runs: 0, cycle: 0 };
   private runState = new GroupRunState();
+  /**
+   * Run states are complete once a read finished in this lifetime. Later re-reads after a
+   * pause or a finished run keep the loaded list quietly; showing 「后台运行状态仍在恢复」 for
+   * each of them made a routine refresh minutes after start look like startup recovery.
+   */
+  private runsSettled = false;
   constructor(
     readonly peer: ChatPeer,
     readonly groupId: string,
@@ -142,6 +148,7 @@ export class GroupData {
     this.pending.clear();
     this.failures.clear();
     this.runState.clear();
+    this.runsSettled = false;
     this.lifetime = new AbortController();
     this.state = {
       ...this.state,
@@ -192,12 +199,15 @@ export class GroupData {
       this.jobs.delete(kind);
       this.publish({
         detailsLoading: [...this.jobs.keys()].some((key) => key !== "group"),
-        runsLoading: this.jobs.has("runs"),
+        runsLoading: this.jobs.has("runs") && !this.runsSettled,
       });
       this.schedule();
     });
     this.jobs.set(kind, job);
-    this.publish({ detailsLoading: true, ...(kind === "runs" ? { runsLoading: true } : {}) });
+    this.publish({
+      detailsLoading: true,
+      ...(kind === "runs" && !this.runsSettled ? { runsLoading: true } : {}),
+    });
     return job;
   }
   private async readInside(kind: ReadKind) {
@@ -231,6 +241,8 @@ export class GroupData {
             ? { tasks: [], runs: [], cycle: undefined, hasMore: false, partialRuns: true }
             : {}),
         });
+        if (group?.conversationId && group.conversationId !== value.conversationId)
+          this.runsSettled = false;
         if (cacheVersion !== undefined)
           this.cache?.writeGroup(this.peer, value, bots, cacheVersion);
         for (const next of ["members", "tasks", "runs", "cycle"] as const) void this.read(next);
@@ -258,7 +270,7 @@ export class GroupData {
           if (current() && groupRevision === this.revisions.group) {
             this.publish({
               runs: this.runState.reconcile(rows, this.state.runs, true),
-              partialRuns: true,
+              ...(this.runsSettled ? {} : { partialRuns: true }),
             });
           }
         });
@@ -270,6 +282,7 @@ export class GroupData {
         patch.runs = this.runState.reconcile(patch.runs, this.state.runs, patch.partialRuns);
       }
       this.failures.delete(kind);
+      if (kind === "runs") this.runsSettled = true;
       this.publish({ ...patch, detailsError: this.failures.size > 0 });
       if (kind === "members" && cacheVersion !== undefined)
         this.cache?.writeGroup(this.peer, group, this.state.bots, cacheVersion);

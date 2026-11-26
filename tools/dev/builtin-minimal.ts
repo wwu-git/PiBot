@@ -3,7 +3,8 @@ import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 // Maintainers 2026-11-20: the spec's seven plus 小媒, 小演 and 小匠, and the research group with its
-// members (研究员, 小数, 小演). A group's member roles must be in this list too: it is offline.
+// members (研究员, 小数, 小演). Owner 2026-11-24: the one-person company group ships offline too,
+// with its four new members (its developer is 小栈). A group's member roles must be in this list too.
 export const MINIMAL_BUILTIN_ROLES = [
   "general-assistant",
   "personal-assistant",
@@ -16,9 +17,13 @@ export const MINIMAL_BUILTIN_ROLES = [
   "presentation-designer",
   "plugin-builder",
   "data-analyst",
+  "chief-of-staff",
+  "finance-assistant",
+  "operations-manager",
+  "customer-support",
 ] as const;
 
-export const MINIMAL_BUILTIN_GROUPS = ["dev-lite", "research-group"] as const;
+export const MINIMAL_BUILTIN_GROUPS = ["dev-lite", "research-group", "opc-team"] as const;
 
 /** Only a generated directory may be replaced; the full catalog remains the release source. */
 export function copyMinimalBuiltin(source: string, destination: string): void {

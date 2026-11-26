@@ -15,7 +15,20 @@ export const CategorySchema = z.enum([
   "web",
   // Handing work to an external agent Bot (delegate_to_agent).
   "agent_delegation",
+  // The default Pi only: create, edit, archive and restore Bots and groups.
+  "bot_management",
+  // The default Pi only: send a message or task to another Bot or a group.
+  "work_dispatch",
 ]);
+/**
+ * Owner decision 2026-11-24: these two levels exist only on the default Pi. The global value stays
+ * at its "ask" default and is never shown or set; Pi's own override is the one switch.
+ */
+export const PI_MANAGER_CATEGORIES = ["bot_management", "work_dispatch"] as const;
+export type PiManagerCategory = (typeof PI_MANAGER_CATEGORIES)[number];
+export function isPiManagerCategory(value: string): value is PiManagerCategory {
+  return (PI_MANAGER_CATEGORIES as readonly string[]).includes(value);
+}
 export const LevelSchema = z.enum(["never", "ask", "always"]);
 // A strict shape keeps unsupported categories out of persisted settings and RPC patches.
 export const PermissionLevelsSchema = z.strictObject({
@@ -32,13 +45,22 @@ export const PermissionLevelsSchema = z.strictObject({
   web: LevelSchema,
   // Settings saved before it have no entry; absence asks, like `connector` above.
   agent_delegation: LevelSchema.default("ask"),
+  bot_management: LevelSchema.default("ask"),
+  work_dispatch: LevelSchema.default("ask"),
 });
 export const PermissionOverridesSchema = PermissionLevelsSchema.omit({
   connector: true,
   agent_delegation: true,
+  bot_management: true,
+  work_dispatch: true,
 })
   .partial()
-  .extend({ connector: LevelSchema.optional(), agent_delegation: LevelSchema.optional() });
+  .extend({
+    connector: LevelSchema.optional(),
+    agent_delegation: LevelSchema.optional(),
+    bot_management: LevelSchema.optional(),
+    work_dispatch: LevelSchema.optional(),
+  });
 export const DomainSchema = z
   .string()
   .trim()
@@ -51,6 +73,13 @@ export const NetworkSettingsSchema = z.strictObject({
 });
 export const BotPermissionOverridesSchema = PermissionOverridesSchema.extend({
   network: NetworkSettingsSchema.optional(),
+  /**
+   * Owner decision 2026-11-24: every outward send of this Bot asks the person, whatever grants,
+   * connection consent, routine pre-approval or YOLO say, and its card never offers "remember".
+   * Read from the Bot's own row even in a group (group overrides cannot remove it). Optional so
+   * rows saved before it still parse; only `true` is stored.
+   */
+  confirmEverySend: z.literal(true).optional(),
 });
 export const IsolationSchema = z.strictObject({ available: z.boolean(), reason: text.optional() });
 export const DockerRuntimeSchema = z.enum(["disabled", "orbstack", "desktop", "engine"]);
@@ -134,6 +163,8 @@ const levelPatch = {
   ...PermissionLevelsSchema.shape,
   connector: LevelSchema,
   agent_delegation: LevelSchema,
+  bot_management: LevelSchema,
+  work_dispatch: LevelSchema,
 };
 export const PermissionsSetSchema = z
   .strictObject({

@@ -1,3 +1,4 @@
+// Prepare trusted filesystem and workspace facts for one policy decision.
 import type { ScriptInputs } from "../commands/scripts.ts";
 import { decisionFileSystem } from "../paths/paths.ts";
 import { PolicyTargetError } from "./errors.ts";
@@ -32,6 +33,12 @@ export async function preparePolicyFacts(
     // absolute path, and its credential folders stay protected through protectionHome.
     home: input.workplace.home,
     protectionHome: remoteTarget ? input.workplace.home : options.userHome,
+    ...(platform === "win32" && !remoteTarget
+      ? {
+          windowsSystemDrive: options.windowsSystemDrive,
+          windowsSystemTrees: options.windowsSystemTrees,
+        }
+      : {}),
     cwd: input.workplace.home,
     roots: [],
     fs: input.realpath

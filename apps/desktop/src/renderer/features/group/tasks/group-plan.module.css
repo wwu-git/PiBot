@@ -113,6 +113,21 @@
 .step {
   position: relative;
 }
+/* A step task is short Markdown (bullet points); keep it as tight as the card's other lines. */
+.stepTask {
+  overflow-wrap: anywhere;
+}
+.stepTask ul {
+  list-style: disc;
+}
+.stepTask ol {
+  list-style: decimal;
+}
+.stepTask ul,
+.stepTask ol {
+  margin: 4px 0;
+  padding-inline-start: 18px;
+}
 .steps > li > .step {
   margin-top: 8px;
 }
@@ -187,4 +202,17 @@
   .bar > i {
     transition: none;
   }
+}
+/* Inside another card (the inbox): the host owns the frame, shadow and surface; the plan lines
+   up with the host's text column and its buttons sit left. */
+.card.embedded {
+  padding: 14px 16px 12px 12px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.embedded .actions,
+.actions.choiceActions {
+  justify-content: flex-start;
 }

@@ -45,14 +45,18 @@ export function businessPorts(
   renderer: Port,
   main: Port,
   acp?: Port,
-  withSource: (source: "acp" | undefined, action: () => void) => void = (_source, action) =>
-    action(),
+  withSource: (source: "acp" | "desktop-main" | undefined, action: () => void) => void = (
+    _source,
+    action,
+  ) => action(),
 ): Port {
   const acpMethods = new Set(acpMethodNames);
   const acpEvents = new Set(acpEventNames);
   const destination = (owner: string) =>
     owner === "main" ? main : owner === "acp" ? acp : renderer;
+  const hostOnly = new Set(["providerImport.stage", "providerImport.resolve"]);
   const methods = new Set([
+    ...hostOnly,
     "routines.pauseAll",
     "routines.resumeAll",
     "credentials.takeoverAccounts",
@@ -70,6 +74,8 @@ export function businessPorts(
     "bots.changed",
     "inbox.changed",
     "runtime.activeRuns",
+    // Live island: Bot names, avatars and short titles only.
+    "runtime.liveActivity",
   ]);
   return {
     post(raw) {
@@ -103,6 +109,7 @@ export function businessPorts(
         const message = request.data;
         if (
           (owner === "main" && !methods.has(message.method)) ||
+          (owner !== "main" && hostOnly.has(message.method)) ||
           (owner === "acp" && (!acpMethods.has(message.method) || message.id === undefined))
         ) {
           if (message.id !== undefined)
@@ -125,7 +132,9 @@ export function businessPorts(
       const a = renderer.onMessage((message) =>
         withSource(undefined, () => receive("renderer", message)),
       );
-      const b = main.onMessage((message) => withSource(undefined, () => receive("main", message)));
+      const b = main.onMessage((message) =>
+        withSource("desktop-main", () => receive("main", message)),
+      );
       const c = acp?.onMessage((message) => withSource("acp", () => receive("acp", message)));
       return () => {
         a();

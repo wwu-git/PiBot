@@ -1,4 +1,35 @@
+// Provides the shared bilingual copy for memory management and maintenance status.
 export const memorySettingsZh = {
+  "memorySettings.maintenance.lastExtraction": "最近一次：{time}。",
+  "memorySettings.maintenance.healthy": "记忆正常 · 最近一次记下 {time}。",
+  "memorySettings.maintenance.extraction": "提炼记忆最近 {count} 次未完成：{reason}",
+  "memorySettings.maintenance.organization": "整理记忆最近 {count} 次未完成：{reason}",
+  "memorySettings.maintenance.no_model": "没有可用的文字模型。",
+  "memorySettings.maintenance.auth_failed": "模型密钥无效或登录已失效。",
+  "memorySettings.maintenance.budget_exhausted": "今日记忆预算不足。",
+  "memorySettings.maintenance.draft_invalid": "模型返回的记忆格式无法读取。",
+  "memorySettings.maintenance.failed": "记忆维护遇到错误，请检查模型设置。",
+  "memorySettings.maintenance.budgetNext": "将在预算恢复后继续。",
+  "memorySettings.dream.title": "最近一次记忆整理",
+  "memorySettings.dream.summary": "合并 {merged} 组 · 退休 {retired} 条 · {proposed} 条提议",
+  "memorySettings.dream.lead":
+    "用已配置的记忆模型整理。可设为每天空闲时自动整理，也可现在整理。共享记忆的改动由你确认。",
+  "memorySettings.dream.run": "现在整理",
+  "memorySettings.dream.undo": "撤销",
+  "memorySettings.dream.changes": "查看改动",
+  "memorySettings.dream.waiting": "提议在「等你处理」里查看。",
+  "memorySettings.dream.options": "整理设置",
+  "memorySettings.dream.automatic": "每日自动整理（使用已配置的记忆模型）",
+  "memorySettings.dream.localOnly": "只用本机模型",
+  "memorySettings.dream.budget": "每次预算（美元）",
+  "memorySettings.dream.save": "保存",
+  "memorySettings.dream.empty": "这一轮没有需要整理的记忆。",
+  "memorySettings.dream.busy": "正在聊天或整理记忆，请稍后再试。",
+  "memorySettings.dream.failed": "未能完成这次操作。记忆有更新时，请重新查看改动。",
+  "memorySettings.dream.runFailed":
+    "整理遇到错误。检查模型设置或连接后，点「现在整理」继续。已完成的改动已保留。",
+  "memorySettings.dream.limited": "本次预算已用完。下次从剩余记忆继续。",
+  "memorySettings.dream.interrupted": "整理已暂停。下次从剩余记忆继续。",
   "memorySettings.sortIntoPlace": "整理归位",
   "memorySettings.sortLead": "用模型将工作记忆归回来源 Bot，保留个人偏好；移动前由你逐条确认。",
   "memorySettings.sortProgress": "正在整理：已检查 {processed} / {total} 条…",
@@ -9,6 +40,9 @@ export const memorySettingsZh = {
   "memorySettings.sort.limited":
     "已达到本次整理的时间、内容或用量上限，剩余记忆未处理。已生成的提议仍可确认。",
   "memorySettings.sort.failed": "整理未完成，请检查模型和连接后重试。已生成的提议仍可确认。",
+  "memorySettings.projectFileChanged": "AGENTS.md 在提议之后被改过，没有写入。请重新整理后再确认。",
+  "memorySettings.projectTargetInvalid":
+    "项目里的 AGENTS.md 不是普通文件（可能是链接），没有写入。",
   "memorySettings.moveCopyRequired":
     "请先确认 Bot 中的新增或改写提议，再删除「关于你」中的副本。副本已修改或归档时请先核对。",
   "memorySettings.moveRestoreRequired":
@@ -40,7 +74,7 @@ export const memorySettingsZh = {
   "memorySettings.archivedCount": "已归档 {count}",
 
   "memorySettings.title": "记忆",
-  "memorySettings.unusedSummary": "很久没用到：{count} 条",
+  "memorySettings.unusedSummary": "90 天内未推测到使用：{count} 条",
   "memorySettings.aboutYouLead": "所有 Bot 都会参考这些；只存在这台电脑上，随时可以改。",
   "memorySettings.lead": "管理这台设备上的记忆。记忆是参考资料，不会授予权限。",
   "memorySettings.scope": "记忆归属",
@@ -67,7 +101,10 @@ export const memorySettingsZh = {
   "memorySettings.pending": "待确认的记忆",
   "memorySettings.summary": "当前 {active} 条 · 归档 {archived} 条 · 很久没用到 {unused} 条",
   "memorySettings.organize": "需要整理：一些记忆已归档，仍可按需召回。",
-  "memorySettings.unused": "很久没用到（90 天）",
+  "memorySettings.unused": "90 天内未推测到使用",
+  "memorySettings.recallUsed": "推测最近用到：{date} · {used}/{injected} 轮",
+  "memorySettings.recallUnused": "已注入 {injected} 轮，尚未推测到使用",
+  "memorySettings.recallUnavailable": "使用度量尚无数据",
   "memorySettings.used": "最近使用：{date} · 合并使用批次 {count}",
   "memorySettings.neverUsed": "尚无使用记录",
   "memorySettings.created": "创建于 {date}",
@@ -103,6 +140,43 @@ export const memorySettingsZh = {
   "memorySettings.exportLimit": "导出超过 2000 条或 1 MiB 限制，未生成文件；请选择较小的归属范围。",
 } as const;
 export const memorySettingsEn = {
+  "memorySettings.maintenance.lastExtraction": "Last attempt: {time}.",
+  "memorySettings.maintenance.healthy": "Memory is healthy · Last saved {time}.",
+  "memorySettings.maintenance.extraction":
+    "Recent unfinished extraction attempts ({count}): {reason}",
+  "memorySettings.maintenance.organization":
+    "Recent unfinished organization attempts ({count}): {reason}",
+  "memorySettings.maintenance.no_model": "No text model is available.",
+  "memorySettings.maintenance.auth_failed":
+    "The model API key is invalid or the sign-in has expired.",
+  "memorySettings.maintenance.budget_exhausted": "There is not enough memory budget left today.",
+  "memorySettings.maintenance.draft_invalid":
+    "The model returned a memory draft that could not be read.",
+  "memorySettings.maintenance.failed": "Memory maintenance failed. Check the model settings.",
+  "memorySettings.maintenance.budgetNext": "Work resumes when the budget is available.",
+  "memorySettings.dream.title": "Latest memory cleanup",
+  "memorySettings.dream.summary": "{merged} merged · {retired} retired · {proposed} proposals",
+  "memorySettings.dream.lead":
+    "Use the configured memory model to clean up now or daily while idle. Changes to shared memories need your confirmation.",
+  "memorySettings.dream.run": "Clean up now",
+  "memorySettings.dream.undo": "Undo",
+  "memorySettings.dream.changes": "View changes",
+  "memorySettings.dream.waiting": "Review proposals in Waiting for you.",
+  "memorySettings.dream.options": "Cleanup settings",
+  "memorySettings.dream.automatic": "Clean up daily using the configured memory model",
+  "memorySettings.dream.localOnly": "Use only a local model",
+  "memorySettings.dream.budget": "Budget per run (USD)",
+  "memorySettings.dream.save": "Save",
+  "memorySettings.dream.empty": "No memories needed cleanup this time.",
+  "memorySettings.dream.busy": "Chat or memory maintenance is busy. Try again shortly.",
+  "memorySettings.dream.failed":
+    "Could not complete the operation. If memories changed, review the latest changes.",
+  "memorySettings.dream.runFailed":
+    "Cleanup stopped. Check the model settings or connection, then choose Clean up now to continue. Completed changes were kept.",
+  "memorySettings.dream.limited":
+    "This run reached its budget. Cleanup will continue with the remaining memories next time.",
+  "memorySettings.dream.interrupted":
+    "Cleanup paused. It will continue with the remaining memories next time.",
   "memorySettings.sortIntoPlace": "Sort into place",
   "memorySettings.sortLead":
     "Use the model to return work memories to their source Bot and keep personal preferences shared; confirm each move.",
@@ -116,6 +190,10 @@ export const memorySettingsEn = {
     "This run reached its time, content or usage limit. Remaining memories were not processed; created proposals are still available.",
   "memorySettings.sort.failed":
     "Sorting could not finish. Check the model and connection, then retry. Created proposals are still available.",
+  "memorySettings.projectFileChanged":
+    "AGENTS.md changed after this proposal was made, so nothing was written. Sort again, then confirm.",
+  "memorySettings.projectTargetInvalid":
+    "The project's AGENTS.md is not a regular file (it may be a link), so nothing was written.",
   "memorySettings.moveCopyRequired":
     "Confirm the Bot add or rewrite first, then delete the About you copy. Check the Bot copy if it was changed or archived.",
   "memorySettings.moveRestoreRequired":
@@ -148,7 +226,7 @@ export const memorySettingsEn = {
   "memorySettings.archivedCount": "Archived {count}",
 
   "memorySettings.title": "Memory",
-  "memorySettings.unusedSummary": "Unused for a long time: {count}",
+  "memorySettings.unusedSummary": "No inferred use in 90 days: {count}",
   "memorySettings.aboutYouLead":
     "All Bots refer to these memories. Stored on this computer; edit them any time.",
   "memorySettings.lead":
@@ -180,7 +258,10 @@ export const memorySettingsEn = {
     "{active} active · {archived} archived · {unused} unused for a long time",
   "memorySettings.organize":
     "Needs organization: some memories are archived and can still be recalled when relevant.",
-  "memorySettings.unused": "Unused for a long time (90 days)",
+  "memorySettings.unused": "No inferred use in 90 days",
+  "memorySettings.recallUsed": "Last inferred use: {date} · {used}/{injected} runs",
+  "memorySettings.recallUnused": "Injected in {injected} runs; no inferred use yet",
+  "memorySettings.recallUnavailable": "Usage measurements unavailable",
   "memorySettings.used": "Last used: {date} · {count} merged usage batches",
   "memorySettings.neverUsed": "No usage recorded yet",
   "memorySettings.created": "Created {date}",

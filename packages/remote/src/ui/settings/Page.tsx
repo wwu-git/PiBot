@@ -41,7 +41,13 @@ export function RemoteSettingsPage() {
             name: remote.devices.find((device) => device.id === remote.pair?.deviceId)?.name ?? "",
           })
         : remote.pair.status === "waiting"
-          ? t("remote.runner.waiting")
+          ? remote.pair.relayProblem === "unreachable"
+            ? t("remote.runner.relayUnreachable")
+            : remote.pair.relayProblem === "tls"
+              ? t("remote.runner.relayTls")
+              : remote.pair.relayProblem === "certificate"
+                ? t("remote.runner.relayCertificate")
+                : t("remote.runner.waiting")
           : remote.pair.status === "expired"
             ? t("remote.runner.expired")
             : remote.pair.status === "failed"
@@ -356,7 +362,14 @@ export function RemoteSettingsPage() {
                   {t("remote.runner.generatedNote")}
                   {runnerRelayHost ? t("remote.runner.viaRelay", { host: runnerRelayHost }) : ""}
                 </p>
-                {runnerStatus && <p className={styles.runnerNote}>{runnerStatus}</p>}
+                {runnerStatus && (
+                  <p
+                    className={styles.runnerNote}
+                    role={remote.pair?.relayProblem ? "alert" : undefined}
+                  >
+                    {runnerStatus}
+                  </p>
+                )}
               </div>
             )}
             <div className={styles.actions}>

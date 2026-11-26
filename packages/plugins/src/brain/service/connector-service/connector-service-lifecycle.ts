@@ -108,6 +108,7 @@ export async function discoverToolsStep(
       names.add(tool.name);
       tools.push({
         tool: tool.name,
+        ...(tool.title ? { title: tool.title } : {}),
         description: tool.description ?? "",
         schema: tool.inputSchema,
         suggestedReadOnly: tool.readOnlyHint === true,

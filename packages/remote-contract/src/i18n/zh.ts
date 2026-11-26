@@ -78,6 +78,11 @@ export const remoteZh = {
   "remote.runner.addedNamed": "✓ 已添加「{name}」",
   "remote.runner.expired": "配对码已过期，点「换一个」重新生成",
   "remote.runner.waiting": "等待执行端连接…",
+  "remote.runner.relayUnreachable":
+    "这台电脑连不上中继服务器。请检查中继地址、端口和网络，执行端也要能连上同一个中继。",
+  "remote.runner.relayTls": "和中继服务器的加密连接没有建立（TLS 失败）。请检查中继的 HTTPS 设置。",
+  "remote.runner.relayCertificate":
+    "中继服务器的证书不受信任。自建中继使用内部证书时，请把它的根证书安装到这台电脑上。",
   "remote.runner.useLegacy": "执行端已经给了配对码？改为输入",
   "remote.runner.useGenerated": "改用电脑给出的配对码",
   "remote.runner.closeCode": "收起",

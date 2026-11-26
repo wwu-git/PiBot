@@ -10,10 +10,11 @@ import {
   type Permissions,
   PermissionsPatchSchema,
   type PermissionsSettings,
+  PI_MANAGER_CATEGORIES,
   type PolicyStep,
   RpcError,
 } from "@pibot/protocol-base";
-import { PermissionsRepo, transaction } from "@pibot/storage";
+import { BotsRepo, PermissionsRepo, transaction } from "@pibot/storage";
 
 export class PermissionService {
   readonly repo: PermissionsRepo;
@@ -90,6 +91,12 @@ export class PermissionService {
   }
   async set(params: KernelMethodParams["permissions.set"]): Promise<Permissions> {
     const { botId, groupId, levels, network, pathEntries, dockerRuntime, sshHosts } = params;
+    // Owner decision 2026-11-24: these levels exist only on the default Pi's own page.
+    if (
+      PI_MANAGER_CATEGORIES.some((category) => levels?.[category] !== undefined) &&
+      (!botId || groupId || !new BotsRepo(this.db).get(botId)?.isMain)
+    )
+      throw new RpcError(-32602, "pi_manager_main_only");
     if (!botId && !groupId) {
       if (network === null || Object.values(levels ?? {}).some((value) => value === null))
         throw new RpcError(-32602, "Only Bot overrides can follow global");

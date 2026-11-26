@@ -33,6 +33,7 @@ export function scanWindowsCommand(
   verifiedPaths: ReadonlySet<string> = new Set(),
   directoryWrites?: ReturnType<typeof powershellDirectoryWrites>,
   verifiedDelete = false,
+  ownRoots: readonly string[] = [],
 ) {
   const fragments = new Set<string>();
   let privilegeEscalation = false;
@@ -69,7 +70,10 @@ export function scanWindowsCommand(
         while (paths[pathIndex] && (paths[pathIndex]?.end ?? 0) <= start) pathIndex++;
         const literal = paths[pathIndex];
         if (
-          systemNames.includes(name) &&
+          (systemNames.includes(name) ||
+            (protectedRoots.includes(name) &&
+              !!literal &&
+              !windowsProtectedCommandPath(literal.path, protectedRoots, ownRoots))) &&
           literal &&
           literal.start <= start &&
           literal.end >= end &&
@@ -89,7 +93,7 @@ export function scanWindowsCommand(
     for (const path of directoryWrites.writes)
       if (
         !isWritableCommandPath(path, "win32", scope) ||
-        windowsProtectedCommandPath(path, protectedRoots)
+        windowsProtectedCommandPath(path, protectedRoots, ownRoots)
       )
         add(path);
     if (directoryWrites.unknownWrite) add("unknown_command_directory");
@@ -101,6 +105,8 @@ export async function prepareWindowsCommandScan(
   command: string,
   options: {
     protectedRoots: readonly string[];
+    /** The Bot's own work folder, exempt from the data-directory root (see the predicate). */
+    ownRoots?: readonly string[];
     scope: CommandPathScope;
     writePaths?: readonly string[];
     cwd: string | undefined;
@@ -108,6 +114,7 @@ export async function prepareWindowsCommandScan(
   },
 ) {
   const { protectedRoots, scope, cwd, context } = options;
+  const ownRoots = options.ownRoots ?? [];
   const needsConfirmation =
     windowsNetworkOrDevicePath(command) ||
     (cwd !== undefined && windowsNetworkOrDevicePath(cwd)) ||
@@ -125,6 +132,7 @@ export async function prepareWindowsCommandScan(
       : new Set<string>();
   const confirmed = await checkWindowsWrites(writes, deleteTarget, {
     protectedRoots,
+    ownRoots,
     scope,
     context: context && !needsConfirmation && cwd ? { ...context, cwd } : undefined,
   });
@@ -135,6 +143,7 @@ export async function prepareWindowsCommandScan(
     verifiedPaths,
     directoryWrites,
     confirmed.verifiedDelete,
+    ownRoots,
   );
   return {
     privilegeEscalation: scan.privilegeEscalation,
@@ -147,9 +156,14 @@ export async function prepareWindowsCommandScan(
 async function checkWindowsWrites(
   paths: ReadonlySet<string>,
   deleteTarget: string | undefined,
-  options: { protectedRoots: readonly string[]; scope: CommandPathScope; context?: PathContext },
+  options: {
+    protectedRoots: readonly string[];
+    ownRoots: readonly string[];
+    scope: CommandPathScope;
+    context?: PathContext;
+  },
 ) {
-  const { protectedRoots, scope, context } = options;
+  const { protectedRoots, ownRoots, scope, context } = options;
   const facts: ApprovalFact[] = [];
   const fragments: string[] = [];
   let verifiedDelete = false;
@@ -160,7 +174,7 @@ async function checkWindowsWrites(
       fragments.push("unknown_command_directory");
       break;
     }
-    if (windowsProtectedCommandPath(path, protectedRoots)) {
+    if (windowsProtectedCommandPath(path, protectedRoots, ownRoots)) {
       fragments.push(path.slice(0, MAX_FRAGMENT_LENGTH));
       continue;
     }
@@ -168,7 +182,7 @@ async function checkWindowsWrites(
       const resolved = await canonicalPath(path, context);
       if (
         windowsNetworkOrDevicePath(resolved.path) ||
-        windowsProtectedCommandPath(resolved.path, protectedRoots)
+        windowsProtectedCommandPath(resolved.path, protectedRoots, ownRoots)
       ) {
         fragments.push(path.slice(0, MAX_FRAGMENT_LENGTH));
         continue;
@@ -176,8 +190,8 @@ async function checkWindowsWrites(
       facts.push({ kind: "write", value: resolved.path });
       if (path === deleteTarget)
         verifiedDelete =
-          safeWindowsDeletePath(path, protectedRoots, scope) &&
-          safeWindowsDeletePath(resolved.path, protectedRoots, scope);
+          safeWindowsDeletePath(path, protectedRoots, scope, ownRoots) &&
+          safeWindowsDeletePath(resolved.path, protectedRoots, scope, ownRoots);
     } catch {
       // An unreadable target cannot rule out a junction into a protected directory.
       context.signal.throwIfAborted();

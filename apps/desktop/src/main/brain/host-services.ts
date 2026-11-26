@@ -32,6 +32,7 @@ export const toolbarEvents = {
   "bots.changed": Events["bots.changed"],
   "inbox.changed": Events["inbox.changed"],
   "runtime.activeRuns": Events["runtime.activeRuns"],
+  "runtime.liveActivity": Events["runtime.liveActivity"],
 };
 
 /** The main-process peer of the current brain child; the host RPC surface and toolbars use it. */

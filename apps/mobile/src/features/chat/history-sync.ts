@@ -1,4 +1,4 @@
-import type { Message } from "@pibot/protocol";
+import { type Message, RpcError, RpcErrorCodes } from "@pibot/protocol";
 import type { ChatTarget } from "../../transport/link-port.ts";
 import type { Caller } from "./controls/scope.ts";
 
@@ -28,8 +28,23 @@ export async function readHistoryDelta(
   signal: AbortSignal,
   timeoutMs?: number,
 ): Promise<HistoryDelta> {
-  const read = (limit: number) =>
-    c.call("chat.history", { ...target, limit }, signal, timeoutMs) as Promise<Message[]>;
+  const read = async (limit: number) => {
+    try {
+      return await c.call("chat.history", { ...target, limit }, signal, timeoutMs);
+    } catch (error) {
+      signal.throwIfAborted();
+      // An authoritative missing DM topic must replace the phone's cached history.
+      if (
+        target.botId &&
+        target.topicId &&
+        error instanceof RpcError &&
+        error.code === RpcErrorCodes.invalidParams &&
+        error.message === "Unknown topic"
+      )
+        return [];
+      throw error;
+    }
+  };
   if (local.length) {
     const tail = await read(HISTORY_TAIL);
     signal.throwIfAborted();

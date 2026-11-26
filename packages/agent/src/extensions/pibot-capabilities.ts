@@ -1,6 +1,6 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import type { LocalToolPorts } from "../core/types.ts";
+import type { LocalToolDefinition, LocalToolPorts } from "../core/types.ts";
 import { redactedToolText } from "./redacted-tool-text.ts";
 import type { ToolLoadout } from "./tool-loadout.ts";
 import { toolResultImages } from "./tool-result-images.ts";
@@ -10,9 +10,10 @@ export function pibotCapabilitiesExtension(
   ports: LocalToolPorts,
   permits: Map<string, string>,
   loadout?: ToolLoadout,
+  registration?: readonly LocalToolDefinition[],
 ): ExtensionFactory {
   return (pi) => {
-    for (const tool of ports.capabilityDefinitions ?? []) {
+    for (const tool of registration ?? ports.capabilityDefinitions ?? []) {
       pi.registerTool({
         name: tool.name,
         label: tool.name,

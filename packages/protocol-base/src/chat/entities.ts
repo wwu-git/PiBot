@@ -1,3 +1,4 @@
+// Defines persisted chat messages and their compatible usage fields.
 import { z } from "zod";
 import { AbsolutePathSchema, CanonicalTimeSchema } from "../core/boundaries.ts";
 import { AgentErrorCodeSchema } from "../core/errors.ts";
@@ -9,6 +10,31 @@ import {
 } from "../core/routine-triggers.ts";
 import { ToolCallRecordSchema } from "../execution/tool-calls.ts";
 import { AttachmentSchema, MAX_REPLY_ATTACHMENTS } from "./attachments.ts";
+
+export const MemoryNotedSchema = z
+  .array(z.strictObject({ id: IdSchema, text: z.string().min(1).max(500) }))
+  .max(5);
+
+export function memoryNoted(usage: Message["usage"]) {
+  if (!usage || typeof usage !== "object" || Array.isArray(usage)) return undefined;
+  return MemoryNotedSchema.safeParse(usage.memoryNoted).data;
+}
+
+/** A file-delivery page keeps the original reply as the run's semantic/receipt owner. */
+export function attachmentContinuationOf(message: Message): string | undefined {
+  if (
+    message.role !== "assistant" ||
+    message.status !== "done" ||
+    message.content !== "" ||
+    !message.runId ||
+    !message.usage ||
+    typeof message.usage !== "object" ||
+    Array.isArray(message.usage)
+  )
+    return undefined;
+  const parsed = IdSchema.safeParse(message.usage.attachmentContinuationOf);
+  return parsed.success && parsed.data !== message.id ? parsed.data : undefined;
+}
 
 export const MessageSchema = z.strictObject({
   botId: IdSchema.nullable().optional(),

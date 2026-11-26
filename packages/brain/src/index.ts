@@ -1,3 +1,4 @@
+// Compose and start the platform-independent brain kernel.
 import { mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -42,6 +43,7 @@ import {
   BrainWakeRepo,
   type InboxSource,
   KEPT_QUEUED,
+  LiveActivityRepo,
   openDatabase,
   RunEventsRepo,
   RunsRepo,
@@ -86,6 +88,7 @@ import { registerUserQuestionRpc } from "./runtime/questions/user-questions.ts";
 import { createActiveRunStatus } from "./runtime/queue/active-runs.ts";
 import { resumeApproval } from "./runtime/queue/approval-resume.ts";
 import { BrainSleep } from "./runtime/queue/brain-sleep.ts";
+import { createLiveActivity } from "./runtime/queue/live-activity.ts";
 import { reconcileSessionTails, snapshotSessionTails } from "./runtime/queue/session-tail.ts";
 import { registerReceiptRpc } from "./runtime/receipts/run-receipt.ts";
 import { registerAgentReviewRpc } from "./runtime/review/agent-review-rpc.ts";
@@ -102,6 +105,7 @@ import { registerAppRpc } from "./runtime/startup/register-app-rpc.ts";
 import { registerCapabilities } from "./runtime/startup/register-capabilities.ts";
 import { registerChatRpc } from "./runtime/startup/register-chat-rpc.ts";
 import { registerHealthRpc } from "./runtime/startup/register-health-rpc.ts";
+import { sdkIdlePreload } from "./runtime/startup/sdk-idle-preload.ts";
 import { createStartupProgress } from "./runtime/startup/startup-progress.ts";
 import { createStartupTiming } from "./runtime/startup/startup-timing.ts";
 import { registerCapabilityRpc } from "./runtime/tools/capabilities/capability-rpc.ts";
@@ -177,6 +181,7 @@ export interface BrainHost {
   };
   /** Skill import picker: a SKILL.md or a .zip; null when the user cancels. */
   skills?: { pickFile(signal: AbortSignal): Promise<string | null> };
+  memoryDreamActivity?(signal: AbortSignal): Promise<KernelHostResults["host.memoryDreamActivity"]>;
   notify?(
     params: KernelHostParams["host.notify"],
     signal?: AbortSignal,
@@ -213,7 +218,9 @@ export async function startBrain(opts: {
   };
   port: Port;
   /** Source is supplied by the trusted composition root, never decoded from RPC JSON. */
-  requestSource?: () => "acp" | undefined;
+  requestSource?: () => "acp" | "desktop-main" | undefined;
+  /** True while the paired phone's own request is being handled (the remote kernel bridge). */
+  isPhoneRequest?: () => boolean;
   acp?: import("@pibot/protocol-base").AcpAttachmentPort;
   host: BrainHost;
   dataDir: string;
@@ -227,6 +234,8 @@ export async function startBrain(opts: {
    * with and without the code-navigation tools. Removing a tool never grants another one.
    */
   hiddenTools?: readonly string[];
+  /** Optional content-free model receipts for the headless evaluation host. */
+  modelRequest?: LocalDependencies["modelRequest"];
   dev?: boolean;
   interactiveAttached?: boolean;
   backgroundControlIdle?: () => boolean;
@@ -259,6 +268,10 @@ export async function startBrain(opts: {
   backgroundPreferences(value?: BackgroundPreferences): BackgroundPreferences;
   backgroundSleep(input: BrainWakeControl): Promise<BrainWakeResult>;
   backgroundActivity(): boolean;
+  /** Milliseconds since the last user-side request, for work that should wait for a quiet moment. */
+  quietForMs(): number;
+  /** Names a phase for the event-loop stall log (fixed identifiers only). */
+  markPhase(phase: string): void;
   stop(): Promise<void>;
 }> {
   const timingRaw = createStartupTiming();
@@ -311,6 +324,8 @@ export async function startBrain(opts: {
   let runRetention: RunRetention | undefined;
   let startupDiagnostics: ReturnType<typeof firstRpcDiagnostics> | undefined;
   let loopWatch: ReturnType<typeof watchBrainLoop> | undefined;
+  let sdkPreload: ReturnType<typeof sdkIdlePreload> | undefined;
+  let lastUserActivity = 0;
   let maintenance: ReturnType<typeof deferredMaintenance> | undefined;
   const sessionTailController = new AbortController();
   let sessionTailReconciliation: Promise<void> | undefined;
@@ -381,11 +396,17 @@ export async function startBrain(opts: {
       get loopWatch() {
         return loopWatch;
       },
+      noteUserActivity: () => {
+        lastUserActivity = performance.now();
+      },
+      quietForMs: () => performance.now() - lastUserActivity,
+      markPhase: (phase: string) => loopWatch?.mark(phase),
       get startupDiagnostics() {
         return startupDiagnostics;
       },
       stopStartupMaintenance: async () => {
         startupDiagnostics?.stop();
+        sdkPreload?.stop();
         await maintenance?.stop();
       },
       waitForSessionRecovery,
@@ -615,9 +636,24 @@ export async function startBrain(opts: {
     const sdk = createAgentRuntime({
       dataDir,
       network: agentNetwork,
+      // An image service's result link: the user chose the service, not each CDN host it links,
+      // so the Bot's website list does not apply; address, redirect and size rules still do.
+      fetchImageUrl: async ({ url, signal }) => ({
+        data: (
+          await fetchImage({
+            url,
+            signal,
+            proxy: network.proxy(),
+            allowDomain: () => true,
+            redirects: 3,
+            binary: true,
+          })
+        ).data,
+      }),
       hasApiKey: (id) => models().hasApiKey(id),
       getApiKey: (id) => models().getApiKey(id),
       customProviders: () => models().customProviders(),
+      addedModels: () => models().addedModels?.() ?? {},
       onCustomModelLimit: (providerId, modelId, limits) =>
         models().updateCustomModelLimits?.(providerId, modelId, limits),
       auxiliaryModel: () => settings.get().auxiliaryModel,
@@ -625,6 +661,8 @@ export async function startBrain(opts: {
         logger.warn(
           JSON.stringify({ module: "agent", event: "auxiliary_model_fallback", purpose, code }),
         ),
+      sdkWarmupFailed: (code) =>
+        logger.warn(JSON.stringify({ module: "agent", event: "pi_sdk_warmup_failed", code })),
       get auth() {
         return models().auth;
       },
@@ -724,15 +762,25 @@ export async function startBrain(opts: {
     const activeRuns = createActiveRunStatus(new RunsRepo(db), (count) =>
       rpcPeer.emit("runtime.activeRuns", { count }),
     );
-    const offActiveRuns = opts.port.onClose?.(() => activeRuns.dispose());
+    const liveActivity = createLiveActivity(
+      new LiveActivityRepo(db),
+      (value) => rpcPeer.emit("runtime.liveActivity", value),
+      () => logger.warn(JSON.stringify({ module: "live-island", event: "read_failed" })),
+    );
+    const offActiveRuns = opts.port.onClose?.(() => {
+      activeRuns.dispose();
+      liveActivity.dispose();
+    });
     const peer: typeof rpcPeer = {
       ...rpcPeer,
       emit(event, payload) {
         rpcPeer.emit(event, payload);
         activeRuns.changed(event);
+        liveActivity.changed(event);
       },
       dispose() {
         activeRuns.dispose();
+        liveActivity.dispose();
         offActiveRuns?.();
         rpcPeer.dispose();
       },
@@ -750,6 +798,7 @@ export async function startBrain(opts: {
       resourcesDir: opts.resourcesDir,
       platform: opts.platform as "darwin" | "linux" | "win32",
       hiddenTools: opts.hiddenTools,
+      modelRequest: opts.modelRequest,
       env: executionEnv,
       userHome,
       tempDir,
@@ -963,6 +1012,12 @@ export async function startBrain(opts: {
       chat.abortRoutine = (id) => owner.abortRun(id);
     };
     capabilities.workplaces.beforeChange = (botId) => chat.queue.pauseBot(botId);
+    // A card's "don't ask again" changed Pi's level; an open permissions tab follows it.
+    capabilities.approvals.levelChanged = (botId) =>
+      void capabilities.permissions
+        .get(botId)
+        .then((value) => peer.emit("permissions.changed", value))
+        .catch(() => logger.warn(JSON.stringify({ module: "permissions", event: "emit_failed" })));
     // Capabilities add their inbox kinds at registration; the inbox reads this list per query.
     const inboxSources: InboxSource[] = [];
     registerNavigationRpc(handle, db, peer, chat, inboxSources, composition.inboxItemSchema);
@@ -1036,20 +1091,30 @@ export async function startBrain(opts: {
     sdk.deferSdk?.(2000);
     startupDiagnostics?.ready();
     activeRuns.refresh();
+    liveActivity.refresh();
     logger.info("Brain ready");
     timing.report(logger);
-    maintenance = deferredMaintenance(logger);
-    maintenance.start(capabilityHandles, () =>
-      (sdk.preloadSdk?.() ?? Promise.resolve()).catch(() =>
-        logger.warn(JSON.stringify({ module: "startup", event: "pi_sdk_preload_failed" })),
-      ),
-    );
+    maintenance = deferredMaintenance(logger, sdk.preloadSdk, (phase) => loopWatch?.mark(phase));
+    // A speculative SDK import blocks unrelated navigation while evaluating its module graph.
+    // The agent still loads it on demand for model operations.
+    maintenance.start(capabilityHandles);
+    // The SDK's main-thread evaluation moves to an idle moment after the worker warm-up.
+    sdkPreload = sdkIdlePreload({
+      logger,
+      warm: sdk.preloadSdk,
+      load: sdk.loadSdkWhenIdle,
+      lastUserActivity: () => lastUserActivity,
+      busy: () => startup.interactiveRequests.size > 0,
+      mark: (phase) => loopWatch?.mark(phase),
+    });
+    sdkPreload.start();
     progress?.stop();
     return createBrainController(startup);
   } catch (error) {
     progress?.stop();
     startupDiagnostics?.stop();
     loopWatch?.stop();
+    sdkPreload?.stop();
     await maintenance?.stop();
     await stopSessionRecovery();
     let drained = false;

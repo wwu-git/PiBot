@@ -12,6 +12,7 @@ export {
   sameFile,
 } from "@pibot/execution/file-identity";
 export {
+  attachmentDirectory,
   checkedImage,
   invalidAttachment,
   storedAttachmentFile,
@@ -46,6 +47,7 @@ export type { RegisterRpc, RpcRequestContext } from "./core/business-rpc.ts";
 export type {
   BrainCapability,
   CapabilityContext,
+  ToolCardDescriber,
   ToolExecutor,
   UnattendedAuthorization,
   UnattendedSendIntent,
@@ -65,6 +67,7 @@ export { endpoint } from "./core/endpoint.ts";
 export { activeGroup, requireGroupMember, visibleGroupMessage } from "./core/group-access.ts";
 export type { HostCall } from "./core/host-call.ts";
 export type { CollaborationPort, PreparedTool, ToolRunContext } from "./core/local-types.ts";
+export { mainDirectRun } from "./core/main-direct.ts";
 export type {
   ExecutionCleanupPort,
   ExecutionPort,
@@ -154,10 +157,13 @@ export type {
   GroupMemoryPort,
   MemoryPort,
   MemoryPromptRequest,
+  MemoryRecallObservation,
+  MemoryRecallRequest,
   PersonalMemoryPort,
 } from "./runtime/memory/port.ts";
 export { memoryProjectPath } from "./runtime/memory/project.ts";
 export type { ModelProvidersPort, ModelSettingsPort } from "./runtime/models/port.ts";
+export { writeReviewedProjectNotes } from "./runtime/notes/reviewed-project-notes.ts";
 export type { WakeSource } from "./runtime/queue/brain-sleep.ts";
 export type { ChatRun } from "./runtime/queue/chat-run.ts";
 export type { QueueInput, RunQueue } from "./runtime/queue/run-queue.ts";

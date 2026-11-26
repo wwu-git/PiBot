@@ -40,6 +40,8 @@ export function stepInstructions(
    * Pi Bot's record of the stopped run last, shortened to fit (the task itself is never cut).
    */
   continued?: { lost: boolean; summary?: ResumeSummary },
+  /** The retry of a step whose last run stopped with a full context: one fixed line at the end. */
+  narrower = false,
 ): string | undefined {
   const failed = previous?.result?.items.filter((item) => item.status === "fail") ?? [];
   const text = redact(
@@ -60,6 +62,7 @@ export function stepInstructions(
       review ?? "",
       continued ? groupWorkflowBriefPrompts.resumed : "",
       continued?.lost ? groupWorkflowBriefPrompts.resumedLost : "",
+      narrower ? groupWorkflowBriefPrompts.contextFull : "",
     ]
       .filter(Boolean)
       .join("\n\n"),

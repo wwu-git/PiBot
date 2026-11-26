@@ -2,7 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { cp, lstat, mkdir, open, opendir, realpath, rename, rm } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { PortablePiBotApplicationSchema, parseClaudePluginManifest } from "@pibot/plugin-sdk";
+import {
+  PortablePiBotApplicationSchema,
+  parseClaudePluginManifest,
+  pluginText,
+} from "@pibot/plugin-sdk";
 import {
   hardenPluginConfigField,
   hasPluginCommandSubstitution,
@@ -667,8 +671,9 @@ export function createConnectorImportHost(options: {
         const value = hardenPluginConfigField({
           key,
           type: type as ClaudePluginConfigField["type"],
-          title: String(field.title ?? key),
-          description: String(field.description ?? key),
+          // `{ zh, en }` is accepted beside plain strings (see the SDK's PluginTextSchema).
+          title: pluginText(field.title) ?? key,
+          description: pluginText(field.description) ?? key,
           sensitive: field.sensitive === true,
           required: field.required === true,
           ...(field.default !== undefined
@@ -684,11 +689,11 @@ export function createConnectorImportHost(options: {
                   .filter(
                     (option) =>
                       ["string", "number", "boolean"].includes(typeof option.value) &&
-                      typeof option.label === "string",
+                      pluginText(option.label) !== undefined,
                   )
                   .map((option) => ({
                     value: option.value as string | number | boolean,
-                    label: String(option.label),
+                    label: pluginText(option.label) as string,
                   })),
               }
             : Array.isArray(field.enum)

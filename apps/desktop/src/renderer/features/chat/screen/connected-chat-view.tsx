@@ -20,6 +20,7 @@ import { userBubbleStyle } from "../messages/user-bubble.ts";
 import { AgentAccountStatusBand } from "../status/AgentAccountStatusBand.tsx";
 import { YoloControl } from "../status/YoloControl.tsx";
 import { TopicMenu } from "../topics/TopicMenu.tsx";
+import { importedTopicLabel } from "../topics/use-topic-title.ts";
 import { renderChatComposer } from "./chat-composer-view.tsx";
 import { renderChatHistory } from "./chat-history-view.tsx";
 import type { ChatScreenModel } from "./chat-screen-model.ts";
@@ -42,6 +43,7 @@ export function renderConnectedChat(screen: ChatScreenModel) {
     workplaces,
     topicPlace,
     actualTopicId,
+    topic,
     feedbackTopic,
     isDraft,
     drainFailed,
@@ -93,6 +95,7 @@ export function renderConnectedChat(screen: ChatScreenModel) {
               botId={state.bot.id}
               conversationId={actualTopicId}
               draft={isDraft}
+              topic={topic}
             />
           )
         }
@@ -103,7 +106,13 @@ export function renderConnectedChat(screen: ChatScreenModel) {
           ) : undefined
         }
         folders={
-          folderModel ? (
+          topic.readOnly ? (
+            <span className={styles.subtitleText}>{importedTopicLabel(t, topic.importSource)}</span>
+          ) : topic.locked ? (
+            <span className={styles.subtitleText}>
+              {t(topic.error ? "chat.topicUnavailable" : "common.loading")}
+            </span>
+          ) : folderModel ? (
             <FolderPicker
               model={folderModel}
               disabled={!state.bot || !workplaces.confirmed || (!isDraft && !topicPlace.confirmed)}
@@ -126,28 +135,32 @@ export function renderConnectedChat(screen: ChatScreenModel) {
           )
         }
         panelOpen={panelOpen}
-        newTopicDisabled={sendingBlocked}
+        newTopicDisabled={!topic.readOnly && sendingBlocked}
         changes={
-          <div className={sidePaneStyles.pills}>
-            <SidePaneActions
-              pane={sidePane}
-              changes={changes.state}
-              previewCount={officePreview.count}
-              hasDirectory={!!folderModel}
-              browserActive={browserActive}
-              disabled={!state.bot}
-              openTasks={execution.open}
-              openChanges={changes.togglePill}
-            />
-          </div>
+          !topic.locked && (
+            <div className={sidePaneStyles.pills}>
+              <SidePaneActions
+                pane={sidePane}
+                changes={changes.state}
+                previewCount={officePreview.count}
+                hasDirectory={!!folderModel}
+                browserActive={browserActive}
+                disabled={!state.bot}
+                openTasks={execution.open}
+                openChanges={changes.togglePill}
+              />
+            </div>
+          )
         }
         yolo={
-          <YoloControl
-            key={`${state.bot?.id}:${state.conversationId ?? draftId ?? "draft"}`}
-            peer={peer}
-            conversationId={state.conversationId}
-            topicBotId={state.bot?.id}
-          />
+          !topic.locked && (
+            <YoloControl
+              key={`${state.bot?.id}:${state.conversationId ?? draftId ?? "draft"}`}
+              peer={peer}
+              conversationId={state.conversationId}
+              topicBotId={state.bot?.id}
+            />
+          )
         }
         onNewTopic={() => {
           if (state.bot)
@@ -180,7 +193,7 @@ export function renderConnectedChat(screen: ChatScreenModel) {
             />
           )}
           {renderChatHistory(screen)}
-          {renderChatComposer(screen)}
+          {!topic.locked && renderChatComposer(screen)}
         </div>
         {state.bot && (
           <SidePane

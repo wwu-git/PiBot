@@ -1,6 +1,6 @@
 // Exercises the real SQLite migration and repository contracts in temporary data directories.
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -176,7 +176,14 @@ describe("database and migrations", () => {
       "groups",
       "image_artifacts",
       "image_workspace_receipts",
+      "import_folder_records",
+      "import_folders",
       "import_jobs",
+      "import_memories",
+      "import_memory_usage",
+      "import_personas",
+      "import_project_files",
+      "import_project_notes",
       "knowledge_assignments",
       "knowledge_managed_installations",
       "knowledge_sources",
@@ -185,6 +192,9 @@ describe("database and migrations", () => {
       "managed_worktrees",
       "memories",
       "memory_aliases",
+      "memory_dream_runs",
+      "memory_dream_source_facts",
+      "memory_dream_source_watermarks",
       "memory_extractions",
       "memory_fts",
       "memory_fts_config",
@@ -194,6 +204,8 @@ describe("database and migrations", () => {
       "memory_organizations",
       "memory_projects",
       "memory_proposals",
+      "memory_recall_metrics",
+      "memory_recall_observations",
       "memory_revisions",
       "memory_scope_moves",
       "message_attachment_links",
@@ -201,6 +213,7 @@ describe("database and migrations", () => {
       "messages",
       "office_render_checks",
       "personal_todos",
+      "pi_dispatches",
       "plugin_access",
       "plugin_installations",
       "plugin_skill_access",
@@ -264,7 +277,8 @@ describe("database and migrations", () => {
       "worktree_allocations",
     ]);
     const versions = db.prepare("SELECT * FROM schema_migrations").all();
-    expect(versions).toHaveLength(175);
+    expect(versions).toHaveLength(183);
+    expect(versions.at(-1)?.version).toBe(185);
     expect(versions[0]?.version).toBe(1);
     expect(String(versions[0]?.applied_at)).toMatch(/Z$/);
     const bot = new BotsRepo(db).ensureMainBot();
@@ -275,6 +289,39 @@ describe("database and migrations", () => {
     runMigrations(db);
     expect(new BotsRepo(db).get(bot.id)).toEqual(bot);
   }, 20_000);
+
+  it("upgrades a prd database with previously assigned migration numbers", () => {
+    const previous = join(dir, "previous");
+    mkdirSync(previous);
+    const current = new URL("../migrations/", import.meta.url);
+    for (const file of readdirSync(current)) {
+      if (Number(file.split("_")[0]) < 176)
+        writeFileSync(join(previous, file), readFileSync(new URL(file, current)));
+    }
+    for (const [from, to] of [
+      ["0184_mcp_direct_read_write.sql", "0176_mcp_direct_read_write.sql"],
+      ["0185_antigravity_agent.sql", "0177_antigravity_agent.sql"],
+    ] as const)
+      writeFileSync(join(previous, to), readFileSync(new URL(from, current)));
+    runMigrations(db, previous);
+    const localVersions = db
+      .prepare(
+        "SELECT applied_at FROM schema_migrations WHERE version IN (176, 177) ORDER BY version",
+      )
+      .all();
+    runMigrations(db);
+    runMigrations(db);
+    expect(
+      db
+        .prepare(
+          "SELECT applied_at FROM schema_migrations WHERE version IN (184, 185) ORDER BY version",
+        )
+        .all(),
+    ).toEqual(localVersions);
+    expect(db.prepare("SELECT cleanup_phase FROM import_jobs").all()).toEqual([]);
+    expect(db.prepare("SELECT kind FROM scoped_memories").all()).toEqual([]);
+    expect(db.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
+  });
 
   it("executes versions numerically and rolls back a failed migration", () => {
     const migrations = join(dir, "migrations");

@@ -85,7 +85,11 @@ export function createSandboxProfiles(options: ExecOptions) {
             : linuxProbeDiagnostic(output);
       const reason =
         options.platform === "linux"
-          ? await linuxIsolationFailure(await builder.ripgrepPath().catch(() => ""), diagnostic)
+          ? await linuxIsolationFailure(
+              await builder.ripgrepPath().catch(() => ""),
+              diagnostic,
+              options.env?.PATH,
+            )
           : "sandbox_dependencies_or_runtime_unavailable";
       options.onDiagnostic?.({
         runId: probeId,

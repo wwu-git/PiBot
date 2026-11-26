@@ -17,6 +17,7 @@ import { stream as anthropicMessages } from "@earendil-works/pi-ai/api/anthropic
 import { stream as openaiCompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { stream as openaiResponses } from "@earendil-works/pi-ai/api/openai-responses";
 import { normalizeContext } from "@earendil-works/pi-ai/utils/transcript";
+import { withAnthropicThreadPolicy } from "../models/anthropic-threads.ts";
 
 export type {
   AssistantMessage,
@@ -61,7 +62,11 @@ export function streamPortable(
   const transcript = normalizeContext(context);
   switch (model.api) {
     case "anthropic-messages":
-      return anthropicMessages(model as Model<"anthropic-messages">, transcript, options);
+      return anthropicMessages(
+        withAnthropicThreadPolicy(model as Model<"anthropic-messages">),
+        transcript,
+        options,
+      );
     case "openai-completions":
       return openaiCompletions(model as Model<"openai-completions">, transcript, options);
     case "openai-responses":

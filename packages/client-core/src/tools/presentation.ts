@@ -89,6 +89,11 @@ const names: Record<string, TranslationKey> = {
   execution_targets: "tool.execution_targets",
   workplace_use_runner: "tool.workplace_use_runner",
   delegate_to_agent: "tool.delegate_to_agent",
+  team_list: "tool.team_list",
+  bot_manage: "tool.bot_manage",
+  group_manage: "tool.group_manage",
+  send_to_bot: "tool.send_to_bot",
+  send_to_group: "tool.send_to_group",
 };
 // A finished phone read names what came back ("读取了手机照片 3 张"), written by the
 // brain in the run's language; the row shows that sentence instead of the generic tool name.
@@ -102,6 +107,11 @@ const summaryLabels = new Set([
   "workplace_use_runner",
   // The finished row names the agent and how its work ended.
   "delegate_to_agent",
+  // The default Pi's management and hand-off steps name what they changed or whom they asked.
+  "bot_manage",
+  "group_manage",
+  "send_to_bot",
+  "send_to_group",
 ]);
 /** A row label taken from the tool's own summary (a skill use, a finished phone read). */
 export function toolSummaryLabel(tool: { tool: string; status: string; summary: string }) {

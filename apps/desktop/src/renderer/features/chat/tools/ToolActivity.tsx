@@ -174,9 +174,7 @@ export function ToolActivity({
   return (
     <div className={styles.toolGroup}>
       {computer && <ComputerRunNotice botId={botId} runId={runId} showStopped={stoppedHere} />}
-      {attention.map((step) => renderStep(step, true))}
-      {visibleUnmatched.map(renderUnmatched)}
-      {current.map((step) => renderStep(step, false, true))}
+      {/* Steps read in order: finished ones first, then the one waiting for you or running. */}
       {(grouped.length > 0 || settledUnmatched.length > 0) && (
         <>
           <button
@@ -209,6 +207,9 @@ export function ToolActivity({
           </div>
         </>
       )}
+      {attention.map((step) => renderStep(step, true))}
+      {visibleUnmatched.map(renderUnmatched)}
+      {current.map((step) => renderStep(step, false, true))}
       {/* A server still running stays visible (and stoppable) with its step folded away. */}
       {!showGroup &&
         folded

@@ -1,3 +1,4 @@
+// Assembles the Simplified Chinese strings for the shared interface.
 import { botBrowserZh, browserDebugZh } from "@pibot/browser-contract/i18n";
 import {
   computerGuardZh,
@@ -9,11 +10,16 @@ import { externalAgentsZh } from "@pibot/external-agents-contract/i18n";
 import { mediaZh } from "@pibot/images-contract/i18n";
 import { providersZh } from "@pibot/models-contract/i18n";
 import { officeZh } from "@pibot/office-contract/i18n";
-import { connectionsZh, connectorsZh, knowledgeZh } from "@pibot/plugins-contract/i18n";
+import {
+  connectionDrawerZh,
+  connectionsZh,
+  connectorsZh,
+  knowledgeZh,
+} from "@pibot/plugins-contract/i18n";
 import { remoteZh } from "@pibot/remote-contract/i18n";
 import { routineProposalsZh, routinesZh } from "@pibot/routines-contract/i18n";
 import { skillsZh, teachZh, workflowsZh } from "@pibot/skills-contract/i18n";
-import { builtinZh, teamsZh } from "@pibot/teams-contract/i18n";
+import { builtinZh, piManagerZh, teamsZh } from "@pibot/teams-contract/i18n";
 import { changesZh, managedResourcesZh } from "@pibot/workspaces-contract/i18n";
 import { mergeTranslations } from "./merge-translations.ts";
 import { activityZh } from "./sections/activity.ts";
@@ -27,6 +33,7 @@ import { botHooksZh } from "./sections/bot-hooks.ts";
 import { capabilitiesZh } from "./sections/capabilities.ts";
 import { chatZh } from "./sections/chat.ts";
 import { commandAccessZh } from "./sections/command-access.ts";
+import { conversationImportZh } from "./sections/conversation-import.ts";
 import { draftsZh } from "./sections/drafts.ts";
 import { executionZh } from "./sections/execution.ts";
 import { filePreviewZh } from "./sections/file-preview.ts";
@@ -34,6 +41,7 @@ import { foldersZh } from "./sections/folders.ts";
 import { groupZh } from "./sections/group.ts";
 import { independentBackgroundZh } from "./sections/independent-background.ts";
 import { linuxStartupZh } from "./sections/linux-startup.ts";
+import { liveIslandZh } from "./sections/live-island.ts";
 import { memorySettingsZh } from "./sections/memory-settings.ts";
 import { messageActionsZh } from "./sections/message-actions.ts";
 import { networkZh } from "./sections/network.ts";
@@ -42,6 +50,7 @@ import { permissionsZh } from "./sections/permissions.ts";
 import { personalTodosZh } from "./sections/personal-todos.ts";
 import { policyExplanationZh } from "./sections/policy-explanation.ts";
 import { providerAuthZh } from "./sections/provider-auth.ts";
+import { providerImportZh } from "./sections/provider-import.ts";
 import { receiptZh } from "./sections/receipt.ts";
 import { runtimeZh } from "./sections/runtime.ts";
 import { settingsPagesZh } from "./sections/settings-pages.ts";
@@ -94,6 +103,10 @@ const common = {
   "theme.dark": "深色",
   "theme.system": "跟随系统",
   "theme.preview": "{theme}外观预览",
+  "chatFont.label": "对话字号",
+  "chatFont.small": "小",
+  "chatFont.medium": "中",
+  "chatFont.large": "大",
   "welcome.title": "认识一下 Pi Bot",
   "welcome.subtitle": "你的 Bot 团队，在你自己的电脑上干活",
   "welcome.progress": "第 {step} 步，共 {total} 步",
@@ -223,9 +236,15 @@ const common = {
   "settings.browserUnknown": "未知",
   "settings.browserExtension": "Pi Bot 插件",
   "settings.browserExtensionStatus.connected": "已连接",
-  "settings.browserExtensionStatus.installed": "已安装但未连接",
+  "settings.browserExtensionStatus.installed": "未连接（以前连接过）",
+  "settings.browserExtensionStatus.edgeNotListed": "尚未在 Microsoft Edge 加载项商店上架",
   "settings.browserExtensionStatus.not_installed": "未安装",
   "settings.browserExtensionStatus.unsupported": "不支持",
+  "settings.browserExtensionStatus.separate_data_dir":
+    "这个 Pi Bot 使用单独的数据目录，没有接管浏览器扩展。点「在这里连接」后，扩展改为连接这里，主程序会连不上扩展，直到这里退出。",
+  "settings.browserExtensionStatus.other_instance":
+    "浏览器扩展已连接到另一个 Pi Bot。点「在这里连接」可改为连接这里。",
+  "settings.browserExtensionConnectHere": "在这里连接",
   "settings.browserPreference": "使用方式",
   "settings.browserPreferenceUser": "优先用你的浏览器（用你的登录）",
   "settings.browserPreferenceBot": "只用 Pi Bot 自带的 Bot 浏览器",
@@ -267,6 +286,8 @@ const common = {
   "audit.commandLogs.deleted": "已按保留设置删除 {count} 个命令日志（{bytes} 字节）",
   "audit.runRetention.requested": "请求清理 {days} 天前的运行记录",
   "settings.saveError": "设置保存失败，请重试。",
+  "errors.import_format_chatgpt": "无法识别 ChatGPT 导出文件的格式。",
+  "errors.import_format_claude": "无法识别 Claude 导出文件的格式。",
   "errors.no_model": "还没有可用的模型。请先在设置里配置厂商并为这个 Bot 选择模型。",
   "errors.subscription_unsupported": "订阅登录暂不支持，请改用 API Key。",
   "errors.claude_subscription_unsupported": "Claude 订阅登录已停止支持，请改用 API Key。",
@@ -315,6 +336,7 @@ export const zhSections = {
   connectorsZh,
   knowledgeZh,
   connectionsZh,
+  connectionDrawerZh,
   browserDebugZh,
   executionZh,
   personalTodosZh,
@@ -322,6 +344,7 @@ export const zhSections = {
   agentReviewZh,
   managedResourcesZh,
   commandAccessZh,
+  conversationImportZh,
   panelsZh,
   topicWorkplaceZh,
   yoloZh,
@@ -338,9 +361,11 @@ export const zhSections = {
   networkZh,
   groupZh,
   teamsZh,
+  piManagerZh,
   builtinZh,
   activityZh,
   providerAuthZh,
+  providerImportZh,
   receiptZh,
   computerGuardZh,
   backgroundZh,
@@ -361,6 +386,7 @@ export const zhSections = {
   credentialsZh,
   secretZh,
   settingsPagesZh,
+  liveIslandZh,
 } as const;
 
 export const zh = mergeTranslations(zhSections);

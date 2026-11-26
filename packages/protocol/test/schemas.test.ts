@@ -1,3 +1,4 @@
+// Checks the shared RPC schema matrix at the protocol boundary.
 // Keep the published RPC schemas covered by the existing contract fixtures.
 import { DEFAULT_EXECUTION_LIMITS } from "@pibot/protocol-base";
 import { describe, expect, it } from "vitest";
@@ -65,6 +66,18 @@ import { workspaceMethodCases } from "./fixtures/workspace.ts";
 const id = "00000000-0000-4000-8000-000000000001";
 const computerToken = "A".repeat(43);
 const date = "2026-10-09T00:00:00.000Z";
+const dream = {
+  id,
+  startedAt: date,
+  finishedAt: date,
+  status: "done" as const,
+  merged: 1,
+  retired: 2,
+  proposed: 3,
+  tokens: 100,
+  costUsd: 0,
+  undoable: true,
+};
 const image = { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" } as const;
 const executionTask = {
   id,
@@ -232,6 +245,8 @@ const permissions: MethodResults["permissions.get"] = {
   levels: {
     connector: "ask",
     agent_delegation: "ask",
+    bot_management: "ask",
+    work_dispatch: "ask",
     run_command: "ask",
     computer: "never",
     read_file: "always",
@@ -453,6 +468,38 @@ const methodCases = {
     badResult: {},
   },
   "import.preview": { params: { source: "fixture" }, result: null, badParams: {}, badResult: {} },
+  "import.reviewMemories": {
+    params: { importId: id, botId: id, scope: "user" },
+    result: { reviewId: id, items: [], omitted: 0 },
+    badParams: {},
+    badResult: {},
+  },
+  "import.estimateDistillation": {
+    params: { importId: id, botId: id },
+    result: null,
+    badParams: {},
+    badResult: {},
+  },
+  "import.reviewPlan": {
+    params: { importId: id },
+    result: { reviewId: id, memories: [], omitted: 0, folders: [], projects: [] },
+    badParams: {},
+    badResult: {},
+  },
+  "import.reviewProject": {
+    params: { importId: id, key: "claude:p1", folder: { kind: "new" } },
+    result: {
+      reviewId: id,
+      file: "AGENTS.md",
+      folder: "~/Documents/p1",
+      path: "~/Documents/p1/AGENTS.md",
+      diff: "+# p1",
+      lines: 1,
+      create: "folder",
+    },
+    badParams: { importId: id, key: "claude:p1", folder: { kind: "path", path: "/tmp" } },
+    badResult: {},
+  },
   "import.start": {
     params: { importId: id, botId: id },
     result: importStatus,
@@ -460,10 +507,16 @@ const methodCases = {
     badResult: {},
   },
   "import.status": { params: { importId: id }, result: importStatus, badParams: {}, badResult: {} },
+  "import.history": {
+    params: { limit: 20 },
+    result: { items: [{ ...importStatus, createdAt: null }], next: null },
+    badParams: { limit: 0 },
+    badResult: {},
+  },
   "import.cancel": { params: { importId: id }, result: importStatus, badParams: {}, badResult: {} },
   "import.undo": {
     params: { importId: id },
-    result: { ...importStatus, state: "undone" },
+    result: { ...importStatus, state: "undoing", removed: { topics: 0, messages: 0 } },
     badParams: {},
     badResult: {},
   },
@@ -1198,6 +1251,12 @@ const methodCases = {
     badParams: { unexpected: true },
     badResult: { unexpected: true },
   },
+  "topics.metadata": {
+    params: { botId: id, topicId: id },
+    result: { title: "Imported topic", importSource: "claude", readOnly: true },
+    badParams: { botId: id, topicId: "invalid" },
+    badResult: { readOnly: true, piSessionFile: "/tmp/session.jsonl" },
+  },
   "topics.list": {
     params: { botId: id, query: "Topic" },
     result: [{ ...conversation, messageCount: 2, isCurrent: true }],
@@ -1641,6 +1700,12 @@ const methodCases = {
     badParams: {},
     badResult: [],
   },
+  "groups.tasks.brief": {
+    params: { groupId: id, taskId: id },
+    result: null,
+    badParams: { groupId: id },
+    badResult: { step: {} },
+  },
   "groups.tasks.execution": {
     params: { groupId: id, taskId: id },
     result: { items: [], nextBefore: null, checkpoint: null, resultMessageId: null },
@@ -1701,10 +1766,34 @@ const methodCases = {
     badParams: { unexpected: true },
     badResult: { unexpected: true },
   },
+  "memory.dream.last": {
+    params: {},
+    result: dream,
+    badParams: { botId: id },
+    badResult: { ...dream, retired: -1 },
+  },
+  "memory.dream.run": {
+    params: { ownerInitiated: true },
+    result: dream,
+    badParams: { ownerInitiated: false },
+    badResult: null,
+  },
+  "memory.dream.changes": {
+    params: { id },
+    result: [{ proposalId: id, botName: "Bot", text: "Fixture" }],
+    badParams: {},
+    badResult: [{ proposalId: id }],
+  },
+  "memory.dream.undo": {
+    params: { id },
+    result: { ok: true },
+    badParams: {},
+    badResult: {},
+  },
   "memory.status": {
     params: { botId: id },
     result: { activeCount: 1, archivedCount: 0, unusedCount: 0, needsOrganization: false },
-    badParams: {},
+    badParams: { scope: "bot" },
     badResult: { activeCount: -1 },
   },
   "memory.project": {
@@ -1942,6 +2031,12 @@ const methodCases = {
   "search.removeConfig": {
     params: {},
     result: { ok: true },
+    badParams: { unexpected: true },
+    badResult: { unexpected: true },
+  },
+  "teams.dispatches": {
+    params: { messageId: id },
+    result: [],
     badParams: { unexpected: true },
     badResult: { unexpected: true },
   },
@@ -2431,6 +2526,18 @@ const methodCases = {
     badParams: { defaultModel: { provider: "openai", id: "test-model", thinkingLevel: "extreme" } },
     badResult: { ...settings, openAtLogin: 1 },
   },
+  "providerImport.stage": {
+    params: { status: "refused" },
+    result: { status: "refused" },
+    badParams: { status: "review" },
+    badResult: { status: "refused", key: "fake-key" },
+  },
+  "providerImport.resolve": {
+    params: { id, botIds: null },
+    result: { ok: true },
+    badParams: { id, botIds: [] },
+    badResult: { ok: false },
+  },
   "providers.list": {
     params: undefined,
     result: [provider],
@@ -2448,6 +2555,18 @@ const methodCases = {
     result: { ok: true },
     badParams: { providerId: 1 },
     badResult: { ok: "true" },
+  },
+  "providers.addModel": {
+    params: { providerId: "openai", modelId: "gpt-6.2-sol" },
+    result: { ok: true },
+    badParams: { providerId: "openai", modelId: "gpt 6" },
+    badResult: { ok: false },
+  },
+  "providers.removeModel": {
+    params: { providerId: "openai", modelId: "gpt-6.2-sol" },
+    result: { ok: true },
+    badParams: { providerId: "openai", modelId: "" },
+    badResult: { ok: false },
   },
   "providers.remove": {
     params: { providerId: "openai" },
@@ -2878,6 +2997,18 @@ const methodCases = {
     badParams: { afterSeq: -1 },
     badResult: [{ ...envelope, params: { ...envelope.params, seq: 0 } }],
   },
+  "local.detectMagpie": {
+    params: {},
+    result: { running: true, port: 43210, version: "0.1.0" },
+    badParams: { port: 65536 },
+    badResult: { running: true, port: 43210 },
+  },
+  "local.configureMagpie": {
+    params: { port: 43210 },
+    result: { count: 1 },
+    badParams: { port: 0 },
+    badResult: { count: 0 },
+  },
   "local.detectOllama": {
     params: undefined,
     result: { running: true, baseUrl: custom.baseUrl, models: [{ id: "model" }] },
@@ -3270,6 +3401,12 @@ const methodCases = {
   },
 } satisfies Cases<MethodParams, MethodResults>;
 const hostCases = {
+  "host.memoryDreamActivity": {
+    params: {},
+    result: { idleSeconds: 3600, supply: "ac" },
+    badParams: { unknown: true },
+    badResult: { idleSeconds: -1, supply: "ac" },
+  },
   "host.office.render": {
     params: { format: "pptx", data: "AAAA", pages: [1] },
     result: [],
@@ -3951,7 +4088,25 @@ const eventCases = {
   },
   "runtime.commands": { payload: { paused: "retrying" }, bad: { paused: "paused" } },
   "runtime.activeRuns": { payload: { count: 1 }, bad: { count: -1 } },
+  "runtime.liveActivity": {
+    payload: {
+      items: [
+        {
+          key: `run:${id}`,
+          botId: id,
+          botName: "Pi",
+          avatar: { shape: "blob", color: "violet", eyes: "marks", image: null },
+          kind: "chat",
+          title: "Draft the report",
+          startedAt: date,
+          target: { view: "group", groupId: id },
+        },
+      ],
+    },
+    bad: { items: [{ key: "x", botId: id, kind: "busy" }] },
+  },
   "bots.changed": { payload: { botId: id, reason: "created" }, bad: { unexpected: true } },
+  "teams.dispatch.changed": { payload: { messageId: id }, bad: { unexpected: true } },
   "groups.changed": { payload: { groupId: id, reason: "created" }, bad: { unexpected: true } },
   "group.task": { payload: { task }, bad: { unexpected: true } },
   "group.paused": {
@@ -3962,6 +4117,8 @@ const eventCases = {
     payload: { groupId: id, kind: "memory" },
     bad: { groupId: id, kind: "other" },
   },
+  "memory.dream.finished": { payload: { id }, bad: { unexpected: true } },
+  "memory.status.changed": { payload: { botId: id }, bad: { unexpected: true } },
   "memory.sortProgress": { payload: { processed: 0, total: 0, moves: 0 }, bad: { processed: -1 } },
   "memory.changed": {
     payload: { botId: id, reason: "added", memoryId: id },

@@ -226,8 +226,25 @@ export class ExecutionService {
     context: Pick<ToolRunContext, "botId" | "conversationId"> & Partial<ToolRunContext>,
     tool: string,
   ) {
+    return this.allowsInMode(context, tool, () => this.mode(context));
+  }
+
+  /** One synchronous catalog pass can share the first successful scope lookup. */
+  catalogAvailability(
+    context: Pick<ToolRunContext, "botId" | "conversationId"> & Partial<ToolRunContext>,
+  ): (tool: string) => boolean {
+    let mode: ExecutionMode | undefined;
+    const readMode = () => (mode ??= this.mode(context));
+    return (tool) => this.allowsInMode(context, tool, readMode);
+  }
+
+  private allowsInMode(
+    context: Pick<ToolRunContext, "todoRun">,
+    tool: string,
+    readMode: () => ExecutionMode,
+  ) {
     if (context.todoRun?.paused?.question && tool !== "todo_list") return false;
-    return this.mode(context) !== "plan" || PLAN_TOOLS.has(tool);
+    return readMode() !== "plan" || PLAN_TOOLS.has(tool);
   }
 
   execute(context: ToolRunContext, call: LocalToolCall): LocalToolResult {

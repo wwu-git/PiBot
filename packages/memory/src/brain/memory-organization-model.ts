@@ -1,3 +1,4 @@
+// Selects the primary text model for memory organization.
 import type { DatabaseSync } from "node:sqlite";
 import { BotsRepo, SettingsRepo } from "@pibot/storage";
 
@@ -10,8 +11,9 @@ export function organizationModel(db: DatabaseSync, botId: string) {
   const bot = new BotsRepo(db).get(botId);
   if (!bot || bot.archivedAt) return undefined;
   // An image Bot's own model only draws; organizing memories needs the text default.
-  if (bot.imageMode) return new SettingsRepo(db).get().defaultModel ?? undefined;
+  const { defaultModel, auxiliaryModel } = new SettingsRepo(db).get();
+  if (bot.imageMode) return defaultModel ?? auxiliaryModel ?? undefined;
   return bot.modelProvider && bot.modelId
     ? { provider: bot.modelProvider, id: bot.modelId }
-    : (new SettingsRepo(db).get().defaultModel ?? undefined);
+    : (defaultModel ?? auxiliaryModel ?? undefined);
 }

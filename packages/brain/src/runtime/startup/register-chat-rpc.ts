@@ -59,7 +59,7 @@ export function registerChatRpc(ctx: StartupContext) {
         workplace,
         mentions,
       },
-      { source },
+      { source, phone },
     ) => {
       if (groupId)
         return ctx.groups.send(
@@ -75,7 +75,7 @@ export function registerChatRpc(ctx: StartupContext) {
           },
           undefined,
           undefined,
-          { inputOrigin: source === "acp" ? "acp" : "user" },
+          { inputOrigin: source === "acp" ? "acp" : phone ? "phone" : "user" },
         );
       if (!botId) throw new RpcError(-32602, "Invalid chat target");
       return ctx.chat.send(
@@ -88,7 +88,7 @@ export function registerChatRpc(ctx: StartupContext) {
         workplace,
         initialMode,
         replyToMessageId,
-        { inputOrigin: source === "acp" ? "acp" : "user" },
+        { inputOrigin: source === "acp" ? "acp" : phone ? "phone" : "user" },
       );
     },
   );

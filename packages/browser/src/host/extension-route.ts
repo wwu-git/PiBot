@@ -1,10 +1,12 @@
 import {
   type BrowserBlocked,
   type BrowserRules,
+  browserPrivateNetworkHost,
   RpcError,
   RpcErrorCodes,
 } from "@pibot/browser-contract/full";
 import type { Logger } from "@pibot/observability";
+import { approvedPrivateOrigin } from "./network.ts";
 import type { BrowserGuard } from "./types.ts";
 
 export type UserBrowserId = "chrome" | "edge" | "brave" | "chromium" | "firefox";
@@ -47,8 +49,9 @@ export interface UserBrowser {
     } | null;
     supported: boolean;
     extension: "connected" | "installed" | "not_installed" | "unsupported";
+    registration?: "separate_data_dir" | "other_instance";
   }>;
-  register(enabled: boolean): Promise<void>;
+  register(enabled: boolean, options?: { explicit?: boolean; takeOver?: boolean }): Promise<void>;
 }
 
 type Page = {
@@ -89,6 +92,7 @@ const hostOf = (href: string) => {
  * Returns `undefined` to let the Bot browser handle the call.
  */
 export function createExtensionRoute(user: UserBrowser, guard: BrowserGuard, logger: Logger) {
+  const privateLanes = new Map<string, string>();
   return async (
     method: string,
     params: Record<string, unknown>,
@@ -97,6 +101,25 @@ export function createExtensionRoute(user: UserBrowser, guard: BrowserGuard, log
   ): Promise<{ value: unknown } | undefined> => {
     const name = method.replace(/^host\.browser\./, "");
     if (!ROUTED.has(name) || !rules?.userBrowser || !user.supported()) return undefined;
+    // An explicit open chooses its backend. A private grant alone must not move an existing
+    // public extension tab or replay its refs/forms in a different browser.
+    const lane = JSON.stringify([params.groupId ?? null, params.botId]);
+    const run = typeof params.runId === "string" ? params.runId : "";
+    if (privateLanes.has(lane) && privateLanes.get(lane) !== run) privateLanes.delete(lane);
+    if (name === "open") {
+      let privateOpen = false;
+      try {
+        privateOpen = !!browserPrivateNetworkHost(new URL(String(params.url)).hostname);
+      } catch {
+        /* The ordinary URL boundary reports malformed input. */
+      }
+      if (privateOpen) {
+        if (privateLanes.size >= 256) privateLanes.delete(privateLanes.keys().next().value ?? "");
+        privateLanes.set(lane, run);
+        return undefined;
+      }
+      privateLanes.delete(lane);
+    } else if (privateLanes.get(lane) === run) return undefined;
     if (!user.extension() && !(await user.ensureConnected?.(signal))) {
       // No extension reached us: the Bot browser takes this action, and the run's topic shows the
       // install card once (the brain keeps one notice per conversation).
@@ -135,6 +158,10 @@ export function createExtensionRoute(user: UserBrowser, guard: BrowserGuard, log
       };
     };
     const refused = async (entry: BrowserBlocked) => {
+      // The first refusal can ask for the target's run grant. After approval, require a new
+      // explicit open; a click/ref or form from the extension cannot be replayed safely here.
+      if (entry.kind === "private" && approvedPrivateOrigin(rules, new URL(entry.url)))
+        throw new RpcError(RpcErrorCodes.unsupported, "browser_private_open_required");
       logger.info(
         JSON.stringify({ module: "browser-extension", event: "blocked", kind: entry.kind, botId }),
       );

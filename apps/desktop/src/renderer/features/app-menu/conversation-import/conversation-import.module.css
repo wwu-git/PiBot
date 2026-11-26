@@ -1,0 +1,340 @@
+/* 导入记录 sits under the source choice; an empty history renders nothing. */
+.history {
+  margin-top: 28px;
+}
+.history:empty {
+  display: none;
+}
+.more {
+  display: flex;
+  justify-content: center;
+  padding: 6px;
+}
+.intro {
+  margin: 0 0 18px;
+  color: var(--text2);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.sources {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  min-inline-size: 0;
+  padding: 0;
+  margin: 24px 0;
+  border: 0;
+  --page-c: var(--avatar-orange);
+}
+.card {
+  min-inline-size: 0;
+  margin: 0 0 18px;
+  padding: 14px;
+  border: 1px solid var(--b1);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+  overflow-wrap: anywhere;
+}
+.card p {
+  margin: 0 0 8px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+}
+.error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+/* Preview: source strip → tabs → sections of rows → sticky summary footer. */
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.monogram {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--avatar-orange);
+  color: var(--on-tone);
+  font-weight: 700;
+  font-size: 15px;
+}
+.stripText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.stripText small {
+  color: var(--text2);
+  font-size: 12.5px;
+}
+.tabs {
+  width: min(560px, 100%);
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.hint {
+  color: var(--text2);
+  font-size: 12.5px;
+  font-weight: 400;
+  text-align: end;
+  overflow-wrap: anywhere;
+}
+/* One item of a card: its row plus the lines under it share one divider. */
+.item {
+  min-width: 0;
+}
+.item[data-off] > div:first-child {
+  opacity: 0.55;
+}
+.reviewText {
+  white-space: pre-wrap;
+}
+.dest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 0 16px 12px 64px;
+  margin-top: -4px;
+  min-width: 0;
+}
+.break {
+  flex-basis: 100%;
+  height: 0;
+}
+.meta {
+  color: var(--text2);
+  font-size: 12.5px;
+}
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.link:focus-visible {
+  outline: 2px solid var(--prim);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.confirmed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ok);
+  font-size: 12.5px;
+}
+/* A destination chip: a Bot, 关于你 or a folder, with a caret; it wraps rather than overflows. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 9px 0 6px;
+  border: 1px solid var(--b2);
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chip:hover,
+.chip[aria-expanded="true"] {
+  background: var(--hover);
+}
+.chip:focus-visible {
+  outline: 2px solid var(--prim);
+  outline-offset: 2px;
+}
+.chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.chipLabel {
+  min-width: 0;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.caret {
+  flex: none;
+  color: var(--text2);
+}
+.folderIcon {
+  flex: none;
+  color: var(--avatar-orange);
+}
+/* 关于你 is a person, so its tile is round (the shared tile is a rounded square). */
+.person.person.person {
+  border-radius: 50%;
+}
+.menuLabel {
+  padding: 6px 10px 4px;
+  color: var(--text2);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.menuItem {
+  flex: 1;
+  min-width: 0;
+}
+.menuItem small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.check {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--accent);
+}
+/* The inline AGENTS.md diff, written only after "看过了，写入". */
+.diff {
+  margin: 0 16px 14px 64px;
+  padding: 12px;
+  border: 1px solid var(--b1);
+  border-radius: 12px;
+  background: var(--side);
+  min-width: 0;
+}
+.diffPath {
+  margin: 0 0 8px;
+  color: var(--text2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.diff pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  color: var(--ok);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diffFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.diffFoot span {
+  flex: 1 1 160px;
+  color: var(--text2);
+  font-size: 12.5px;
+}
+.compare {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0 16px 14px 64px;
+}
+.compare section {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--b1);
+  border-radius: 12px;
+  background: var(--side);
+}
+.compare h3 {
+  margin: 0 0 6px;
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.compare p {
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text2);
+  font-size: 12.5px;
+}
+.notes p {
+  margin: 0;
+}
+.footer {
+  position: sticky;
+  bottom: -24px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -24px -24px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--b1);
+  background: var(--bg);
+}
+.summary {
+  flex: 1 1 220px;
+  min-width: 0;
+  color: var(--text2);
+  font-size: 13px;
+}
+.summary strong {
+  color: var(--text);
+}
+@media (max-width: 700px) {
+  .sources {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dest {
+    padding-inline-start: 16px;
+  }
+  .diff,
+  .compare {
+    margin-inline-start: 16px;
+  }
+}
+@media (max-width: 440px) {
+  .sources {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

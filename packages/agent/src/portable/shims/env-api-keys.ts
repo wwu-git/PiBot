@@ -1,4 +1,4 @@
-// Phone build stand-in for pi-ai 1.4.0 `dist/env-api-keys.js`. The original discovers keys from
+// Phone build stand-in for pi-ai 1.6.0 `dist/env-api-keys.js`. The original discovers keys from
 // process.env and probes files through `import(variable)`, which Metro refuses to bundle; a phone
 // has no environment keys or credential files, so only the names the adapters import remain.
 // Keep the names in step with the locked pi-ai version (Metro fails loudly on a missing export).

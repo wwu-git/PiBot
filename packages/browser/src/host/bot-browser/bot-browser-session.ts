@@ -26,6 +26,7 @@ export function installBrowserRules(this: BotBrowserOperations) {
     this.session,
     {
       rules: () => this.rules,
+      privateRoute: (rules, url) => this.privateTransport.routes(rules, url),
       // A recording is the user's own browsing from its first page on (teach opens that page just
       // before taking over); a Bot cannot act meanwhile, handoff refuses while recording.
       takeover: () => this.takeover || this.recording.active,

@@ -62,7 +62,7 @@ export function contextBudget(contextWindow?: number): ContextBudget {
   // The pre-cap reserve (20% of the window, 256..16384) still bounds small-window summaries.
   const baseReserve = Math.min(16384, Math.max(256, Math.floor(window * 0.2)));
   // pi has no separate trigger setting; raising reserveTokens is the public way to lower it.
-  // Verified in pi 1.4.0 dist: shouldCompact still reads reserveTokens; generateSummary ignores
+  // Verified in pi 1.6.0 dist: shouldCompact still reads reserveTokens; generateSummary ignores
   // it. Our checkpoint has its own output budget. Request max output is clamped against the
   // real contextWindow (pi-ai clampMaxTokensToContext), and the cut point uses keepRecentTokens.
   const outputReserve = Math.min(RESPONSE_MAX_TOKENS, Math.max(256, Math.floor(window * 0.2)));

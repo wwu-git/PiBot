@@ -1,12 +1,19 @@
+// Builds the pi runtime using Pi Bot configuration and credential ports.
 import { resolve } from "node:path";
 import type { Provider } from "@earendil-works/pi-ai";
 import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { CustomProviderFetchSchema } from "@pibot/protocol-base";
+import {
+  CustomProviderFetchSchema,
+  IMPORTED_MAGPIE_PREFIX,
+  importedMagpieRoute,
+} from "@pibot/protocol-base";
 import {
   CHATGPT_CODEX_PROVIDER,
   CHATGPT_PLAN_PROVIDER,
   CHATGPT_PLAN_PROVIDERS,
   isChatGPTPlanProvider,
+  MAGPIE_PROVIDER,
+  magpiePort,
 } from "@pibot/protocol-base/provider-catalog";
 import { assertSafeSecretValue } from "@pibot/secrets";
 import { cloudAuth, oauthStore } from "../auth/auth-adapter.ts";
@@ -32,6 +39,7 @@ import type {
 } from "../core/types.ts";
 import { CheckpointCache } from "../extensions/checkpoint-result.ts";
 import { imageProvider } from "../images/image-catalog.ts";
+import { withAddedModels } from "../models/added-models.ts";
 import { listProviderCatalog } from "../models/catalog.ts";
 import { identifyProvider } from "../models/client-identity.ts";
 import { createCustomModelResolver } from "../models/custom-models.ts";
@@ -39,7 +47,7 @@ import { createModelCatalogCache } from "../models/model-catalog-cache.ts";
 import { type CatalogSnapshot, withOpenRouterCatalog } from "../models/openrouter-catalog.ts";
 import { createAuxiliaryModelSelector } from "./auxiliary-model.ts";
 import { CacheDiagnosticsMemory } from "./cache-diagnostic.ts";
-import { loadPiSdk } from "./pi-sdk.ts";
+import { loadPiSdk, piSdkLoaded, sdkWarmupCode, warmPiSdkCompileCache } from "./pi-sdk.ts";
 import { createAuxiliaryOperations } from "./runtime-parts/runtime-auxiliary.ts";
 import { createCompactionOperations } from "./runtime-parts/runtime-compaction.ts";
 import { createImagesOperations } from "./runtime-parts/runtime-images.ts";
@@ -90,12 +98,22 @@ export function createRuntimeContext(deps: AgentRuntimeDeps) {
         ids.has(parsed.data.id)
       )
         throw new AgentError("internal");
+      if (
+        parsed.data.id === MAGPIE_PROVIDER.id &&
+        (magpiePort(parsed.data.baseUrl) === undefined ||
+          parsed.data.api !== "openai-completions" ||
+          parsed.data.headers ||
+          parsed.data.imageApi ||
+          parsed.data.imageModels?.length)
+      )
+        throw new AgentError("internal");
       ids.add(parsed.data.id);
       return { ...parsed.data, id: parsed.data.id };
     });
   }
 
   async function injectKey(runtime: ModelRuntime, id: string): Promise<void> {
+    if (id === MAGPIE_PROVIDER.id) return;
     if (isChatGPTPlanProvider(id)) {
       // The ChatGPT plan authenticates through its stored OAuth credential, never an API key.
       if (chatGPTSubscriptionAccess.available) return;
@@ -103,7 +121,11 @@ export function createRuntimeContext(deps: AgentRuntimeDeps) {
     }
     if (deps.auth?.mode(id) === "oauth") throw new AgentError("subscription_unsupported");
     if (deps.auth?.mode(id) === "cloud") return;
-    const key = await deps.getApiKey(id);
+    const saved = await deps.getApiKey(id);
+    const magpie = id.startsWith(IMPORTED_MAGPIE_PREFIX)
+      ? deps.customProviders().find((config) => config.id === id)
+      : undefined;
+    const key = saved ?? (magpie && importedMagpieRoute(magpie) ? "magpie-pibot" : undefined);
     if (key !== undefined) {
       assertSupportedCredential(key);
       assertSafeSecretValue(key);
@@ -143,6 +165,7 @@ export function createRuntimeContext(deps: AgentRuntimeDeps) {
     const key = JSON.stringify([
       snapshot?.updatedAt,
       custom,
+      deps.addedModels?.() ?? {},
       catalog.map((provider) => [
         deps.auth?.mode(provider.id) ?? null,
         deps.hasApiKey(provider.id),
@@ -163,8 +186,14 @@ export function createRuntimeContext(deps: AgentRuntimeDeps) {
   async function createRuntime(snapshot?: CatalogSnapshot) {
     let settleAuth = async () => {};
     sanitizeBrainEnv(process.env, dataDir);
+    await warmPiSdkCompileCache().catch((error: unknown) => {
+      // Compile-cache warmup is an optimization. The main-thread import remains the source of
+      // truth, but a warm-up that never works must be visible in the log.
+      deps.sdkWarmupFailed?.(sdkWarmupCode(error));
+    });
     const pi = await sdk();
     const custom = configs();
+    const added = deps.addedModels?.() ?? {};
     const runtime = await pi.ModelRuntime.create({
       credentials: deps.auth ? oauthStore(deps.auth) : literalCredentials(),
       modelsPath: null,
@@ -172,8 +201,17 @@ export function createRuntimeContext(deps: AgentRuntimeDeps) {
       refreshOnCreate: false,
     });
     const registerNativeProvider = (provider: Provider, config?: CustomProviderConfig) => {
+      const catalogued = withOpenRouterCatalog(provider, snapshot);
       const images = identifyProvider(
-        imageProvider(openaiGoogle(withOpenRouterCatalog(provider, snapshot)), config),
+        imageProvider(
+          openaiGoogle(
+            builtinIds.has(provider.id)
+              ? withAddedModels(catalogued, added[provider.id], customModels.resolve)
+              : catalogued,
+          ),
+          config,
+          { fetchImageUrl: deps.fetchImageUrl },
+        ),
       );
       runtime.registerNativeProvider(deps.network?.wrap(images) ?? images);
     };
@@ -290,7 +328,16 @@ export function createRuntimeContext(deps: AgentRuntimeDeps) {
               }
             : {}),
           auth: {
-            apiKey: literalAuth(true, () => deps.hasApiKey(config.id), true, config.headers),
+            apiKey: literalAuth(
+              true,
+              () =>
+                deps.hasApiKey(config.id) ||
+                (config.id.startsWith(IMPORTED_MAGPIE_PREFIX) && importedMagpieRoute(config)),
+              true,
+              config.id === MAGPIE_PROVIDER.id
+                ? { authorization: `Bearer ${MAGPIE_PROVIDER.attribution}` }
+                : config.headers,
+            ),
           },
         },
         config,
@@ -349,6 +396,7 @@ export function createRuntimeContext(deps: AgentRuntimeDeps) {
     injectKey,
     buildRuntime,
     deferSdk,
+    sdk,
     deps,
     auxiliaryModel,
     customModels,
@@ -377,7 +425,16 @@ export function createAgentRuntime(deps: AgentRuntimeDeps): AgentRuntime {
     deferSdk: context.deferSdk,
     preloadSdk: async () => {
       sanitizeBrainEnv(process.env, context.dataDir);
-      await loadPiSdk();
+      try {
+        await warmPiSdkCompileCache();
+      } catch (error) {
+        throw new Error(sdkWarmupCode(error));
+      }
+    },
+    loadSdkWhenIdle: async () => {
+      if (piSdkLoaded()) return "already_loaded";
+      await context.sdk();
+      return "loaded";
     },
     listImageModels: images.listImageModels,
     generateImage: images.generateImage,

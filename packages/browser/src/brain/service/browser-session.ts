@@ -527,6 +527,7 @@ export class BrowserService {
           this.lastRules.set(context.botId, {
             ...rules,
             runId: undefined,
+            privateOrigins: [],
             readRoots: [],
             downloadsDir: null,
           });

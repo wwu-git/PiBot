@@ -15,6 +15,7 @@ import { provisionBuiltinMethods } from "./builtin/methods.ts";
 import { BuiltinService, registerBuiltinRpc } from "./builtin/service.ts";
 import { BuiltinUpdates, registerBuiltinUpdateRpc } from "./builtin/updates.ts";
 import { RoleCatalogService, withoutAlwaysCommands } from "./cloud/role-catalog.ts";
+import { registerPiManager } from "./manager/index.ts";
 import { defaultBuiltinDir } from "./resources/builtin-dir.ts";
 import { registerTeamRpc, TeamService } from "./teams/team-service.ts";
 
@@ -197,6 +198,7 @@ export function teamsCapability(
           return work;
         });
       registerTeamRpc(handle, teams);
+      const piManager = registerPiManager(ctx, handle);
       registerBuiltinRpc(handle, builtin);
       registerBuiltinUpdateRpc(handle, updates);
       handle("roleCatalog.get", () => cloud.state());
@@ -241,10 +243,14 @@ export function teamsCapability(
           updates.idle,
       });
       return {
-        start: scheduleMethods,
+        start() {
+          piManager.start();
+          scheduleMethods();
+        },
         afterReady: (signal) => builtin.checkConsistency(signal),
         async stop() {
           closed = true;
+          piManager.stop();
           methodsAbort.abort();
           await updates.stop();
           await Promise.all([methodsWork, autoWork]);

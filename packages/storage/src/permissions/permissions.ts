@@ -34,6 +34,9 @@ export const DEFAULT_PERMISSIONS = Object.freeze({
     web: "always",
     // Each hand-off to an external agent asks until the user allows it for good.
     agent_delegation: "ask",
+    // Only the default Pi's own override is ever changed; the default asks every time.
+    bot_management: "ask",
+    work_dispatch: "ask",
   }),
   network: Object.freeze({ allowAll: true, domains: Object.freeze([] as string[]) }),
   pathEntries: Object.freeze([] as string[]),

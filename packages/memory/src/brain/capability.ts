@@ -1,8 +1,11 @@
 // Registers memory services and owns the lifetime of the maintenance workers.
 import type { BrainCapability } from "@pibot/brain/kit";
 import { registerGroupMemoryRpc } from "./group-memory-service.ts";
+import { createImportDistillation } from "./import-distillation.ts";
+import { MemoryDream } from "./memory-dream.ts";
 import { MemoryExtractionQueue } from "./memory-extraction-queue.ts";
 import { registerMemoryImport } from "./memory-import.ts";
+import { registerMemoryStatus } from "./memory-maintenance-status.ts";
 import { registerMemoryManagement } from "./memory-management.ts";
 import { MemoryOrganizationQueue } from "./memory-organization-queue.ts";
 import { proposeScopeMoves } from "./memory-scope-moves.ts";
@@ -19,10 +22,20 @@ export function memoryCapability(): BrainCapability {
         ),
       );
       registerMemoryRpc(ctx.rpc.handle, memory);
-      // Both workers call the same auxiliary model, so each treats a running run of the
-      // other as busy. Two parallel model calls would double the burst on a small local model and
-      // make the shared daily budget overshoot before either result is written.
+      registerMemoryStatus(ctx.rpc.handle, ctx.db, memory);
+      const statusChanged = (botId: string) => ctx.peer.emit("memory.status.changed", { botId });
+      // Serialize maintenance model calls so their results count toward the shared daily budget
+      // before another worker spends it.
       let extraction: MemoryExtractionQueue | undefined;
+      let dream: MemoryDream | undefined;
+      const importDistillation = createImportDistillation(
+        ctx,
+        () =>
+          ctx.chat.queue.isIdle() &&
+          organization.idle() &&
+          (extraction?.idle() ?? true) &&
+          (dream?.idle() ?? true),
+      );
       const healthChanged = () => ctx.peer.emit("inbox.changed", {});
       const organization = new MemoryOrganizationQueue({
         db: ctx.db,
@@ -30,7 +43,13 @@ export function memoryCapability(): BrainCapability {
         logger: ctx.logger,
         memory,
         healthChanged,
-        isIdle: () => ctx.chat.queue.isIdle() && (extraction?.idle() ?? true),
+        statusChanged,
+        automatic: () => !dream?.enabled(),
+        isIdle: () =>
+          ctx.chat.queue.isIdle() &&
+          (extraction?.idle() ?? true) &&
+          (dream?.idle() ?? true) &&
+          importDistillation.idle(),
         draftMemories: ctx.agent.draftMemories?.bind(ctx.agent),
       });
       ctx.rpc.handle("memory.sortIntoPlace", async ({ runId }, { signal }) =>
@@ -48,11 +67,51 @@ export function memoryCapability(): BrainCapability {
         logger: ctx.logger,
         memory,
         healthChanged,
-        isIdle: () => organization.idle(),
-        isBotIdle: (botId) => ctx.chat.queue.isBotIdle(botId),
+        statusChanged,
+        isIdle: () => organization.idle() && (dream?.idle() ?? true) && importDistillation.idle(),
+        isBotIdle: (botId, correction) => ctx.chat.queue.isBotIdle(botId, correction),
+        onAvailable: (listener) => ctx.chat.queue.onAvailable(listener),
+        publishReply: (message, botId) => {
+          if (!message.runId) return;
+          ctx.peer.emit("chat.message", {
+            botId,
+            conversationId: message.conversationId,
+            runId: message.runId,
+            messageId: message.id,
+            message,
+          });
+        },
         onBotWork: (listener) => ctx.chat.queue.onBotWork(listener),
         draftMemories: ctx.agent.draftMemories?.bind(ctx.agent),
       });
+      dream = new MemoryDream({
+        db: ctx.db,
+        memory,
+        redactor: ctx.redactor,
+        logger: ctx.logger,
+        isIdle: () =>
+          ctx.chat.queue.isIdle() &&
+          organization.idle() &&
+          (extraction?.idle() ?? true) &&
+          importDistillation.idle() &&
+          ctx.local.background.isIdle(),
+        interrupt: ctx.sleep.interrupt,
+        activity: ctx.host.memoryDreamActivity,
+        draftMemories: ctx.agent.draftMemories?.bind(ctx.agent),
+        finished: (id) => ctx.peer.emit("memory.dream.finished", { id }),
+      });
+      const memoryDream = dream;
+      const releaseDreamWork = ctx.chat.queue.onBotWork(() => memoryDream.userWork());
+      ctx.sleep.participate({ idle: () => memoryDream.idle() });
+      ctx.rpc.handle("memory.dream.last", async () => memoryDream.last());
+      ctx.rpc.handle("memory.dream.run", async (_, { signal }) => memoryDream.run(true, signal));
+      ctx.rpc.handle("memory.dream.changes", async ({ id }, { signal }) =>
+        memoryDream.changes(id, signal),
+      );
+      ctx.rpc.handle("memory.dream.undo", async ({ id }, { signal }) =>
+        memoryDream.undo(id, signal),
+      );
+      memoryDream.start();
       extraction.start();
       organization.start();
       // Maintainers 2026-11-11: offer to hand Bot work facts back from the shared user scope. Pure SQL
@@ -80,6 +139,7 @@ export function memoryCapability(): BrainCapability {
       const releasePort = ctx.memory.provide({
         personal: memory,
         extraction,
+        importDistillation,
         group: { prompt: (groupId, botId, request) => memory.groupPrompt(groupId, botId, request) },
       });
       const releaseTools = (["memory_add", "memory_update", "memory_remove"] as const).map((tool) =>
@@ -95,6 +155,8 @@ export function memoryCapability(): BrainCapability {
       );
       return {
         async stop() {
+          releaseDreamWork();
+          await memoryDream.stop();
           await organization.stop();
           await extraction?.stop();
           memory.stop();

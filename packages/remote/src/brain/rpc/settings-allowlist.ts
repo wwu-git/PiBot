@@ -11,6 +11,8 @@ export const settingsPhoneMethods = [
   "bots.update",
   "models.list",
   "memory.list",
+  "memory.status",
+  "memory.dream.last",
   "memory.remove",
   "skills.list",
   "skills.get",
@@ -35,9 +37,11 @@ export const settingsPhoneMethods = [
   "groups.execution.get",
   "groups.execution.set",
 ] as const satisfies readonly (keyof typeof Methods)[];
+// Keep Dream completion desktop-only because older phones reject unknown replay events.
 export const settingsPhoneEvents = [
   "skills.changed",
   "memory.changed",
+  "memory.status.changed",
   "permissions.changed",
   "connectors.changed",
   "groups.resources.changed",
@@ -91,6 +95,11 @@ export function restrictSettingsParams(method: string, input: Record<string, unk
   if (method === "models.list" && input.availableOnly !== true) throw unavailable();
   // Bot-scoped only: the global defaults and group overrides are computer settings.
   if (method === "permissions.set" && typeof input.botId !== "string") throw unavailable();
+  if (
+    method === "memory.status" &&
+    (typeof input.botId !== "string" || input.scope !== undefined || input.ownerId !== undefined)
+  )
+    throw unavailable();
   if (method === "skills.list" && input.groupId !== undefined) throw unavailable();
   // A phone edit must not silently overwrite norms the computer replaced meanwhile.
   if (method === "bots.update" && input.norms !== undefined && input.expectedNorms === undefined)

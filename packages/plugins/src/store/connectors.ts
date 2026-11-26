@@ -223,10 +223,10 @@ export class ConnectorsRepo {
           .prepare(`INSERT INTO connector_tools(
             connector_id,catalog_version,tool_name,description,schema_json,enabled,read_only,
             suggested_read_only,draft_binding,read_only_hint,idempotent_hint,destructive_hint,
-            capability_id,capability_tool,capability_read_only)
+            capability_id,capability_tool,capability_read_only,title)
           SELECT connector_id,?,tool_name,description,schema_json,enabled,read_only,
             suggested_read_only,draft_binding,read_only_hint,idempotent_hint,destructive_hint,
-            capability_id,capability_tool,capability_read_only
+            capability_id,capability_tool,capability_read_only,title
           FROM connector_tools
           WHERE connector_id=? AND catalog_version=?`)
           .run(nextCatalog, current.id, current.catalogVersion);

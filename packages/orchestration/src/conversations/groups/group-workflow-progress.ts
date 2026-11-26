@@ -25,6 +25,7 @@ import {
   supplementConclusion,
 } from "./group-workflow-delivery-review.ts";
 import { GroupWorkflowReplanner } from "./group-workflow-replan.ts";
+import { closeStepTasks } from "./group-workflow-step-tasks.ts";
 import { workflowStopText } from "./group-workflow-stop-text.ts";
 
 const Entry = z.strictObject({
@@ -76,6 +77,29 @@ const Progress = z.strictObject({
     .record(z.string(), z.literal(true))
     .refine((items) => Object.keys(items).length <= 20)
     .default(() => ({})),
+  /**
+   * Reviewed steps whose FAIL verdict the user kept as it is (after skipping its repair, or by
+   * continuing past the replan limit). They count as resolved, so their dependents can run.
+   */
+  verdictAccepts: z
+    .record(z.string(), z.literal(true))
+    .refine((items) => Object.keys(items).length <= 20)
+    .optional(),
+  /**
+   * The plan waits for the user's choice on its card instead of planning again or rechecking:
+   * no replans left, or a repair the user skipped (its reviewed steps keep FAIL meanwhile).
+   */
+  hold: z
+    .strictObject({
+      kind: z.enum(["replan_limit", "fix_skipped"]),
+      stepIds: z.array(z.string().regex(/^[A-Za-z0-9_-]{1,40}$/)).max(20),
+    })
+    .optional(),
+  /** Steps whose last run stopped because what it read did not fit; the next brief says so. */
+  contextFull: z
+    .record(z.string(), z.literal(true))
+    .refine((items) => Object.keys(items).length <= 20)
+    .optional(),
   replanRunId: z.string().optional(),
   /**
    * Maintainers 2026-11-20: steps whose run the group's pause stopped. They wait as `ready` at the same
@@ -343,7 +367,12 @@ export class GroupWorkflowProgress {
       // A pending replan ends with the plan: its run is drained below, and a replacement it may
       // still submit is refused (`replacement()` requires the replaced plan to be waiting).
       const progress = progressOf(latest);
-      this.save(latest, { ...progress, requested: false, stoppedReason: reason });
+      this.save(latest, {
+        ...progress,
+        requested: false,
+        hold: undefined,
+        stoppedReason: reason,
+      });
       for (const step of this.repo.steps(record.id)) {
         if (step.status !== "running") continue;
         if (step.executionRunId) runs.push(step.executionRunId);
@@ -394,7 +423,7 @@ export class GroupWorkflowProgress {
     const exhausted = record.budgetRootRunId
       ? this.service.deps.local.budgets.repo.get(record.budgetRootRunId)?.exhaustedReason
       : undefined;
-    this.drain(runs, record.id, {
+    const drained = this.drain(runs, record.id, {
       code:
         actor === "user"
           ? "user_stopped"
@@ -406,6 +435,28 @@ export class GroupWorkflowProgress {
                 ? "budget_exhausted"
                 : "workflow_stopped",
     });
+    // Unfinished steps' tasks close once their runs are gone, so none stays open after the plan.
+    // A cost stop keeps them: raising the budget resumes the stopped step on its own task.
+    void Promise.allSettled(drained)
+      .then(() => {
+        if (this.service.signal.aborted || reason === "cost") return;
+        closeStepTasks(
+          this.service,
+          record,
+          this.repo.steps(record.id).map((step) => step.stepId),
+          "plan_stopped",
+          actor,
+        );
+      })
+      .catch(() =>
+        this.service.deps.logger.warn(
+          JSON.stringify({
+            module: "group-workflow",
+            event: "stopped_tasks_close_failed",
+            workflowRunId: record.id,
+          }),
+        ),
+      );
     this.service.changed(record.groupId, "updated");
   }
 
@@ -422,8 +473,10 @@ export class GroupWorkflowProgress {
   }
 
   private drain(runs: string[], workflowRunId: string, cause: RunStopCause) {
+    const started: Promise<void>[] = [];
     for (const id of new Set(runs)) {
       const drain = this.service.deps.chat.queue.abortTree(id, cause);
+      started.push(drain);
       this.drains.add(drain);
       void drain.then(
         () => this.drains.delete(drain),
@@ -440,6 +493,7 @@ export class GroupWorkflowProgress {
         },
       );
     }
+    return started;
   }
 
   async settled() {

@@ -8,6 +8,7 @@ import { visibleTaskText } from "@pibot/protocol-base";
 import { BotAvatar, useRpc, useT } from "@pibot/renderer-kit";
 import { Button, Chip } from "@pibot/ui";
 import { useEffect, useRef, useState } from "react";
+import { Markdown } from "../../chat/messages/Markdown.tsx";
 import { RelaxationDetails } from "../../receipt/RelaxationDetails.tsx";
 import type { GroupSnapshot } from "../data.ts";
 import { GroupPlanProgressView } from "./GroupPlanProgress.tsx";
@@ -63,7 +64,9 @@ function StepItem({
         size={22}
       />
       <b>{step.title}</b> · {owner?.name ?? t("group.member")}
-      <p>{visibleTaskText(step.task)}</p>
+      <div className={styles.stepTask}>
+        <Markdown text={visibleTaskText(step.task)} />
+      </div>
       {!!step.dependsOn.length && (
         <p>
           {t("group.plan.depends", {
@@ -93,9 +96,12 @@ export function GroupPlanCard({
   message,
   bots,
   sendChanges,
+  embedded = false,
 }: {
   message: Pick<Message, "id"> & { usage?: unknown };
   bots: GroupSnapshot["bots"];
+  /** Inside another card (the inbox): no frame or tinted surface of its own. */
+  embedded?: boolean;
   /** GroupSession owns send cancellation; the card only guards its local form updates. */
   sendChanges?(text: string): Promise<boolean>;
 }) {
@@ -156,7 +162,10 @@ export function GroupPlanCard({
     }
   };
   return (
-    <section className={styles.card} aria-label={t("group.plan.title")}>
+    <section
+      className={embedded ? `${styles.card} ${styles.embedded}` : styles.card}
+      aria-label={t("group.plan.title")}
+    >
       <div className={styles.head}>
         <b>
           {t("group.plan.title")} · {card.plan.name}

@@ -1,4 +1,9 @@
-import { approvalCountdown, approvalExplanation, approvalText } from "@pibot/client-core";
+import {
+  approvalCountdown,
+  approvalExplanation,
+  approvalFactText,
+  approvalText,
+} from "@pibot/client-core";
 import type { Approval } from "@pibot/protocol";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -10,7 +15,7 @@ import { Banner, Button, Switch } from "../../ui/controls.tsx";
 import { useTimeText } from "../../ui/time.ts";
 import { useToast } from "../../ui/toast.tsx";
 import { useApprovals } from "./approvals-context.tsx";
-import { approvalTarget } from "./card-facts.ts";
+import { approvalLead, approvalTarget, isPiManagerApproval, piRememberText } from "./card-facts.ts";
 import { RiskTag } from "./RiskTag.tsx";
 import { canRemember, desktopOnly } from "./use-approvals.ts";
 import { useApprovalSource } from "./where.ts";
@@ -46,6 +51,9 @@ export function ApprovalCard({ approval, onOpen }: { approval: Approval; onOpen:
   const desktop = desktopOnly(approval);
   const disabled = mobile.status !== "online" || desktop || approvals.action.busy || left === 0;
   const remembered = !!approvals.remember[approval.id];
+  const pi = isPiManagerApproval(approval);
+  const lead = approvalLead(approval, language);
+  const rememberText = pi ? piRememberText(approval, shared) : t("remember");
   const decide = async (decision: "allow" | "deny") => {
     if ((await approvals.resolve(approval, decision)) === undefined) return;
     toast(t(decision === "allow" ? "allowedToast" : "deniedToast"));
@@ -101,7 +109,26 @@ export function ApprovalCard({ approval, onOpen }: { approval: Approval; onOpen:
             {target}
           </Text>
         )}
-        {!!why && (
+        {pi && !!lead && (
+          <Text numberOfLines={3} style={muted}>
+            {lead}
+          </Text>
+        )}
+        {pi &&
+          text.facts.slice(0, 5).map((fact) => (
+            <View
+              key={`${fact.label ?? fact.kind}:${fact.value}`}
+              style={{ flexDirection: "row", alignItems: "baseline", gap: 12 }}
+            >
+              <Text style={[type.caption, { width: 56, color: colors.text2 }]}>
+                {fact.label ?? shared(`facts.${fact.kind}`)}
+              </Text>
+              <Text numberOfLines={3} style={[type.caption, { flex: 1, color: colors.text }]}>
+                {approvalFactText(fact, shared)}
+              </Text>
+            </View>
+          ))}
+        {!!why && !pi && (
           <Text numberOfLines={3} style={muted}>
             {why}
           </Text>
@@ -126,9 +153,9 @@ export function ApprovalCard({ approval, onOpen }: { approval: Approval; onOpen:
             paddingTop: 6,
           }}
         >
-          <Text style={[muted, { flex: 1 }]}>{t("remember")}</Text>
+          <Text style={[muted, { flex: 1 }]}>{rememberText}</Text>
           <Switch
-            label={t("remember")}
+            label={rememberText}
             value={remembered}
             disabled={disabled}
             onValueChange={(value) =>

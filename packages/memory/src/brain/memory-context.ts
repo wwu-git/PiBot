@@ -4,6 +4,7 @@ import {
   type KernelEvents,
   type KernelMethods,
   MEMORY_REFERENCE_NOTICE,
+  type Memory,
   type MemoryOwner,
   type Peer,
   USER_MEMORY_MAX_CHARS,
@@ -31,6 +32,7 @@ export function memoryPrompt(
   groupId?: string,
   used?: (ids: string[]) => void,
   request?: MemoryPromptRequest,
+  injected?: (notes: Memory[]) => void,
 ) {
   if (groupId) requireGroupMember({ db }, groupId, botId);
   // Order follows the stated priority: user > project > group > Bot.
@@ -55,6 +57,9 @@ export function memoryPrompt(
   ];
   used?.(ids);
   request?.onUsed?.(ids);
+  injected?.(
+    [...resident, ...recalled].map((note) => ({ ...note, text: redactor.redact(note.text) })),
+  );
   return sections.length
     ? MEMORY_REFERENCE_NOTICE +
         "Priority: explicit user instructions > user memory > project memory and project notes > group memory > Bot memory / 优先级：用户明确指示 > 用户记忆 > 项目记忆与项目说明 > 群记忆 > Bot 记忆。\n" +

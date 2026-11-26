@@ -40,11 +40,16 @@ export function botAvatarLook(
     eyes: avatarEyes.find((v) => v === bot?.avatarEyes) ?? "marks",
   };
 }
+export type BotAvatarSource = Pick<
+  Bot,
+  "name" | "avatarShape" | "avatarColor" | "avatarEyes" | "avatarImage"
+>;
+
 export function BotAvatar({
   bot,
   unknown,
   ...props
-}: { bot?: Bot; unknown?: boolean } & Omit<AvatarProps, "shape" | "color" | "eyes">) {
+}: { bot?: BotAvatarSource; unknown?: boolean } & Omit<AvatarProps, "shape" | "color" | "eyes">) {
   return (
     <Avatar
       {...props}

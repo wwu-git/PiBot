@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   IdSchema,
   MemoryCategorySchema,
+  MemoryKindSchema,
   MemoryNoteSchema,
   MemoryScopeSchema,
 } from "@pibot/protocol-base";
@@ -41,7 +42,9 @@ export const EXTRACTION_CANDIDATES = 5;
 export interface ExtractionCandidate {
   action: "add" | "update";
   id?: string;
-  scope: "user" | "bot" | "group";
+  scope: "user" | "bot" | "group" | "project";
+  kind?: "preference" | "method" | "project" | "decision" | null;
+  expiresAt?: string | null;
   category?: "about_you" | "work" | "how_to" | null;
   text: string;
   why?: string | null;
@@ -58,7 +61,9 @@ export const ExtractionDraftSchema = z.object({
       z.object({
         action: z.enum(["add", "update"]),
         id: IdSchema.optional(),
-        scope: MemoryScopeSchema.exclude(["project"]),
+        scope: MemoryScopeSchema,
+        kind: MemoryKindSchema.nullable().optional(),
+        expiresAt: z.iso.datetime().nullable().optional(),
         sourceMessageId: IdSchema.optional(),
         category: MemoryCategorySchema.nullable().optional(),
         // Extraction notes are deliberately shorter than a hand-written memory: the model has no
@@ -106,9 +111,16 @@ export function candidateInput(candidate: ExtractionCandidate): MemoryToolInput 
           text: candidate.text,
           // memory_add requires a category; the prompt asks for one, so this only covers a
           // dropped field and keeps the scope's usual section instead of failing the note.
-          category: candidate.category ?? (candidate.scope === "user" ? "about_you" : "work"),
+          category:
+            candidate.category ??
+            (candidate.kind === "preference"
+              ? "about_you"
+              : candidate.kind === "method"
+                ? "how_to"
+                : "work"),
           ...(candidate.why == null ? {} : { why: candidate.why }),
           ...(candidate.how == null ? {} : { how: candidate.how }),
+          ...(candidate.expiresAt === undefined ? {} : { expiresAt: candidate.expiresAt }),
         },
       }
     : {
@@ -120,6 +132,7 @@ export function candidateInput(candidate: ExtractionCandidate): MemoryToolInput 
           ...(candidate.category == null ? {} : { category: candidate.category }),
           ...(candidate.why === undefined ? {} : { why: candidate.why }),
           ...(candidate.how === undefined ? {} : { how: candidate.how }),
+          ...(candidate.expiresAt === undefined ? {} : { expiresAt: candidate.expiresAt }),
         },
       };
 }

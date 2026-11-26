@@ -16,7 +16,14 @@
 // Uses the caller's own Wrangler login; Wrangler telemetry is forced off.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import { assertReleaseArtifact } from "../../apps/desktop/scripts/package/release-record.ts";
 import {
@@ -26,6 +33,8 @@ import {
   formatFeed,
   parseFeed,
 } from "../../apps/desktop/scripts/package/update-feed.ts";
+
+import { androidFeed } from "./android-feed.mjs";
 
 const root = resolve(import.meta.dirname, "../..");
 const args = process.argv.slice(2);
@@ -42,7 +51,7 @@ const desktopOnly = args.includes("--desktop-only");
 // --update-only: an urgent fix ships only as an in-app update. The macOS disk images (download
 // only) are not uploaded, and stable.json and the website's buttons keep the published version;
 // the electron-updater feeds and the files they name (mac zips, the Windows installer, the
-// AppImage, blockmaps) are what installed apps fetch.
+// AppImage and the .deb latest-linux.yml also lists, blockmaps) are what installed apps fetch.
 const updateOnly = args.includes("--update-only");
 if (updateOnly && launch) throw new Error("--update-only cannot be combined with --launch");
 const version = JSON.parse(readFileSync(join(root, "apps/desktop/package.json"), "utf8")).version;
@@ -68,16 +77,18 @@ if (!existsSync(join(web, "public/releases.json"))) throw new Error(`No website 
 
 const dist = join(root, "apps/desktop/dist/release");
 // Only explicit --release builds enter this tree; never fall back to legacy/test dist/ files.
-const locate = (folder, name) =>
-  [join(dist, folder, name)].find((path) => existsSync(path));
+const locate = (folder, name) => [join(dist, folder, name)].find((path) => existsSync(path));
 // Manifest key (AppReleaseSchema) → website button key → packaging folder → installer name.
 const artifacts = [
   ["darwin-arm64", "mac-arm64", "mac-arm64", `PiBot-${version}-mac-arm64.dmg`],
   ["darwin-x64", "mac-x64", "mac-x64", `PiBot-${version}-mac-x64.dmg`],
   ["win32-x64", "windows", "win-x64", `PiBot-${version}-win-x64.exe`],
   ["linux-x64", "linux", "linux-x64", `PiBot-${version}-linux-x86_64.AppImage`],
+  // Ubuntu 24.04+ needs the .deb's AppArmor profile. It is a download button only: installed apps
+  // parse the manifest's downloads strictly, and its single linux-x64 entry stays the AppImage.
+  [undefined, "linux-deb", "linux-x64", `PiBot-${version}-linux-amd64.deb`, "Linux · .deb"],
 ]
-  .map(([platform, button, folder, name]) => ({ platform, button, folder, name }))
+  .map(([platform, button, folder, name, label]) => ({ platform, button, folder, name, label }))
   .map((artifact) => ({ ...artifact, path: locate(artifact.folder, artifact.name) }))
   .filter((artifact) => artifact.path);
 if (!artifacts.length) throw new Error(`No installers for ${version} in ${dist}`);
@@ -102,10 +113,19 @@ const uploads = new Map(
     .filter((artifact) => !(updateOnly && artifact.name.endsWith(".dmg")))
     .map((artifact) => [artifact.name, artifact.path]),
 );
-// The Android app (sideloaded APK) ships with the same version; it has no update feed.
+// An APK is advertised only when this release uploads it.
 const apk = join(root, "apps/mobile/android/app/build/outputs/apk/release/app-release.apk");
 const apkName = `PiBot-${version}-android.apk`;
-if (!desktopOnly && existsSync(apk)) uploads.set(apkName, apk);
+let android;
+if (!desktopOnly && !updateOnly && existsSync(apk)) {
+  android = await androidFeed(
+    apk,
+    version,
+    `${DOWNLOAD_ORIGIN}/${version}/${apkName}`,
+    process.env.AAPT,
+  );
+  uploads.set(apkName, apk);
+}
 const feeds = {};
 for (const [name, folders] of Object.entries(feedSources)) {
   const parts = [];
@@ -143,7 +163,10 @@ for (const [name, folders] of Object.entries(feedSources)) {
     await assertReleaseArtifact(local, resolve(local, ".."), version);
     uploads.set(fileName, local);
   }
-  merged.top = [...merged.top.filter(([key]) => key !== "releaseNotes"), ["releaseNotes", releaseNotesYaml]];
+  merged.top = [
+    ...merged.top.filter(([key]) => key !== "releaseNotes"),
+    ["releaseNotes", releaseNotesYaml],
+  ];
   feeds[name] = formatFeed(merged);
 }
 
@@ -160,29 +183,47 @@ for (const [name, path] of [...uploads])
 // app to dist/runner/darwin-<arch>; they upload under release names, and --launch fills the
 // website's runner download links (status stays as the release test plan set it).
 const runnerDist = join(root, "dist/runner");
-const runnerFiles = desktopOnly ? [] : [
-  ["runner-windows", join(runnerDist, "installer", `Pi Bot Runner Setup ${version}.exe`), `PiBot-Runner-${version}-win-x64.exe`],
-  ["runner-linux", join(runnerDist, "installer", `pibot-runner_${version}_amd64.deb`), `PiBot-Runner-${version}-linux-x64.deb`],
-];
+const runnerFiles = desktopOnly
+  ? []
+  : [
+      [
+        "runner-windows",
+        join(runnerDist, "installer", `Pi Bot Runner Setup ${version}.exe`),
+        `PiBot-Runner-${version}-win-x64.exe`,
+      ],
+      [
+        "runner-linux",
+        join(runnerDist, "installer", `pibot-runner_${version}_amd64.deb`),
+        `PiBot-Runner-${version}-linux-x64.deb`,
+      ],
+    ];
 const runnerApp = join(runnerDist, "darwin-x64", "Pi Bot Runner.app");
 // v0.0.3 dry run: the tray app left from the 0.0.1 build was zipped and labelled 0.0.3. Only a
 // bundle whose own version is this release is published; otherwise its download stays.
 const runnerAppVersion = () => {
   const plist = join(runnerApp, "Contents", "Info.plist");
   if (!existsSync(plist)) return undefined;
-  const read = spawnSync("/usr/libexec/PlistBuddy", ["-c", "Print :CFBundleShortVersionString", plist], {
-    encoding: "utf8",
-  });
+  const read = spawnSync(
+    "/usr/libexec/PlistBuddy",
+    ["-c", "Print :CFBundleShortVersionString", plist],
+    {
+      encoding: "utf8",
+    },
+  );
   return read.status === 0 ? read.stdout.trim() : undefined;
 };
 const runnerAppCurrent = !desktopOnly && existsSync(runnerApp) && runnerAppVersion() === version;
 if (!desktopOnly && existsSync(runnerApp) && !runnerAppCurrent)
-  console.warn(`The runner-mac build is ${runnerAppVersion() ?? "of unknown version"}, not ${version}; its download stays as it is.`);
+  console.warn(
+    `The runner-mac build is ${runnerAppVersion() ?? "of unknown version"}, not ${version}; its download stays as it is.`,
+  );
 if (runnerAppCurrent) {
   const zip = join(runnerDist, `PiBot-Runner-${version}-mac-x64.zip`);
   if (!dryRun || !existsSync(zip)) {
     // ditto keeps the bundle's symlinks and signature; a plain zip would break the app.
-    const result = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", runnerApp, zip], { stdio: "inherit" });
+    const result = spawnSync("/usr/bin/ditto", ["-c", "-k", "--keepParent", runnerApp, zip], {
+      stdio: "inherit",
+    });
     if (result.status !== 0) throw new Error(`zipping ${runnerApp} failed`);
   }
   runnerFiles.push(["runner-mac", zip, `PiBot-Runner-${version}-mac-x64.zip`]);
@@ -250,7 +291,9 @@ for (const [name, path] of uploads) {
   const oversized = size > 300 * 1024 * 1024;
   const url = `${origin}/${version}/${name}`;
   if (oversized && !reuseLargeUploads)
-    throw new Error(`${name} exceeds the Wrangler upload limit; upload by S3 or R2 multipart and pass --reuse-large-uploads`);
+    throw new Error(
+      `${name} exceeds the Wrangler upload limit; upload by S3 or R2 multipart and pass --reuse-large-uploads`,
+    );
   if (reuseLargeUploads && !dryRun) {
     if (await uploadedBytesMatch(path, url, size).catch(() => false)) {
       console.log(`Verified staged upload: ${url}`);
@@ -264,14 +307,14 @@ for (const [name, path] of uploads) {
   const type = name.endsWith(".apk")
     ? "application/vnd.android.package-archive"
     : name.endsWith(".exe")
-    ? "application/vnd.microsoft.portable-executable"
-    : name.endsWith(".dmg")
-      ? "application/x-apple-diskimage"
-      : name.endsWith(".zip")
-        ? "application/zip"
-        : name.endsWith(".deb")
-          ? "application/vnd.debian.binary-package"
-          : "application/octet-stream";
+      ? "application/vnd.microsoft.portable-executable"
+      : name.endsWith(".dmg")
+        ? "application/x-apple-diskimage"
+        : name.endsWith(".zip")
+          ? "application/zip"
+          : name.endsWith(".deb")
+            ? "application/vnd.debian.binary-package"
+            : "application/octet-stream";
   wrangler([
     "r2",
     "object",
@@ -287,14 +330,14 @@ for (const [name, path] of uploads) {
 
 const downloads = {};
 for (const artifact of artifacts)
-  downloads[artifact.platform] = `${origin}/${version}/${artifact.name}`;
+  if (artifact.platform) downloads[artifact.platform] = `${origin}/${version}/${artifact.name}`;
 const releases = JSON.parse(readFileSync(join(web, "public/releases.json"), "utf8"));
 releases.status = "available";
 releases.version = version;
-if (uploads.has(apkName))
+if (android)
   releases.platforms.android = {
     ...releases.platforms.android,
-    url: `${origin}/${version}/${apkName}`,
+    url: android.url,
     label: "Android",
     detail: `v${version}`,
     version,
@@ -302,8 +345,9 @@ if (uploads.has(apkName))
   };
 for (const artifact of artifacts) {
   releases.platforms[artifact.button] = {
+    ...(artifact.label ? { label: artifact.label } : {}),
     ...releases.platforms[artifact.button],
-    url: downloads[artifact.platform],
+    url: `${origin}/${version}/${artifact.name}`,
     detail: `v${version}`,
     version,
     ...(releases.platforms[artifact.button]?.version !== version ? { status: "testing" } : {}),
@@ -317,19 +361,29 @@ for (const runner of runners)
     version,
     ...(releases.platforms[runner.button]?.version !== version ? { status: "testing" } : {}),
   };
-// stable.json stays { version, downloads }: installed versions parse it strictly
-// (AppReleaseSchema), so the notes travel only in the electron-updater feed.
+// Release notes stay in the electron-updater feeds.
 const manifest = { version, downloads };
+const androidManifest = android ? JSON.stringify(android, null, 2) : undefined;
 console.log(JSON.stringify(manifest, null, 2));
+if (androidManifest) console.log(`--- updates/android.json\n${androidManifest}`);
 for (const [name, text] of Object.entries(feeds)) console.log(`--- updates/${name}\n${text}`);
-if (!Object.keys(feeds).length) console.warn("No update feeds for this version; in-app updates will not see it.");
+if (!Object.keys(feeds).length)
+  console.warn("No update feeds for this version; in-app updates will not see it.");
 if (!dryRun) {
-  if (launch) writeFileSync(join(web, "public/releases.json"), `${JSON.stringify(releases, null, 2)}\n`);
+  if (launch)
+    writeFileSync(join(web, "public/releases.json"), `${JSON.stringify(releases, null, 2)}\n`);
   mkdirSync(join(web, "public/updates"), { recursive: true });
   if (!updateOnly)
-    writeFileSync(join(web, "public/updates/stable.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+    writeFileSync(
+      join(web, "public/updates/stable.json"),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
   for (const [name, text] of Object.entries(feeds))
     writeFileSync(join(web, "public/updates", name), text);
+  if (androidManifest) {
+    writeFileSync(join(web, "public/updates/android.json"), `${androidManifest}\n`);
+    console.log("Wrote updates/android.json");
+  }
   console.log(
     `Wrote ${launch ? "releases.json, " : ""}${updateOnly ? "" : "updates/stable.json and "}${Object.keys(feeds).join(", ") || "no update feeds"} in ${web}; deploy the website next.`,
   );

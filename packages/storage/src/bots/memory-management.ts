@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   MemoryCatalogEntrySchema,
   type MemoryOwner,
+  MemoryRecallMetricsSchema,
   MemoryRevisionSchema,
 } from "@pibot/protocol-base";
 
@@ -85,7 +86,10 @@ export class MemoryManagementRepo {
         LAG(r.text) OVER w AS priorText,LAG(r.category) OVER w AS priorCategory,
         ROW_NUMBER() OVER w AS n FROM memory_revisions r WHERE r.memory_id=m.id
         WINDOW w AS (ORDER BY r.version))
-      WHERE n>1 AND (text IS NOT priorText OR category IS NOT priorCategory)) AS edits
+      WHERE n>1 AND (text IS NOT priorText OR category IS NOT priorCategory)) AS edits,
+      (SELECT json_object('injectedCount',r.injected_count,'usedCount',r.used_count,
+        'measuredSince',r.measured_since,'lastUsedAt',r.last_used_at)
+       FROM memory_recall_metrics r WHERE r.memory_id=m.id) AS recallMetrics
       FROM scoped_memories m LEFT JOIN bots b ON b.id=m.bot_id
       WHERE m.id IN (SELECT value FROM json_each(?))`)
       .all(JSON.stringify(ids))
@@ -93,6 +97,11 @@ export class MemoryManagementRepo {
         id: String(row.id),
         botName: row.botName == null ? null : String(row.botName),
         edits: Number(row.edits),
+        ...(row.recallMetrics
+          ? {
+              recallMetrics: MemoryRecallMetricsSchema.parse(JSON.parse(String(row.recallMetrics))),
+            }
+          : {}),
       }));
   }
 

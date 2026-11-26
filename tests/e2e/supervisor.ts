@@ -157,9 +157,9 @@ export function failureReason(error: unknown) {
   const frame = String((error as Error)?.stack ?? "")
     .split("\n")
     .find((entry) =>
-      /(?:tests\/e2e\/routines|tools\/fake-llm)\/[\w/-]+\.ts:\d+/.test(entry),
+      /(?:tests\/e2e\/[\w-]+|tools\/fake-llm)\/[\w/-]+\.ts:\d+/.test(entry),
     )
-    ?.match(/(?:tests\/e2e\/routines|tools\/fake-llm)\/[\w/-]+\.ts:\d+/)?.[0];
+    ?.match(/(?:tests\/e2e\/[\w-]+|tools\/fake-llm)\/[\w/-]+\.ts:\d+/)?.[0];
   // Keep a fixed source step beside bare internal failures. It is a file/line identifier only;
   // never include the original error text, prompts, paths or model output.
   const reason = frame ? `${line} @ ${frame}` : line;

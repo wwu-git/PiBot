@@ -132,6 +132,7 @@ export function createRoutineHost(options: {
   }
   return {
     focused,
+    powerSupply: () => supply,
     begin(owner: number) {
       active = false;
       epoch = owner;

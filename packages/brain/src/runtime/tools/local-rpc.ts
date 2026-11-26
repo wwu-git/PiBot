@@ -1,7 +1,7 @@
 // Expose local operations through the validated brain RPC dispatcher.
 import { join } from "node:path";
 import { discoverCommandPaths, listHostSshAliases } from "@pibot/execution";
-import { RpcError } from "@pibot/protocol-base";
+import { PI_MANAGER_CATEGORIES, RpcError } from "@pibot/protocol-base";
 import { BotsRepo, transaction } from "@pibot/storage";
 import { registerDraftRpc } from "../../conversations/drafts/drafts.ts";
 import type { KernelRegisterRpc } from "../../core/business-rpc.ts";
@@ -173,7 +173,16 @@ export function registerLocalRpc(handle: KernelRegisterRpc, local: LocalService)
     }
     return result;
   });
-  handle("permissions.set", savePermissions);
+  handle("permissions.set", (params, { source }) => {
+    // Pi's management and dispatch levels are the person's own switch (this computer or the
+    // paired phone); an ACP editor cannot widen them.
+    if (
+      source === "acp" &&
+      PI_MANAGER_CATEGORIES.some((category) => params.levels?.[category] !== undefined)
+    )
+      throw new RpcError(-32602, "pi_manager_no_acp");
+    return savePermissions(params);
+  });
   handle("approvals.pending", async (params) => approvals.repo.pending(params));
   handle("approvals.addWritableFolder", ({ id }, { signal }) =>
     approvals.addWritableFolder(id, signal),
@@ -198,6 +207,15 @@ export function registerLocalRpc(handle: KernelRegisterRpc, local: LocalService)
       const approval = approvals.repo.get(id);
       if (conversationId && approval?.conversationId !== conversationId)
         throw new RpcError(-32602, "Approval conversation changed");
+      // "Don't ask again" on Pi's cards changes Pi's own level: the person's switch, on this
+      // computer or the paired phone, never an ACP editor's.
+      if (
+        remember &&
+        source === "acp" &&
+        approval &&
+        PI_MANAGER_CATEGORIES.some((category) => category === approval.category)
+      )
+        throw new RpcError(-32602, "pi_manager_no_acp");
       if (approval?.draft) throw new RpcError(-32602, "Use drafts.resolve for send drafts");
       return approvals.resolve(
         id,

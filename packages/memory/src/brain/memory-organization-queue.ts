@@ -1,34 +1,25 @@
+// Coordinates scheduled and owner-initiated organization without concurrent model calls.
 import type { DatabaseSync } from "node:sqlite";
-import type { MemoryDraftRequest, MemoryDraftUsage } from "@pibot/agent";
+import type { MemoryDraftRequest } from "@pibot/agent";
 import type { BrainRedactor } from "@pibot/brain/kit";
 import { RpcError } from "@pibot/protocol-base";
-import {
-  AuditRepo,
-  BackgroundTaskHealthRepo,
-  BotsRepo,
-  type MemoryOrganization,
-  MemoryOrganizationsRepo,
-  memoryMaintenanceUsage,
-  SettingsRepo,
-} from "@pibot/storage";
-import { organizationInstruction, parseOrganizationDraft } from "./memory-organization.ts";
+import { BotsRepo, MemoryOrganizationsRepo, memoryMaintenanceUsage } from "@pibot/storage";
+import { dayStart } from "./memory-extraction-attempt.ts";
+import { logMemoryAttempt } from "./memory-maintenance-log.ts";
+import { MemoryOrganizationAttempt } from "./memory-organization-attempt.ts";
 import { organizationErrorDetails } from "./memory-organization-errors.ts";
-import { organizationModel } from "./memory-organization-model.ts";
 import { sortUserMemories } from "./memory-scope-sort.ts";
 import type { MemoryService } from "./memory-service.ts";
-
-interface Model {
-  provider: string;
-  id: string;
-}
 
 export interface OrganizationDeps {
   db: DatabaseSync;
   redactor: BrainRedactor;
-  logger: { warn(message: string): void };
+  logger: { warn(message: string): void; info?(message: string): void };
   memory: MemoryService;
   healthChanged?(): void;
+  statusChanged?(botId: string): void;
   isIdle(): boolean;
+  automatic?(): boolean;
   draftMemories?: (request: MemoryDraftRequest) => Promise<{
     draft: unknown;
     tokens: number;
@@ -44,12 +35,6 @@ const WINDOW_MS = 7 * 86400_000;
 const RETRY_MS = 24 * 3600_000;
 const SCAN_MS = 5 * 60_000;
 
-function dayStart(now = new Date()): string {
-  const value = new Date(now);
-  value.setHours(0, 0, 0, 0);
-  return value.toISOString();
-}
-
 /**
  * The organization worker. It shares the extraction worker's constraints — idle-only, one
  * run at a time, durable across restarts, and the same daily budget — because both spend the same
@@ -58,18 +43,17 @@ function dayStart(now = new Date()): string {
 export class MemoryOrganizationQueue {
   private readonly repo: MemoryOrganizationsRepo;
   private readonly bots: BotsRepo;
-  private readonly settings: SettingsRepo;
-  private readonly health: BackgroundTaskHealthRepo;
+  private readonly attempt: MemoryOrganizationAttempt;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private controller: AbortController | undefined;
   private stopped = false;
+  private running: Promise<void> | undefined;
   private busy = false;
 
   constructor(private readonly deps: OrganizationDeps) {
     this.repo = new MemoryOrganizationsRepo(deps.db);
     this.bots = new BotsRepo(deps.db);
-    this.settings = new SettingsRepo(deps.db);
-    this.health = new BackgroundTaskHealthRepo(deps.db, deps.healthChanged);
+    this.attempt = new MemoryOrganizationAttempt(deps, this.repo);
   }
 
   start() {
@@ -119,6 +103,7 @@ export class MemoryOrganizationQueue {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
     this.controller?.abort();
+    await this.running;
     await this.ownerTask;
   }
 
@@ -134,7 +119,9 @@ export class MemoryOrganizationQueue {
   private schedule(delay: number) {
     if (this.stopped) return;
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.tick(), delay);
+    this.timer = setTimeout(() => {
+      this.running = this.tick();
+    }, delay);
     this.timer.unref?.();
   }
 
@@ -192,13 +179,14 @@ export class MemoryOrganizationQueue {
   }
 
   private async drain() {
-    if (this.busy || this.stopped || !this.deps.isIdle()) return;
+    if (this.busy || this.stopped || this.deps.automatic?.() === false || !this.deps.isIdle())
+      return;
     this.busy = true;
     this.controller = new AbortController();
     try {
       this.enqueueDue();
       while (!this.stopped && this.deps.isIdle()) {
-        const limit = this.limit();
+        const limit = this.attempt.limit();
         // Extraction and organization draw on the same day budget: whichever cap is reached first
         // stops both, so the configured ceiling is the real spend.
         const used = memoryMaintenanceUsage(this.deps.db, dayStart());
@@ -207,147 +195,17 @@ export class MemoryOrganizationQueue {
         const full = [...counts].filter(([, n]) => n >= RUNS_PER_BOT_DAY).map(([id]) => id);
         const next = this.repo.claim(full);
         if (!next) break;
-        await this.process(next);
+        const start = performance.now();
+        try {
+          await this.attempt.process(next, this.controller.signal);
+        } finally {
+          logMemoryAttempt(this.deps, "organization", next, start);
+        }
       }
     } finally {
       this.busy = false;
       this.controller = undefined;
     }
-  }
-
-  private limit() {
-    const settings = this.settings.get();
-    return {
-      costUsd: settings.memoryExtractionDailyCostUsd ?? 0.5,
-      tokens: settings.memoryExtractionDailyTokens ?? 2_000_000,
-    };
-  }
-
-  private model(botId: string): Model | undefined {
-    return organizationModel(this.deps.db, botId);
-  }
-
-  private async process(row: MemoryOrganization) {
-    const bot = this.bots.get(row.botId);
-    if (!bot || bot.archivedAt) {
-      this.repo.finish(row.id, { status: "skipped" });
-      return;
-    }
-    const model = this.model(row.botId);
-    if (!model || !this.deps.draftMemories) {
-      // No usable auxiliary model is a normal state, not a failure: stay quiet and retry later.
-      // Keeps the quiet run but counts it: "never organized" was the part nobody saw.
-      this.health.fail("memory_organization", row.botId, "no_model");
-      this.repo.finish(row.id, { status: "skipped" });
-      return;
-    }
-    let catalog: { text: string; ids: string[] };
-    try {
-      catalog = this.deps.memory.organizationCatalog(row.botId, row.scope, row.ownerId);
-    } catch {
-      // The owner disappeared (group left, Bot archived) between enqueue and now.
-      this.repo.finish(row.id, { status: "skipped" });
-      return;
-    }
-    if (!catalog.ids.length) {
-      this.repo.finish(row.id, { status: "skipped", memoryCount: 0 });
-      return;
-    }
-    try {
-      const used = memoryMaintenanceUsage(this.deps.db, dayStart());
-      const limit = this.limit();
-      const draftMemories = this.deps.draftMemories;
-      const signal = this.controller?.signal ?? new AbortController().signal;
-      const draft = (chosen: Model) =>
-        draftMemories({
-          model: chosen,
-          text: this.deps.redactor.redact(catalog.text),
-          instruction: organizationInstruction(),
-          signal,
-          budget: {
-            tokens: Math.max(0, limit.tokens - used.tokens),
-            costUsd: Math.max(0, limit.costUsd - used.costUsd),
-          },
-          onUsage: (usage: MemoryDraftUsage) => this.repo.recordUsage(row.id, usage),
-        });
-      // Like extraction: a Bot model that is gone or refused falls back once to the main model in
-      // Settings; both fail before dispatch, so nothing is billed twice (maintainers 2026-11-18).
-      const fallback = this.settings.get().defaultModel ?? undefined;
-      let usedModel = model;
-      const result = await draft(model).catch((error: unknown) => {
-        const { error: code } = organizationErrorDetails(error);
-        if (
-          (code !== "no_model" && code !== "auth_failed") ||
-          !fallback ||
-          (fallback.provider === model.provider && fallback.id === model.id) ||
-          signal.aborted
-        )
-          throw error;
-        usedModel = { provider: fallback.provider, id: fallback.id };
-        return draft(usedModel);
-      });
-      const { proposals } = parseOrganizationDraft(result.draft, new Set(catalog.ids));
-      let created = 0;
-      for (const proposal of proposals) {
-        try {
-          created += this.deps.memory.applyOrganization(
-            row.botId,
-            row.scope,
-            row.ownerId,
-            proposal,
-          );
-        } catch {
-          // One note that vanished or changed under us must not discard the other proposals.
-        }
-      }
-      this.audit(row, usedModel, catalog.ids.length, created);
-      this.repo.finish(row.id, {
-        status: "done",
-        modelProvider: usedModel.provider,
-        modelId: usedModel.id,
-        tokens: result.tokens,
-        costUsd: result.costUsd ?? 0,
-        proposals: created,
-        memoryCount: catalog.ids.length,
-      });
-      if (!this.controller?.signal.aborted) this.health.recover("memory_organization", row.botId);
-    } catch (error) {
-      const { error: code } = organizationErrorDetails(error);
-      // Missing model or refused credentials are configuration states; they must not burn the day.
-      if (code === "no_model" || code === "auth_failed") {
-        if (!this.controller?.signal.aborted)
-          this.health.fail("memory_organization", row.botId, code);
-        this.repo.finish(row.id, { status: "skipped", memoryCount: catalog.ids.length });
-        return;
-      }
-      this.warn("memory_organization_failed", error);
-      if (!this.controller?.signal.aborted)
-        this.health.fail("memory_organization", row.botId, code);
-      this.repo.finish(row.id, {
-        status: "failed",
-        memoryCount: catalog.ids.length,
-        error: code,
-      });
-    }
-  }
-
-  private audit(row: MemoryOrganization, model: Model, notes: number, proposals: number) {
-    // `notes` is not in the audit detail vocabulary on purpose: the row keeps the count, and the
-    // audit only needs what happened and how many proposals the user will be asked about.
-    void notes;
-    new AuditRepo(this.deps.db, this.deps.redactor).append({
-      botId: row.botId,
-      kind: "memory.changed",
-      summary: "Memory organized into proposals / 记忆整理提议已生成",
-      detail: {
-        actor: "automatic",
-        reasonCode: "memory_organized",
-        memoryScope: row.scope,
-        memoryOwnerId: row.ownerId,
-        modelId: model.id,
-        revision: proposals,
-      },
-    });
   }
 
   private warn(reason: string, error: unknown) {

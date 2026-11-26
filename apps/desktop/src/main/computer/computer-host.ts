@@ -1,3 +1,4 @@
+// Inject trusted desktop host facts into computer-use drivers.
 import {
   type ComputerDriver,
   type ComputerService,
@@ -9,6 +10,7 @@ import {
   type SessionState,
   scrubDriverText,
 } from "@pibot/computer";
+import { windowsProgramFiles } from "@pibot/execution";
 import type { Logger } from "@pibot/observability";
 import {
   type ComputerStatus,
@@ -167,6 +169,7 @@ export function createComputerHost(options: {
       load: createCuaLoader().load,
       session,
       connect: macOwner?.connect,
+      ...(platform === "win32" ? { windowsProgramFiles: windowsProgramFiles(process.env) } : {}),
     });
     platformDriver = driver;
     service = createComputerService({

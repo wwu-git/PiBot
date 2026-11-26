@@ -300,7 +300,9 @@ export class ChatReplies {
     summary: string;
     groupPlanId?: string;
     stall?: import("@pibot/protocol-base").ExecutionStall;
-    observation?: "promised_without_tools";
+    observation?: "promised_without_tools" | "compaction_no_progress";
+    /** What the run was reading when it stopped; already redacted and capped by the caller. */
+    reads?: string;
     question?: import("@pibot/protocol-base").UserQuestion;
   }) {
     const message = this.messages.get(this.current);
@@ -316,6 +318,7 @@ export class ChatReplies {
           summary: this.redactor.redact(pause.summary).slice(0, 500),
           ...(pause.stall ? { stall: pause.stall } : {}),
           ...(pause.observation ? { observation: pause.observation } : {}),
+          ...(pause.reads ? { reads: this.redactor.redact(pause.reads).slice(0, 300) } : {}),
           ...(pause.question ? { question: pause.question } : {}),
         },
       },

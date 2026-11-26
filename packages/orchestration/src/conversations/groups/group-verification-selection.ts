@@ -23,6 +23,9 @@ export function selectVerifiers(
     "translator",
     "presentation-designer",
     "video-scriptwriter",
+    // Post and reply drafts are outward content, checked as such rather than as research.
+    "operations-manager",
+    "customer-support",
   ]);
   const authorRoles = members.filter((bot) => authors.has(bot.id)).map((bot) => bot.role?.id);
   const kinds = facts.files.map((file): VerificationKind => {

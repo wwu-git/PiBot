@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConnectorApprovalScope } from "./ConnectorApprovalScope.tsx";
 import { DraftCard } from "./DraftCard.tsx";
 import lively from "./lively.module.css";
+import { ManagerApprovalCard } from "./ManagerApprovalCard.tsx";
 import { useApprovalFolder } from "./use-approval-folder.ts";
 
 const paidImageModel = (scope: { provider: string; model: string }) =>
@@ -90,6 +91,19 @@ export function ApprovalCard(props: ApprovalCardProps) {
         approval={props.approval}
         request={login}
         refresh={props.refresh}
+        inbox={props.inbox}
+      />
+    );
+  // The default Pi's management and dispatch cards list each change and remember as a level.
+  if (
+    props.approval.status === "pending" &&
+    (props.approval.category === "bot_management" || props.approval.category === "work_dispatch")
+  )
+    return (
+      <ManagerApprovalCard
+        approval={props.approval}
+        refresh={props.refresh}
+        decide={props.decide}
         inbox={props.inbox}
       />
     );

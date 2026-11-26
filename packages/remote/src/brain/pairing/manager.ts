@@ -1,5 +1,11 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { RunnerDrainError, resumeRunnerDrain, runnerPairCode, waitRunnerRetry } from "@pibot/link";
+import {
+  RunnerDrainError,
+  resumeRunnerDrain,
+  runnerLinkFailure,
+  runnerPairCode,
+  waitRunnerRetry,
+} from "@pibot/link";
 import { RpcError, RpcErrorCodes } from "@pibot/protocol";
 import { DeviceNameSchema, type PairStatus } from "@pibot/remote-contract";
 import { transaction } from "@pibot/storage";
@@ -21,6 +27,20 @@ const PhoneSchema = z.strictObject({
 // Room opens retry within this budget; one 20 s open plus backoff must fit at least twice.
 // Kept below the devices.pairStart RPC timeout so the caller still hears the failure.
 const PAIR_SETUP_MS = 60_000;
+type RelayProblem = NonNullable<PairStatus["relayProblem"]>;
+
+/** A failed relay open as one of the problems the pairing card can explain, or none. */
+function relayProblem(error: unknown): RelayProblem | undefined {
+  const { stage, reason } = runnerLinkFailure(error, "relay");
+  if (reason === "certificate") return "certificate";
+  if (reason === "tls" || stage === "tls") return "tls";
+  if (
+    ["dns", "refused", "unreachable", "reset"].includes(reason) ||
+    ((stage === "dns" || stage === "tcp") && reason !== "cancelled")
+  )
+    return "unreachable";
+  return undefined;
+}
 interface Attempt {
   state: PairStatus;
   controller: AbortController;
@@ -81,9 +101,20 @@ export class PairingManager {
       try {
         const handle =
           kind === "runner"
-            ? this.runnerHandle(link, identity, relayUrl, pairSignal, (confirm) => {
-                confirmRunner = confirm;
-              })
+            ? this.runnerHandle(
+                link,
+                identity,
+                relayUrl,
+                pairSignal,
+                (confirm) => {
+                  confirmRunner = confirm;
+                },
+                (problem) => {
+                  if (attempt.state.status !== "waiting") return;
+                  const { relayProblem: _previous, ...state } = attempt.state;
+                  attempt.state = problem ? { ...state, relayProblem: problem } : state;
+                },
+              )
             : await link.pair({
                 identity,
                 relayUrl,
@@ -189,6 +220,7 @@ export class PairingManager {
     relayUrl: string,
     signal: AbortSignal,
     onCommit: (confirm: () => void) => void,
+    onRelay: (problem: RelayProblem | undefined) => void,
   ) {
     const pair = link.pairRunner;
     if (!pair) throw new Error("remote_pair_unavailable");
@@ -219,6 +251,7 @@ export class PairingManager {
       saved = true;
       confirm();
     });
+    let logged: RelayProblem | undefined;
     const work = (async () => {
       let failures = 0;
       while (failures < 3 && !sessionSignal.aborted) {
@@ -232,6 +265,7 @@ export class PairingManager {
             generated: true,
             onPeer: () => {
               reachedPeer = true;
+              onRelay(undefined);
             },
             signal: sessionSignal,
             commit: async (device) => {
@@ -259,6 +293,23 @@ export class PairingManager {
             reject(error);
             if (error instanceof RunnerDrainError) throw error;
             return;
+          }
+          // The code keeps waiting while the relay cannot be opened; the card says why, and the
+          // log gets one fixed line per distinct cause (never the address or the code).
+          const problem = reachedPeer ? undefined : relayProblem(error);
+          onRelay(problem);
+          if (problem && problem !== logged) {
+            logged = problem;
+            const { stage, reason } = runnerLinkFailure(error, "relay");
+            this.r.ctx.logger.warn(
+              JSON.stringify({
+                module: "remote-pair",
+                event: "relay_unavailable",
+                code: `relay_${problem}`,
+                stage,
+                reason,
+              }),
+            );
           }
           await waitRunnerRetry(1000, sessionSignal);
         }

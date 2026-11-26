@@ -1,3 +1,4 @@
+// Validates model candidates and keeps extraction writes in the memory service.
 import type { MemoryExtraction } from "@pibot/storage";
 import { type ExtractionCandidate, parseExtractionDraft } from "./memory-extraction.ts";
 import type { MemoryService } from "./memory-service.ts";
@@ -10,6 +11,8 @@ import { looksLikeWorkFact } from "./memory-work-facts.ts";
  * assistant and keeps the model's choice; updates keep their target note's scope.
  */
 function scopedCandidate(candidate: ExtractionCandidate, mainBot: boolean): ExtractionCandidate {
+  if (candidate.kind === "project")
+    return { ...candidate, scope: "bot", kind: "method", category: "work" };
   if (mainBot || candidate.scope !== "user" || candidate.action !== "add") return candidate;
   if (!looksLikeWorkFact(candidate.text)) return candidate;
   return {
@@ -26,6 +29,7 @@ export function applyExtractionCandidates(
   draft: unknown,
   groupSourceIds?: readonly string[],
   groupSourceTexts?: Readonly<Record<string, string>>,
+  receipt?: { replyId: string; notes: { id: string; text: string }[]; noted?: ReadonlySet<string> },
 ) {
   const parsed = parseExtractionDraft(draft);
   const citing = new Map<string, number>();
@@ -38,13 +42,24 @@ export function applyExtractionCandidates(
     applied: 0,
     proposed: 0,
     reasons: {} as Record<string, number>,
+    acceptedFactProposalIds: [] as string[],
   };
   if (parsed.dropped) counts.reasons.candidate_invalid = parsed.dropped;
   const mainBot = memory.active(row.botId).isMain;
+  const project = memory.projectForConversation(row.conversationId);
   for (const raw of parsed.candidates) {
-    const candidate = row.groupId ? raw : scopedCandidate(raw, mainBot);
+    const candidate = row.groupId
+      ? raw
+      : raw.kind === "project" && project
+        ? { ...raw, scope: "project" as const }
+        : scopedCandidate(raw, mainBot);
     if (candidate !== raw)
       counts.reasons.candidate_rescoped_bot = (counts.reasons.candidate_rescoped_bot ?? 0) + 1;
+    // The Bot saved this note itself in the same turn and its receipt is already shown.
+    if (candidate.action === "update" && candidate.id && receipt?.noted?.has(candidate.id)) {
+      counts.reasons.candidate_duplicate = (counts.reasons.candidate_duplicate ?? 0) + 1;
+      continue;
+    }
     try {
       const sourceId = row.groupId ? candidate.sourceMessageId : messageId;
       if (
@@ -55,15 +70,27 @@ export function applyExtractionCandidates(
       const source = row.groupId && sourceId ? groupSourceTexts?.[sourceId] : undefined;
       const value = memory.applyExtraction(
         row.botId,
-        sourceId ?? messageId,
+        receipt?.replyId ?? sourceId ?? messageId,
         source && citing.get(sourceId ?? "") === 1
           ? { ...candidate, text: keepIdentifiers(candidate.text, source) }
           : candidate,
         row.groupId,
+        project?.id,
       );
       const code = value.memory ? "candidate_applied" : "candidate_proposed";
-      if (value.memory) counts.applied++;
-      else counts.proposed++;
+      if (value.memory) {
+        counts.applied++;
+        if (
+          !receipt &&
+          !row.groupId &&
+          value.proposal.status === "accepted" &&
+          (value.memory.scope === "bot" || value.memory.scope === "user")
+        )
+          counts.acceptedFactProposalIds.push(value.proposal.id);
+        receipt?.notes.push({ id: value.memory.id, text: value.memory.text });
+      } else {
+        counts.proposed++;
+      }
       counts.reasons[code] = (counts.reasons[code] ?? 0) + 1;
     } catch (error) {
       const code = candidateErrorCode(error);

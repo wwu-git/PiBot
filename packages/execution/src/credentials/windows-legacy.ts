@@ -1,5 +1,7 @@
+// Read legacy Windows credentials with the host’s PowerShell.
 import { spawn } from "node:child_process";
 import { join } from "node:path";
+import { windowsSystemRoot } from "../core/windows-environment.ts";
 import { legacyWindowsTarget } from "./legacy-format.ts";
 
 /**
@@ -23,7 +25,7 @@ function powershell(
   signal: AbortSignal,
 ) {
   signal.throwIfAborted();
-  const root = process.env.SystemRoot ?? "C:\\Windows";
+  const root = windowsSystemRoot(process.env);
   const encoded = Buffer.from(SCRIPT, "utf16le").toString("base64");
   return new Promise<string>((resolve, reject) => {
     const child = spawn(

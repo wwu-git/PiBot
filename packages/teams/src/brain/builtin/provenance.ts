@@ -39,7 +39,11 @@ export async function recordBaselines(
           row,
         ]),
       );
-      const { network: _network, ...levels } = bot.permissionOverrides ?? {};
+      const {
+        network: _network,
+        confirmEverySend: _confirm,
+        ...levels
+      } = bot.permissionOverrides ?? {};
       repo.setBot(bot.id, entry.role.id, entry.role.version, {
         language: deps.language,
         thinkingLevel: bot.thinkingLevel,

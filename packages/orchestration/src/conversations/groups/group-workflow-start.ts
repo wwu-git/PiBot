@@ -186,7 +186,15 @@ export class GroupWorkflowStarter {
       throw new RpcError(-32602, "group_plan_workplace_changed");
     // A pending confirmation is not a reservation: never overwrite another run's new period.
     if (delivery && !dynamic?.previous) {
-      const current = await resolveWorkflowFolder(primary, input, signal, undefined, access);
+      // The card's own folder segment: a card from before plan folders were slugged keeps its name.
+      const root = access.paths.basename(access.paths.dirname(delivery.folder));
+      const current = await resolveWorkflowFolder(
+        primary,
+        { ...input, root },
+        signal,
+        undefined,
+        access,
+      );
       if (current.folder !== delivery.folder)
         throw new RpcError(-32602, "group_plan_output_folder_changed");
     }

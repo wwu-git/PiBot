@@ -6,7 +6,16 @@ import { setTimeout as delay } from "node:timers/promises";
 import { resolveDataDir } from "@pibot/storage/data-dir";
 import { app } from "electron";
 import { bundleIdentity, pruneCompileCache } from "../shared/bundle-identity.ts";
+import { guardConsoleStreams } from "../shared/console-guard.ts";
 import { linuxPasswordStore } from "./window/linux-password-store.ts";
+import { captureProviderLinks } from "./window/provider-link-inbox.ts";
+
+/** The compile-cache flush waits for this much quiet after the last input in any window. */
+const CACHE_FLUSH_QUIET_MS = 5_000;
+const CACHE_FLUSH_MAX_WAIT_MS = 10 * 60_000;
+
+// A closed stdout/stderr pipe must never become a crash dialog (see console-guard.ts).
+guardConsoleStreams([process.stdout, process.stderr]);
 
 // Chromium switches, process identity and the role lock must precede every asynchronous import.
 // FeatureList is initialized before per-window renderer arguments can override it.
@@ -94,6 +103,7 @@ if (process.argv.includes("--sandbox-doctor")) {
         | ReturnType<typeof import("./background/background-prelaunch.ts").prelaunchBackground>
         | undefined;
       const lifetime = new AbortController();
+      const providerLinks = captureProviderLinks(process.argv, lifetime.signal);
       const quitGui = () => app.quit();
       if (!background && !embedded) process.on("SIGTERM", quitGui);
       app.once("will-quit", () => {
@@ -160,7 +170,20 @@ if (process.argv.includes("--sandbox-doctor")) {
         const importing = performance.now();
         const { startMain } = await import("./process-entry.ts");
         if (lifetime.signal.aborted) return;
+        let mainLogger: { info(message: string): void; warn(message: string): void } | undefined;
+        // Any keyboard or mouse input, or a window gaining focus, counts as someone using the app.
+        let lastInput = 0;
+        const noteInput = () => {
+          lastInput = performance.now();
+        };
+        app.on("browser-window-created", (_event, window) => {
+          window.on("focus", noteInput);
+          window.webContents.on("input-event", noteInput);
+        });
         await startMain({
+          onLogger: (logger) => {
+            mainLogger = logger;
+          },
           dataDir,
           version,
           dev,
@@ -168,6 +191,7 @@ if (process.argv.includes("--sandbox-doctor")) {
           embedded,
           originalEnv,
           prelaunch,
+          providerLinks,
           compileCache,
           signal: lifetime.signal,
           bootstrap: {
@@ -182,22 +206,47 @@ if (process.argv.includes("--sandbox-doctor")) {
         if (lifetime.signal.aborted) return;
         await compileCache;
         if (lifetime.signal.aborted) return;
-        // Best-effort disk writes must not compete with first-screen reads. Normal exit also flushes.
-        const cacheTimer = setTimeout(() => {
+        // Best-effort disk writes must not compete with first-screen reads. The flush is one
+        // synchronous call that, after an install or update, freezes this process (and every
+        // window) for as long as it writes; like the brain's, it waits until nobody has touched
+        // a window for a few seconds, gives up waiting after ten minutes, and exit still flushes.
+        const flushStarted = performance.now();
+        let cacheTimer: ReturnType<typeof setTimeout>;
+        const flushWhenQuiet = () => {
+          if (lifetime.signal.aborted) return;
+          const quiet = performance.now() - lastInput;
+          if (
+            quiet < CACHE_FLUSH_QUIET_MS &&
+            performance.now() - flushStarted < CACHE_FLUSH_MAX_WAIT_MS
+          ) {
+            cacheTimer = setTimeout(flushWhenQuiet, CACHE_FLUSH_QUIET_MS - quiet + 250);
+            cacheTimer.unref();
+            return;
+          }
+          const began = performance.now();
           try {
             flushCompileCache();
+            mainLogger?.info(
+              JSON.stringify({
+                module: "startup",
+                event: "compile_cache_flushed",
+                process: "main",
+                durationMs: Math.round(performance.now() - began),
+              }),
+            );
           } catch {
-            console.warn(
+            (mainLogger ?? console).warn(
               JSON.stringify({ module: "startup", event: "main_compile_cache_flush_failed" }),
             );
           }
           void pruneCompileCache(join(dataDir, "main-compile-cache"), hash).then((ok) => {
             if (!ok)
-              console.warn(
+              (mainLogger ?? console).warn(
                 JSON.stringify({ module: "startup", event: "main_compile_cache_prune_failed" }),
               );
           });
-        }, 30_000);
+        };
+        cacheTimer = setTimeout(flushWhenQuiet, 30_000);
         cacheTimer.unref();
         app.once("will-quit", () => clearTimeout(cacheTimer));
       })().catch(() => {

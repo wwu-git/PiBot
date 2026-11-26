@@ -1,10 +1,13 @@
 // Owns the durable extraction worker and yields to foreground Bot work.
+import { setTimeout as delay } from "node:timers/promises";
 import {
   boundaryTopics,
   correctionTopic,
   MemoryExtractionsRepo,
   memoryMaintenanceUsage,
 } from "@pibot/storage";
+import { correctionSource } from "./memory-correction.ts";
+import { recordCorrectionReceipt } from "./memory-correction-receipt.ts";
 import {
   dayStart,
   MemoryExtractionAttempt,
@@ -15,6 +18,7 @@ import { extractionErrorCode } from "./memory-extraction-result.ts";
 interface Deps extends Omit<MemoryExtractionAttemptDeps, "isPaused"> {
   isIdle(): boolean;
   onBotWork(listener: (botId: string) => void): () => void;
+  onAvailable?(listener: () => void): () => void;
 }
 const TOPICS_PER_BOT_DAY = 20;
 const SCAN_MS = 15_000;
@@ -33,6 +37,7 @@ export class MemoryExtractionQueue {
   private busy = false;
   private activeBot: string | undefined;
   private releaseWork: (() => void) | undefined;
+  private releaseAvailable: (() => void) | undefined;
   private running: Promise<void> | undefined;
   private exitSave: Promise<void> | undefined;
   constructor(private readonly deps: Deps) {
@@ -50,6 +55,13 @@ export class MemoryExtractionQueue {
     this.nextFallback = 0;
     this.releaseWork = this.deps.onBotWork((botId) => {
       if (botId === this.activeBot) this.controller?.abort();
+    });
+    this.releaseAvailable = this.deps.onAvailable?.(() => {
+      try {
+        if (this.repo.pendingCorrection()) this.wake();
+      } catch (error) {
+        this.warn("memory_extraction_wake_failed", error);
+      }
     });
     this.schedule(5_000);
   }
@@ -94,6 +106,8 @@ export class MemoryExtractionQueue {
     this.stopped = true;
     this.releaseWork?.();
     this.releaseWork = undefined;
+    this.releaseAvailable?.();
+    this.releaseAvailable = undefined;
     this.pause();
     await this.running;
     await this.exitSave;
@@ -112,9 +126,50 @@ export class MemoryExtractionQueue {
     try {
       if (this.stopped) return;
       const topic = correctionTopic(this.deps.db, conversationId, sourceMessageId);
-      if (topic && this.repo.enqueue({ ...topic, reason: "correction" })) this.wake();
+      const source =
+        topic &&
+        correctionSource(this.deps.db, conversationId, sourceMessageId, topic.botId, topic.groupId);
+      if (!topic || !source) return;
+      // After the caller publishes the finished reply, so this receipt is not overwritten by it.
+      const { botId } = topic;
+      setImmediate(() => {
+        if (!this.stopped) this.noteOwnRun(botId, source.replyId);
+      });
+      if (this.repo.enqueue({ ...topic, reason: "correction" })) this.wake();
     } catch (error) {
       this.warn("memory_extraction_correction_failed", error);
+    }
+  }
+  private noteOwnRun(botId: string, replyId: string) {
+    try {
+      const notes = this.deps.memory.anchorRunNotes(botId, replyId);
+      if (!notes.length) return;
+      const message = recordCorrectionReceipt(this.deps.db, replyId, notes, this.deps.redactor);
+      if (message) this.deps.publishReply?.(message, botId);
+    } catch (error) {
+      // The note itself is saved; only its receipt under the reply is missing.
+      this.warn("memory_correction_receipt_failed", error);
+    }
+  }
+  async waitForCorrection(
+    botId: string,
+    destinationConversationId: string | undefined,
+    signal: AbortSignal,
+  ) {
+    const deadline = performance.now() + 4_000;
+    const since = new Date(Date.now() - 60_000).toISOString();
+    while (!this.stopped && !this.paused) {
+      signal.throwIfAborted();
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) return;
+      const pending = this.repo.pendingCorrection({ botId, destinationConversationId, since });
+      if (!pending) return;
+      if (pending === "queued") {
+        // A new topic may wait for a prompt start, but it must not queue behind other maintenance.
+        if (this.busy || !this.deps.isIdle()) return;
+        if (this.deps.isBotIdle(botId, true)) this.wake();
+      }
+      await delay(Math.min(100, remaining), undefined, { signal });
     }
   }
   private wake() {
@@ -185,7 +240,7 @@ export class MemoryExtractionQueue {
           if (n >= TOPICS_PER_BOT_DAY) excluded.add(id);
         const next = this.repo.claim([...excluded]);
         if (!next) break;
-        if (!this.deps.isBotIdle(next.botId)) {
+        if (!this.deps.isBotIdle(next.botId, next.reason === "correction")) {
           this.repo.defer(next, "bot_busy");
           excluded.add(next.botId);
           continue;

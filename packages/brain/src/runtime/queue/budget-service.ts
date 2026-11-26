@@ -1,5 +1,7 @@
+// Track and enforce execution budgets across model requests and tool calls.
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import type { ModelRequestMetrics } from "@pibot/agent";
 import {
   AgentError,
   type AgentRequestObserver,
@@ -70,6 +72,7 @@ export class BudgetService {
     private readonly deps: {
       db: DatabaseSync;
       changed(snapshot: BudgetSnapshot): void;
+      modelRequest?(runId: string, request: ModelRequestMetrics): void;
       groupStopped?(groupId: string): void;
       warning(reason: string): void;
       redact(text: string): string;
@@ -331,7 +334,9 @@ export class BudgetService {
     if (count >= (isError ? 6 : 16)) this.stopRun(context, "repeated_operation");
   }
   observer(context: ToolRunContext): AgentRequestObserver {
+    const modelRequest = this.deps.modelRequest;
     return {
+      ...(modelRequest && { metrics: (request) => modelRequest(context.runId, request) }),
       beforeRequest: (request) => {
         this.reserve(context, request.id, "model", { pricingKnown: request.pricingKnown });
       },

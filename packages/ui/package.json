@@ -11,7 +11,8 @@
     "./tokens.css": "./src/theme/tokens.css",
     "./logo": "./src/brand/Logo.tsx",
     "./tokens": "./src/theme/tokens.ts",
-    "./icon-paths": "./src/components/icon-paths.ts"
+    "./icon-paths": "./src/components/icon-paths.ts",
+    "./avatar-paths": "./src/components/avatar-paths.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --ignoreConfig --noEmit --strict --noUncheckedIndexedAccess --target ES2023 --module ESNext --moduleResolution bundler --skipLibCheck --types node scripts/generate-tokens.ts",

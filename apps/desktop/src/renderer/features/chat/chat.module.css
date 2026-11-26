@@ -10,6 +10,24 @@
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
+  /* Message reading sizes, chosen in Settings › General (chatFontSize). Only the message text,
+     code and the message box scale; the sidebar, header and cards keep the app's type scale. */
+  --chat-text: 15px;
+  --chat-code: 13px;
+  --chat-input: 15px;
+  --chat-input-line: 22px;
+}
+.shell[data-chat-font="small"] {
+  --chat-text: 14px;
+  --chat-code: 12.5px;
+  --chat-input: 14px;
+  --chat-input-line: 21px;
+}
+.shell[data-chat-font="large"] {
+  --chat-text: 16.5px;
+  --chat-code: 14.5px;
+  --chat-input: 16.5px;
+  --chat-input-line: 25px;
 }
 .main {
   position: relative;
@@ -511,9 +529,20 @@
   color: var(--onUser);
   padding: 10px 14px;
   border-radius: 18px 18px 4px 18px;
+  font-size: var(--chat-text);
   box-shadow: 0 6px 16px -10px var(--chat-c, var(--b3));
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* A message the default Pi sent on the person's request: a quiet label above the bubble. */
+.fromPi {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px -4px;
+  color: var(--text2);
+  font-size: 12px;
 }
 /* The first line beside the avatar is always content, with or without a group sender line. */
 .assistant {
@@ -563,6 +592,7 @@
   box-shadow: var(--shadow-soft);
   border-radius: 4px 18px 18px 18px;
   padding: 10px 14px;
+  font-size: var(--chat-text);
   overflow-wrap: anywhere;
 }
 .bubble p {
@@ -590,7 +620,7 @@
   border-radius: 10px;
   background: var(--tert);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: var(--chat-code);
 }
 .bubble code {
   font-family: var(--font-mono);
@@ -809,8 +839,8 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 15px;
-  line-height: 22px;
+  font-size: var(--chat-input);
+  line-height: var(--chat-input-line);
 }
 .input::placeholder {
   color: var(--text2);

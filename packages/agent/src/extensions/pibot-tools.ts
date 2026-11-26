@@ -2,7 +2,7 @@ import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
 import { normalizeComputerInput, normalizeTodoPauseInput } from "@pibot/protocol-base";
 import { Type } from "typebox";
 import { PARALLEL_READS } from "../core/tool-effects.ts";
-import type { LocalToolPorts } from "../core/types.ts";
+import type { LocalToolDefinition, LocalToolPorts } from "../core/types.ts";
 import { isConnectorTool } from "./pibot-apps.ts";
 import { redactedToolText } from "./redacted-tool-text.ts";
 import type { ToolLoadout } from "./tool-loadout.ts";
@@ -34,10 +34,11 @@ export function toolsExtension(
   ports: LocalToolPorts,
   permits: Map<string, string>,
   loadout?: ToolLoadout,
+  registration?: readonly LocalToolDefinition[],
 ): ExtensionFactory {
   return (pi) => {
     loadout?.bind(pi);
-    for (const tool of ports.definitions) {
+    for (const tool of registration ?? ports.definitions) {
       if (isConnectorTool(tool.name)) continue;
       pi.registerTool({
         name: tool.name,

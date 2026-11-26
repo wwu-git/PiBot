@@ -16,6 +16,9 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import java.io.FileInputStream
+import java.security.MessageDigest
+import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.core.os.BundleCompat
 import com.google.android.gms.auth.api.phone.SmsRetriever
@@ -59,6 +62,39 @@ class PibotAndroidModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("PibotAndroid")
     Events("linkTick")
+    AsyncFunction("sha256File") { uri: String ->
+      val path = Uri.parse(uri).path ?: throw IllegalArgumentException("update_file_invalid")
+      val digest = MessageDigest.getInstance("SHA-256")
+      FileInputStream(java.io.File(path)).use { input ->
+        val buffer = ByteArray(1024 * 1024)
+        while (true) {
+          val count = input.read(buffer)
+          if (count < 0) break
+          digest.update(buffer, 0, count)
+        }
+      }
+      digest.digest().joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+    }.runOnQueue(Queues.DEFAULT)
+    AsyncFunction("installApk") { uri: String ->
+      val ctx = context
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ctx.packageManager.canRequestPackageInstalls()) {
+        "unknown_sources"
+      } else {
+        val source = Uri.parse(uri)
+        val path = source.path ?: throw IllegalArgumentException("update_file_invalid")
+        val content = FileProvider.getUriForFile(ctx, "${ctx.packageName}.pibot.files", java.io.File(path))
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+          setDataAndType(content, "application/vnd.android.package-archive")
+          addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+        "started"
+      }
+    }.runOnQueue(Queues.MAIN)
+    AsyncFunction("openInstallSettings") {
+      val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+      context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.runOnQueue(Queues.MAIN)
     OnCreate { RemoteLinkService.onTick = { sendEvent("linkTick", emptyMap<String, Any>()) } }
     AsyncFunction("readPagePermission") { kind: String -> PhoneReadPages.permission(context, kind) }
     AsyncFunction("beginPhonePage") { PhoneReadPages.begin() }

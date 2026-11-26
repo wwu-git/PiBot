@@ -67,6 +67,11 @@ const icons: Record<string, IconName> = {
   execution_targets: "folder",
   workplace_use_runner: "folder",
   delegate_to_agent: "bot",
+  team_list: "users",
+  bot_manage: "users",
+  group_manage: "users",
+  send_to_bot: "arrow",
+  send_to_group: "arrow",
 
   image_generation: "image",
   image_result: "image",

@@ -1,0 +1,293 @@
+/* The connect drawer and the connected detail drawer. Sections, cards and rows come from the
+   shared settings layout; this file only adds the hero, inputs, chips and the tool list's fold. */
+.drawer {
+  --page-c: var(--avatar-blue);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.hero {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  min-width: 0;
+}
+.tile {
+  --lc: var(--avatar-blue);
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  background: var(--lc);
+  color: var(--on-tone);
+  font-size: 18px;
+  font-weight: 700;
+}
+.tile[data-tone="teal"] {
+  --lc: var(--avatar-teal);
+}
+.tile[data-tone="orange"] {
+  --lc: var(--avatar-orange);
+}
+.tile[data-tone="violet"] {
+  --lc: var(--avatar-violet);
+}
+.tile[data-tone="green"] {
+  --lc: var(--avatar-green);
+}
+.tile[data-tone="pink"] {
+  --lc: var(--avatar-pink);
+}
+.tile[data-tone="amber"] {
+  --lc: var(--avatar-amber);
+}
+.heroText {
+  flex: 1 1 140px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.heroName {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 17px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 500;
+}
+.heroNote {
+  color: var(--text2);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+.heroActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+/* Over the page tabs' own width and inset, which are sized for the page header. */
+.tabs[role="tablist"] {
+  width: 100%;
+  margin: 0;
+}
+.tabs[role="tablist"] > button {
+  padding: 0 4px;
+  font-size: 13px;
+}
+.prep {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+}
+.prepText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+.fieldLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.fieldLabel small {
+  color: var(--text2);
+  font-weight: 400;
+  font-size: 12px;
+}
+.inputBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 40px;
+  padding: 0 6px 0 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--b2);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text2);
+}
+.inputBox:focus-within {
+  border-color: var(--accent);
+}
+/* The box shows focus; a second ring on the bare input inside it doubled it. */
+.inputBox input:focus-visible,
+.inputBox select:focus-visible {
+  outline: none;
+}
+.inputBox input,
+.inputBox select {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.eye {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text2);
+  cursor: pointer;
+}
+.eye:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.eye:focus-visible {
+  outline: 2px solid var(--prim);
+  outline-offset: 1px;
+}
+.fieldNote {
+  color: var(--text2);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.fieldError {
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.more {
+  display: block;
+  width: 100%;
+  padding: 10px 16px 12px 70px;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+.more:hover {
+  text-decoration: underline;
+}
+.more:focus-visible {
+  outline: 2px solid var(--prim);
+  outline-offset: -2px;
+}
+.pickerRow {
+  padding: 14px 16px 16px 70px;
+}
+.radio {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.radioRow {
+  display: block;
+  cursor: pointer;
+}
+.radioRow:has(.radio:disabled) {
+  cursor: default;
+}
+.footStart {
+  margin-inline-end: auto;
+}
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lines p {
+  margin: 0;
+}
+.siteChips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 100%;
+}
+.siteChips.start {
+  justify-content: flex-start;
+}
+.stackedControl {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 0 16px 14px;
+}
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.danger {
+  color: var(--danger);
+}
+@media (max-width: 520px) {
+  .more,
+  .pickerRow {
+    padding-inline-start: 16px;
+  }
+}

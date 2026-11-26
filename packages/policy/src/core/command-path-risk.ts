@@ -67,9 +67,25 @@ export async function verifiedCommandPaths(
   return verified;
 }
 
-export function windowsProtectedCommandPath(path: string, roots: readonly string[]) {
+/**
+ * `ownRoots` is the Bot's own work folder. It lives inside the data directory, which is otherwise
+ * protected as a whole, so without this a plain `dir` there asked and a write there was "danger"
+ * while the same command in a picked folder was fine. Only a protected root that contains the own
+ * folder yields to it; protected names, `.git` and roots inside the own folder still apply.
+ */
+export function windowsProtectedCommandPath(
+  path: string,
+  roots: readonly string[],
+  ownRoots: readonly string[] = [],
+) {
   return (
-    roots.some((root) => containsPath(root, path, "win32")) ||
+    roots.some(
+      (root) =>
+        containsPath(root, path, "win32") &&
+        !ownRoots.some(
+          (own) => containsPath(root, own, "win32") && containsPath(own, path, "win32"),
+        ),
+    ) ||
     windowsProtectedPathNames().some((name) =>
       `\\${path.replaceAll("/", "\\").toLowerCase()}\\`.includes(
         `\\${name.replaceAll("/", "\\").toLowerCase()}\\`,

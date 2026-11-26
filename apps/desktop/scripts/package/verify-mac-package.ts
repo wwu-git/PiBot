@@ -261,7 +261,7 @@ export async function verifyMacPackage(
       const pkg = JSON.parse(readFileSync(packageJson, "utf8"));
       if (name === "@earendil-works/pi-coding-agent") piPackageJson = packageJson;
       if (name === "@earendil-works/pi-ai" || name === "@earendil-works/pi-coding-agent")
-        assert.equal(pkg.version, "1.4.0");
+        assert.equal(pkg.version, "1.6.0");
       for (const dependency of Object.keys(pkg.dependencies ?? {}))
         inspect(dependency, packageJson);
     };

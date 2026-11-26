@@ -25,31 +25,37 @@ export async function loadLocalExtensions(
   const { createExtensionRuntime, DefaultResourceLoader } = await loadPiSdk();
   const runtime = createExtensionRuntime();
   if (!ports) return { runtime, extensions: [], errors: [] };
+  // Registration shares one catalog view; execution and later synchronization keep live ports.
+  const definitions = ports.definitions;
+  const capabilityDefinitions = ports.capabilityDefinitions ?? [];
   const permits = new Map<string, string>();
-  const loadout = new ToolLoadout(ports, toolLoading);
-  const builtinPorts: LocalToolPorts = ports.capabilityDefinitions?.length
-    ? {
-        ...ports,
-        definitions: ports.definitions.filter((tool) => !tool.capabilityImplementation),
-      }
-    : ports;
+  const loadout = new ToolLoadout(ports, toolLoading, definitions);
+  const builtinDefinitions = capabilityDefinitions.length
+    ? definitions.filter((tool) => !tool.capabilityImplementation)
+    : definitions;
   // pibot-apps joins the whitelist only when the brain wires connector tools;
   // the count check below keeps the set exact either way.
   const factories: { name: string; factory: ReturnType<typeof toolsExtension> }[] = [
-    { name: "pibot-tools", factory: toolsExtension(builtinPorts, permits, loadout) },
+    {
+      name: "pibot-tools",
+      factory: toolsExtension(ports, permits, loadout, builtinDefinitions),
+    },
     { name: "pibot-policy", factory: policyExtension(ports, permits) },
     {
       name: "pibot-activity",
       factory: activityExtension(ports, promptState, compaction, additions),
     },
   ];
-  if (ports.capabilityDefinitions?.length)
+  if (capabilityDefinitions.length)
     factories.push({
       name: "pibot-capabilities",
-      factory: pibotCapabilitiesExtension(ports, permits, loadout),
+      factory: pibotCapabilitiesExtension(ports, permits, loadout, capabilityDefinitions),
     });
-  if (ports.definitions.some((definition) => isConnectorTool(definition.name)))
-    factories.push({ name: "pibot-apps", factory: pibotAppsExtension(ports, permits, loadout) });
+  if (definitions.some((definition) => isConnectorTool(definition.name)))
+    factories.push({
+      name: "pibot-apps",
+      factory: pibotAppsExtension(ports, permits, loadout, definitions),
+    });
   const toolFactories = factories.map((entry) => entry.name);
   const loader = new DefaultResourceLoader({
     cwd,

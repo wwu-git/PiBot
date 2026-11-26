@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { until } from "../chat/harness.ts";
 import type { M3Fixture } from "./fixture.ts";
 import { approval, draft, type Exercise, terminal } from "./shared.ts";
@@ -208,9 +207,6 @@ export async function ledgerAcceptance(exercise: Exercise) {
 
 /** The e2e echo MCP fixture as a user-identity connector the main Bot may use. */
 async function echoConnector(f: M3Fixture) {
-  const server = fileURLToPath(
-    new URL("../../../tools/e2e/fixtures/mcp-echo/server.mjs", import.meta.url),
-  );
   const manifest = {
     schemaVersion: 1,
     id: "r1.echo",
@@ -222,7 +218,7 @@ async function echoConnector(f: M3Fixture) {
         id: "echo",
         transport: "stdio",
         command: process.execPath,
-        args: [server],
+        args: [f.echoServer],
         auth: { kind: "none", secretNames: [] },
         networkDomains: [],
       },

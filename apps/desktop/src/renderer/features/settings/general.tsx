@@ -1,4 +1,4 @@
-import type { Settings } from "@pibot/protocol";
+import { ChatFontSizeSchema, type Settings } from "@pibot/protocol";
 import {
   SettingsPage,
   SettingsRow,
@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useStartupDisplay } from "../../app/startup-display.tsx";
 import { LoginStartRow } from "../background/LoginStartRow.tsx";
 import { BackgroundLimit } from "./BackgroundLimit.tsx";
+import { LiveIslandSettings } from "./LiveIslandSettings.tsx";
 import { NetworkProxySettings } from "./network-proxy.tsx";
 import { requirePeer, SetupError } from "./operations.ts";
 
@@ -47,6 +48,7 @@ export function GeneralSettings() {
   return (
     <SettingsPage>
       <TaskStatus task={task} />
+      <LiveIslandSettings disabled={disabled} change={change} />
       <SettingsSection title={t("settings.languageTheme")}>
         <SettingsRow icon="globe" tone="blue" label={t("language.label")} note={t("language.note")}>
           <SegmentedControl
@@ -72,6 +74,23 @@ export function GeneralSettings() {
             value={settings?.theme ?? "system"}
             options={THEMES.map((value) => ({ value, label: t(`theme.${value}`) }))}
             onValueChange={(theme) => change({ theme })}
+          />
+        </SettingsRow>
+        <SettingsRow
+          icon="message"
+          tone="teal"
+          label={t("chatFont.label")}
+          note={t("settings.chatFontNote")}
+        >
+          <SegmentedControl
+            label={t("chatFont.label")}
+            disabled={disabled}
+            value={settings?.chatFontSize ?? "medium"}
+            options={ChatFontSizeSchema.options.map((value) => ({
+              value,
+              label: t(`chatFont.${value}`),
+            }))}
+            onValueChange={(chatFontSize) => change({ chatFontSize })}
           />
         </SettingsRow>
       </SettingsSection>

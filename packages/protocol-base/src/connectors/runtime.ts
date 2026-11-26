@@ -23,6 +23,8 @@ export interface PreparedConnector {
 /** Raw metadata stays untrusted until brain validates schema, limits and current revision. */
 export interface ConnectorRemoteTool {
   name: string;
+  /** MCP `title` (or annotations.title): a name for people, shown only. */
+  title?: string;
   description?: string;
   inputSchema: Record<string, unknown>;
   readOnlyHint?: boolean;

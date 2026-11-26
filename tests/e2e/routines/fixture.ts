@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, realpath } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { Socket } from "node:net";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   type BrainHost,
   type RoutineHostAdapter,
@@ -32,6 +31,14 @@ export async function m3Fixture(temporaryRoot: string, reuse?: { root: string; p
     monitor = join(primary, "readonly"),
     output = join(primary, "output");
   await Promise.all([mkdir(monitor, { recursive: true }), mkdir(output, { recursive: true })]);
+  // MCP executes inside the permissions sandbox. A development checkout can itself be under a
+  // protected AI-config directory, so give subprocesses only the synthetic scripts they need.
+  const githubServer = join(root, "fake-github-mcp.mjs");
+  const echoServer = join(root, "fake-echo-mcp.mjs");
+  await Promise.all([
+    copyFile(new URL("../../fixtures/fake-github-mcp.mjs", import.meta.url), githubServer),
+    copyFile(new URL("../../../tools/e2e/fixtures/mcp-echo/server.mjs", import.meta.url), echoServer),
+  ]);
   const scenario: Scenario = await loadScenario("routines");
   const requests: { model: string; body: Record<string, unknown> }[] = [];
   const server = await startFakeLlm({
@@ -140,10 +147,7 @@ export async function m3Fixture(temporaryRoot: string, reuse?: { root: string; p
                 approved:
                   input.command === process.execPath &&
                   input.args.length === 1 &&
-                  input.args[0] ===
-                    fileURLToPath(
-                      new URL("../../../tools/e2e/fixtures/mcp-echo/server.mjs", import.meta.url),
-                    ) &&
+                  input.args[0] === echoServer &&
                   input.networkDomains.length === 0,
               })
             : undefined,
@@ -264,6 +268,8 @@ export async function m3Fixture(temporaryRoot: string, reuse?: { root: string; p
       primary,
       monitor,
       output,
+      githubServer,
+      echoServer,
       bot,
       other,
       provider,

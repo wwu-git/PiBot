@@ -53,11 +53,24 @@ export function Sidebar() {
   const [searchError, setSearchError] = useState(false);
   const [searchingMore, setSearchingMore] = useState(false);
   const searchedQuery = useRef("");
+  const searchRevision = useRef(0);
+  const [importRevision, setImportRevision] = useState(0);
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => {
+    return peer?.on("import.progress", ({ state, removed }) => {
+      const hidden = state === "undoing" && removed?.topics === 0 && removed.messages === 0;
+      if (!hidden && state !== "completed") return;
+      searchRevision.current++;
+      setImportRevision((value) => value + 1);
+    });
+  }, [peer]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: import publication invalidates the current query without changing its text.
+  useEffect(() => {
     let active = true;
+    const revision = ++searchRevision.current;
     setResults(undefined);
     setSearchError(false);
+    setSearchingMore(false);
     setSearching(!!query.trim());
     searchedQuery.current = query.trim();
     if (!peer || !query.trim()) return;
@@ -65,30 +78,31 @@ export function Sidebar() {
       void peer
         .call("search.query", { query: query.trim(), limit: 50 })
         .then((result) => {
-          if (active) setResults(result);
+          if (active && revision === searchRevision.current) setResults(result);
         })
         .catch(() => {
-          if (active) setSearchError(true);
+          if (active && revision === searchRevision.current) setSearchError(true);
         })
         .finally(() => {
-          if (active) setSearching(false);
+          if (active && revision === searchRevision.current) setSearching(false);
         });
     }, 250);
     return () => {
       active = false;
       clearTimeout(timer);
     };
-  }, [peer, query]);
+  }, [peer, query, importRevision]);
   // Older message matches arrive page by page; a page for a query the user has since changed is dropped.
   const searchOlder = () => {
     const cursor = results?.nextCursor;
     if (!peer || !cursor || searchingMore) return;
     const asked = searchedQuery.current;
+    const revision = searchRevision.current;
     setSearchingMore(true);
     void peer
       .call("search.query", { query: asked, limit: 50, cursor })
       .then((page) => {
-        if (searchedQuery.current !== asked) return;
+        if (revision !== searchRevision.current) return;
         setResults((current) => {
           if (!current) return current;
           const seen = new Set(current.messages.map((message) => message.id));
@@ -105,9 +119,11 @@ export function Sidebar() {
         });
       })
       .catch(() => {
-        if (searchedQuery.current === asked) setSearchError(true);
+        if (revision === searchRevision.current) setSearchError(true);
       })
-      .finally(() => setSearchingMore(false));
+      .finally(() => {
+        if (revision === searchRevision.current) setSearchingMore(false);
+      });
   };
   const computerStates = useComputerStates();
   const conversations = useConversationNavigation(query, task);

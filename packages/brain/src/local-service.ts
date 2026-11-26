@@ -5,6 +5,8 @@ import {
   createLocalExecutionTarget,
   type ExecutionTarget,
   sensitiveReadBoundary,
+  windowsSystemDrive,
+  windowsSystemTrees,
 } from "@pibot/execution";
 import { createPolicy, type Policy, type PolicyRequest } from "@pibot/policy";
 import { RpcError, RpcErrorCodes } from "@pibot/protocol-base";
@@ -194,6 +196,7 @@ export class LocalService {
    * schema, policy request and catalog entry are still kernel tables.
    */
   readonly toolExecutors = new Map<string, import("./core/capability.ts").ToolExecutor>();
+  readonly toolCards = new Map<string, import("./core/capability.ts").ToolCardDescriber>();
   /** Owner of unattended runs; undefined when no capability claims it. */
   unattended?: import("./core/capability.ts").UnattendedRunOwner;
   /** Pre-authorization inside unattended runs; asks the owner capability and fails closed. */
@@ -218,6 +221,9 @@ export class LocalService {
   }
   get memoryExtraction() {
     return this.memoryProvider?.extraction;
+  }
+  get memoryImportDistillation() {
+    return this.memoryProvider?.importDistillation;
   }
   get memory() {
     if (!this.memoryProvider) throw new RpcError(RpcErrorCodes.unsupported, "memory_unavailable");
@@ -449,6 +455,7 @@ export class LocalService {
     timing.mark("tool_calls_recover");
     this.budgets = new BudgetService({
       db: deps.db,
+      modelRequest: deps.modelRequest,
       redact: (text) => deps.redactor.redact(text),
       changed: (snapshot) => deps.peer.emit("execution.budget.changed", snapshot),
       groupStopped: (groupId) => {
@@ -521,6 +528,12 @@ export class LocalService {
     this.policy ??= createPolicy({
       platform: this.deps.platform,
       userHome: this.deps.userHome,
+      ...(this.deps.platform === "win32"
+        ? {
+            windowsSystemDrive: windowsSystemDrive(this.deps.env),
+            windowsSystemTrees: windowsSystemTrees(this.deps.env),
+          }
+        : {}),
       resourcesDir: this.deps.resourcesDir,
     }).then((policy) => {
       if (this.shutdown.signal.aborted) {

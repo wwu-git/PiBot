@@ -103,7 +103,9 @@ Ways to add memory:
 
 - Tell a Bot "remember that I prefer…".
 - In a memory list click **+ Add**, write the memory and pick a category (About you, Work, How to work, Other).
-- Turn on **Extract memories from conversations**: when a topic winds down, the Bot pulls preferences and agreements out of it into memory.
+- Turn on **Extract memories from conversations**. Pi Bot schedules extraction when you switch topics, after about 30 minutes without new messages, or after a group plan or routine with input from you finishes. Pending extraction is saved when you quit and can resume when you next open Pi Bot.
+
+You can also correct a Bot directly, for example by saying “Put the conclusion first in future reports.” With extraction on and **Remember** selected, Pi Bot prioritizes corrections and lasting preferences it recognizes. Once saved, **Remembered** appears under the original reply, where you can choose **Undo**. If the model is busy, this may take longer. With **Ask first**, you get a suggestion to confirm.
 
 **When it learns something new** can be **Remember** or **Ask first**. With Ask first, the Bot asks you before it writes a memory. **Sort into place** in About you uses the model to move memories that belong to one Bot's work back to that Bot; the move proposals appear in the Inbox for you to confirm one by one.
 
@@ -123,3 +125,14 @@ Coding agents already installed on your computer (Codex, Claude Agent, Cursor, O
 
 - **Import a .pibot file**: "+" › **Import a .pibot file**; you preview before importing. Multi-Bot or group templates import as a whole, as previewed.
 - **New sidebar group**: "+" › **New sidebar group** to organize the sidebar.
+
+## Let Pi manage Bots and assign work
+
+The default Pi is your chief of staff. In your direct chat with Pi, say things like "set up someone for the bookkeeping", "make a group with Fin and Dev" or "have the reviewer check the contracts": Pi can create, edit, archive or restore Bots, create groups, add or remove members, archive or restore groups, and hand a task to a Bot or a group.
+
+- Every change shows a card first that lists exactly what changes (name, role, model, members, or who gets which task). Ticking **Don't ask again** sets the matching row on Pi's permissions tab to **Always**. With YOLO on in Pi's topic these cards pass like other YOLO-able confirmations (a row set to **Never** still refuses).
+- Pi's **Permissions** tab starts with **Manage and assign · Pi only**: **Manage Bots and groups** and **Assign work to Bots and groups** can each be **Never**, **Ask** (default) or **Always**. No other Bot has these rows or the tools behind them.
+- Pi cannot delete Bots or groups (archive only, always restorable), cannot change any Bot's permissions, and cannot read keys.
+- Assigned work opens a new topic marked **From Pi** at the receiver, which works under its own permissions; a group plans it through its coordinator as usual. When it finishes, fails, stops or needs you, a receipt card appears in Pi's chat (result, summary, outputs, **Open topic**) and Pi tells you in a sentence or two.
+- At most 3 hand-offs per turn; a Bot or group working on Pi's task cannot hand work on, or back to Pi.
+- This works only in your direct chat with Pi: on the computer, or from your paired phone through the computer (cards and receipts show there too, including **Don't ask again**). Not with the phone's own offline model, an editor (ACP), groups or routines.

@@ -27,6 +27,7 @@ import {
   GroupTaskSchema,
   GroupWorkplaceSchema,
 } from "./group.ts";
+import { GroupTaskBriefSchema } from "./task-brief.ts";
 
 const label = z.string().trim().min(1).max(200);
 const ok = z.strictObject({ ok: z.literal(true) });
@@ -50,7 +51,8 @@ export const GroupMethods = {
       coordinatorBotId: IdSchema.optional(),
       announcement: GroupSchema.shape.announcement.optional(),
       autoRoundLimit: GroupSchema.shape.autoRoundLimit.optional(),
-      externalAgentStepContext: GroupSchema.shape.externalAgentStepContext.optional(),
+      // Leave omissions intact through the phone gateway. Group creation applies the default.
+      externalAgentStepContext: z.boolean().optional(),
       workplace: GroupWorkplaceSchema.optional(),
     }),
     result: GroupSchema,
@@ -142,6 +144,14 @@ export const GroupMethods = {
       checkpoint: ExecutionCheckpointSchema.nullable(),
       resultMessageId: IdSchema.nullable(),
     }),
+  },
+  /**
+   * The structured brief of a plan step's task, from stored plan, step and hand-off records (no
+   * model call). Null for tasks that are not plan steps (ad-hoc assignments, older tasks).
+   */
+  "groups.tasks.brief": {
+    params: groupId.extend({ taskId: IdSchema }),
+    result: GroupTaskBriefSchema.nullable(),
   },
   "groups.tasks.summary": {
     params: groupId.extend({

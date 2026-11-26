@@ -20,6 +20,7 @@ export function ProfilePermissions({ bot }: { bot: Bot }) {
       state={state}
       description={image ? t("panel.imageOnly", { name: bot.name }) : t("panel.permissionsNote")}
       imageOnly={image}
+      piManager={bot.isMain}
       computer={<ProfileComputer key={bot.id} botId={bot.id} permissions={state} />}
       grants={
         <>

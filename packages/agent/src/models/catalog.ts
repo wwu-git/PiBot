@@ -1,3 +1,4 @@
+// Lists model providers from pi and the Pi Bot gateway presets.
 // `./env-api-keys` (add-only patch) has no SDK imports; `./compat` would load pi-ai and typebox.
 import { findEnvKeys } from "@earendil-works/pi-ai/env-api-keys";
 import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
@@ -6,6 +7,7 @@ import {
   CHATGPT_CODEX_PROVIDER,
   CHATGPT_PLAN_PROVIDER,
   CHATGPT_PLAN_PROVIDERS,
+  MAGPIE_PROVIDER,
   providerFamily,
   providerPlan,
 } from "@pibot/protocol-base/provider-catalog";
@@ -98,6 +100,7 @@ export function listProviderCatalog(): ProviderCatalogEntry[] {
       },
     );
   for (const [id, name] of [
+    [MAGPIE_PROVIDER.id, MAGPIE_PROVIDER.name],
     ["ollama", "Ollama"],
     ["lmstudio", "LM Studio"],
     ["vllm", "vLLM"],

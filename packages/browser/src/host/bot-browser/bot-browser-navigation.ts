@@ -12,7 +12,6 @@ import {
   readUserAgentMetadata,
 } from "../login/google-compat.ts";
 import {
-  applyProxy,
   approvedPrivateOrigin,
   listedHost,
   localWorkplaceFile,
@@ -94,15 +93,14 @@ export async function configureRulesStep(this: BotBrowserOperations, rules: Brow
   if (compatChanged) this.reloadGoogleTabs();
   if (rules.googleCompat)
     for (const tab of this.tabs.values()) this.learnUserAgentMetadata(tab, tab.url);
-  // With a proxy the bypass list carries the Bot's own local ports, so it changes too.
-  // Allowed local-network origins bypass it as well (maintainers 2026-11-14).
-  const key = rules.proxy
-    ? `${rules.proxy.url} ${rules.localPorts?.join(",") ?? ""} ${rules.privateOrigins?.join(",") ?? ""}`
-    : "direct";
-  // The default session mode is "system"; the first configure always pins it.
+  // Grant removal and run handoff must also retire authenticated tunnels, even in direct mode.
+  const key = JSON.stringify([rules.runId, rules.proxy, rules.localPorts, rules.privateOrigins]);
   if (key !== this.proxyKey) {
-    await applyProxy(this.session, rules.proxy, rules.localPorts, rules.privateOrigins);
+    await this.privateTransport.configure(rules);
     this.proxyKey = key;
+  } else {
+    // A new rules object still owns the same run's route; refresh the transport's rule binding.
+    this.privateTransport.rebind(rules);
   }
 }
 

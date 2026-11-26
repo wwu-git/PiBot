@@ -1,7 +1,12 @@
+// Registers the brain-side model and provider operations.
 import type { CapabilityContext } from "@pibot/brain/kit";
 import {
   canonicalImageModelId,
   isChatGPTPlanProvider,
+  MAGPIE_PROVIDER,
+  type MethodParams,
+  magpieBaseUrl,
+  magpiePort,
   providerPlan,
   RpcError,
 } from "@pibot/models-contract/full";
@@ -9,6 +14,7 @@ import { SettingsRepo } from "@pibot/storage";
 import { recordedModelHealth } from "../../store/index.ts";
 import type { ProviderAuth } from "../auth/provider-auth.ts";
 import type { ModelSettings } from "../settings/model-settings.ts";
+import { detectMagpie, fetchMagpieModels } from "./magpie.ts";
 import { detectOllama } from "./ollama.ts";
 import { type ProviderStore, providerScope } from "./providers.ts";
 
@@ -25,24 +31,25 @@ export function registerModelProviderRpc(
   handle("models.health", ({ models }) => recordedModelHealth(ctx.db, models));
   handle("providers.list", async () => {
     const envNames = new Set(await ctx.host.env.detect());
+    // Use the same catalog as the model picker, including retirement and snapshot overlays.
     const modelCounts = new Map<string, number>();
     for (const model of await agent.listModels())
       modelCounts.set(model.provider, (modelCounts.get(model.provider) ?? 0) + 1);
+    const saved = providers.configs();
     const catalog = providers.catalog.map((entry) => {
-      const custom = providers
-        .configs()
-        .find((cfg) => cfg.id === entry.id && entry.auth === "custom");
+      const custom = saved.find((cfg) => cfg.id === entry.id && entry.auth === "custom");
       return custom
         ? {
             ...entry,
             name: custom.name,
+            ...(entry.id === MAGPIE_PROVIDER.id ? { baseUrl: custom.baseUrl } : {}),
             modelCount: custom.models.length + (custom.imageModels?.length ?? 0),
           }
-        : entry.id === "openrouter"
+        : entry.auth !== "custom"
           ? { ...entry, modelCount: modelCounts.get(entry.id) ?? entry.modelCount }
           : entry;
     });
-    for (const cfg of providers.configs()) {
+    for (const cfg of saved) {
       if (!catalog.some((entry) => entry.id === cfg.id && entry.auth === "custom"))
         catalog.push({
           id: cfg.id,
@@ -54,6 +61,12 @@ export function registerModelProviderRpc(
         });
     }
     return catalog.map((entry) => {
+      if (entry.id === MAGPIE_PROVIDER.id)
+        return {
+          ...entry,
+          configured: saved.some((cfg) => cfg.id === entry.id),
+          envDetected: false,
+        };
       const enabled = entry.auth === "apiKey" || entry.auth === "custom";
       const configured =
         enabled &&
@@ -82,6 +95,25 @@ export function registerModelProviderRpc(
   handle("providers.setApiKey", async ({ providerId, apiKey }) => {
     await providers.serialize(() => providers.setKey(providerId, apiKey));
     changed();
+    return { ok: true };
+  });
+  handle("providers.addModel", async ({ providerId, modelId }) => {
+    // The pinned catalog already offers it: a duplicate entry would hide which one a Bot uses.
+    const listed = (await agent.listModels()).some(
+      (model) => model.provider === providerId && model.id === modelId && !model.addedByUser,
+    );
+    if (listed) throw new RpcError(-32602, "model_already_listed");
+    const changedList = await providers.serialize(async () =>
+      providers.changeAddedModel(providerId, modelId, true),
+    );
+    if (changedList) changed();
+    return { ok: true };
+  });
+  handle("providers.removeModel", async ({ providerId, modelId }) => {
+    const changedList = await providers.serialize(async () =>
+      providers.changeAddedModel(providerId, modelId, false),
+    );
+    if (changedList) changed();
     return { ok: true };
   });
   handle("providers.importFromEnv", async ({ providerId }) => {
@@ -135,7 +167,7 @@ export function registerModelProviderRpc(
           providerId,
           ...(result.ok ? { event: "test_fell_back" } : { error: result.error ?? "internal" }),
           ...(httpStatus === undefined ? {} : { httpStatus }),
-          ...(testedModels?.length ? { testedModels } : {}),
+          ...(providerId !== MAGPIE_PROVIDER.id && testedModels?.length ? { testedModels } : {}),
         }),
       );
     return {
@@ -150,7 +182,17 @@ export function registerModelProviderRpc(
     return { models: await agent.fetchCustomModels(cfg) };
   });
   handle("customProviders.get", async ({ providerId }) => providers.info(providerId));
-  handle("customProviders.fetchSavedModels", async ({ providerId }) => {
+  handle("customProviders.fetchSavedModels", async ({ providerId }, { signal }) => {
+    if (providerId === MAGPIE_PROVIDER.id) {
+      const port = magpiePort(providers.get(providerId).baseUrl);
+      if (port === undefined) throw new RpcError(-32602, "magpie_port_invalid");
+      return {
+        models: await fetchMagpieModels(
+          port,
+          AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+        ),
+      };
+    }
     await providers.requireCredentials(providerId);
     const { baseUrl, api, headers } = providers.get(providerId);
     const apiKey = await providers.secrets.get(providerScope(providerId), "apiKey");
@@ -164,6 +206,7 @@ export function registerModelProviderRpc(
     };
   });
   handle("customProviders.upsert", async (cfg) => {
+    if (cfg.id === MAGPIE_PROVIDER.id) throw new RpcError(-32602, "magpie_requires_local_setup");
     const id = await modelSettings.upsert(cfg);
     peer.emit("settings.changed", settings.get());
     changed();
@@ -205,5 +248,32 @@ export function registerModelProviderRpc(
       .filter((model) => !before || key(model) > before)
       .slice(0, limit);
   });
+  handle(
+    "local.detectMagpie",
+    ({ port = MAGPIE_PROVIDER.defaultPort }: MethodParams["local.detectMagpie"], { signal }) =>
+      detectMagpie(port, AbortSignal.any([signal, ctx.models.signal()])),
+  );
+  handle(
+    "local.configureMagpie",
+    async ({ port }: MethodParams["local.configureMagpie"], { signal }) => {
+      const deadline = AbortSignal.any([signal, ctx.models.signal(), AbortSignal.timeout(10_000)]);
+      const gateway = await detectMagpie(port, deadline);
+      if (!gateway.running) throw new RpcError(-32602, "magpie_models_unavailable");
+      const discovered = await fetchMagpieModels(port, deadline);
+      await modelSettings.upsert(
+        {
+          id: MAGPIE_PROVIDER.id,
+          name: MAGPIE_PROVIDER.name,
+          baseUrl: magpieBaseUrl(port),
+          api: "openai-completions",
+          models: discovered,
+        },
+        deadline,
+      );
+      peer.emit("settings.changed", settings.get());
+      changed();
+      return { count: discovered.length };
+    },
+  );
   handle("local.detectOllama", async () => detectOllama());
 }

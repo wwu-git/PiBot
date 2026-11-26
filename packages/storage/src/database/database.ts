@@ -71,6 +71,33 @@ export function transaction<T>(db: DatabaseSync, operation: () => T): T {
 /** Runs every migration file in `dir`; the entry's `runMigrations` supplies the bundled directory. */
 type Migration = { file: string; version: number };
 
+// These numbers were shipped by prd before upstream assigned them to different migrations.
+function reconcilePrdMigrations(db: DatabaseSync, migrations: readonly Migration[]): void {
+  if (
+    !migrations.some(({ file }) => file === "0184_mcp_direct_read_write.sql") ||
+    !migrations.some(({ file }) => file === "0185_antigravity_agent.sql")
+  )
+    return;
+  transaction(db, () => {
+    const hasColumn = db.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name = ?");
+    const tableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?");
+    const renumber = db.prepare(
+      "UPDATE schema_migrations SET version = ? WHERE version = ? AND NOT EXISTS " +
+        "(SELECT 1 FROM schema_migrations WHERE version = ?)",
+    );
+    if (
+      !hasColumn.get("import_jobs", "cleanup_phase") &&
+      String(tableSql.get("connectors")?.sql).includes("'direct_read_write'")
+    )
+      renumber.run(184, 176, 184);
+    if (
+      !hasColumn.get("scoped_memories", "kind") &&
+      String(tableSql.get("external_agent_bots")?.sql).includes("'antigravity'")
+    )
+      renumber.run(185, 177, 185);
+  });
+}
+
 /** Versions to consider, validated; creates the ledger table. Shared by both apply paths. */
 function planMigrations(db: DatabaseSync, dir: string): Migration[] {
   const migrations = readdirSync(dir)
@@ -97,6 +124,7 @@ function planMigrations(db: DatabaseSync, dir: string): Migration[] {
   db.exec(
     "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)",
   );
+  reconcilePrdMigrations(db, migrations);
   return migrations;
 }
 

@@ -24,6 +24,7 @@ import {
   dispositionText,
   stuckSteps,
 } from "./group-workflow-disposition.ts";
+import { holdForReplanLimit } from "./group-workflow-hold.ts";
 import { type GroupWorkflowProgress, progressOf } from "./group-workflow-progress.ts";
 import { workflowOf } from "./group-workflow-snapshot.ts";
 import {
@@ -108,7 +109,9 @@ export class GroupWorkflowReplanner {
     // Running out of dispositions hands the stuck steps to the user, not the plan's end.
     if (!limit && progress.replans >= 2 && this.service.workflows.handOver(record, "exhausted"))
       return;
-    if (limit || progress.replans >= 2) return this.progress.stop(record, limit ?? "replan_limit");
+    if (limit) return this.progress.stop(record, limit);
+    // Out of replans is not out of work: the remaining steps wait for the user's choice.
+    if (progress.replans >= 2) return holdForReplanLimit(this.service, record);
     const group = this.service.active(record.groupId, record.coordinatorBotId);
     if (group.paused) return;
     try {
@@ -119,6 +122,8 @@ export class GroupWorkflowReplanner {
       // provable author, over the step cap, a stale plan) falls back to the coordinator below.
       const data = error.data as { planLimit?: boolean; paused?: boolean } | undefined;
       if (data?.paused) return;
+      if (data?.planLimit && error.message === "replan_limit")
+        return holdForReplanLimit(this.service, record);
       if (data?.planLimit) return this.progress.stop(record, error.message);
       this.service.deps.logger.warn(
         JSON.stringify({

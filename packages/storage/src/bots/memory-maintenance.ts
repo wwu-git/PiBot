@@ -7,8 +7,10 @@ export function memoryStatus(db: DatabaseSync, owner: MemoryOwner) {
   const row = db
     .prepare(`SELECT COUNT(*) FILTER(WHERE archived_at IS NULL) AS active,
     COUNT(*) FILTER(WHERE archived_at IS NOT NULL) AS archived,
-    COUNT(*) FILTER(WHERE COALESCE(last_used_at,created_at)<?) AS unused
-    FROM scoped_memories WHERE scope=? AND owner_id=?`)
+    COUNT(*) FILTER(WHERE r.measured_since IS NOT NULL
+      AND COALESCE(r.last_used_at,r.measured_since)<?) AS unused
+    FROM scoped_memories m LEFT JOIN memory_recall_metrics r ON r.memory_id=m.id
+    WHERE scope=? AND owner_id=?`)
     .get(new Date(Date.now() - 90 * 86400_000).toISOString(), owner.scope, owner.ownerId);
   // Only quota archiving (makeMemoryRoom) asks for organizing; a memory the user archived
   // themselves is already organized. The quota audit is written after `archived_at` is set, so a
@@ -78,21 +80,35 @@ export function makeMemoryRoom(
 
 /**
  * Extraction and organization draw on one daily budget, so the cap is checked
- * against both tables. Counting only one of them would let the other double the real spend.
+ * across all maintenance workers so every run contributes to the shared limits.
  */
 export function memoryMaintenanceUsage(db: DatabaseSync, since: string) {
   const sum = (table: "memory_extractions" | "memory_organizations") =>
     db
       .prepare(
-        `SELECT IFNULL(SUM(tokens),0) AS tokens, IFNULL(SUM(cost_usd),0) AS costUsd
+        `SELECT IFNULL(SUM(tokens),0) AS tokens, IFNULL(SUM(MAX(cost_usd,0)),0) AS costUsd
         FROM ${table} WHERE COALESCE(started_at,created_at)>=?`,
       )
       .get(since);
   const extraction = sum("memory_extractions");
   const organization = sum("memory_organizations");
+  const imported = db
+    .prepare("SELECT COALESCE(SUM(tokens),0) AS tokens FROM import_memory_usage WHERE at>=?")
+    .get(since);
+  const dream = db
+    .prepare(`SELECT IFNULL(SUM(tokens),0) AS tokens, IFNULL(SUM(MAX(cost_usd,0)),0) AS costUsd
+    FROM memory_dream_runs WHERE started_at>=?`)
+    .get(since);
   return {
-    tokens: Number(extraction?.tokens ?? 0) + Number(organization?.tokens ?? 0),
-    costUsd: Number(extraction?.costUsd ?? 0) + Number(organization?.costUsd ?? 0),
+    tokens:
+      Number(extraction?.tokens ?? 0) +
+      Number(organization?.tokens ?? 0) +
+      Number(imported?.tokens ?? 0) +
+      Number(dream?.tokens ?? 0),
+    costUsd:
+      Number(extraction?.costUsd ?? 0) +
+      Number(organization?.costUsd ?? 0) +
+      Number(dream?.costUsd ?? 0),
   };
 }
 

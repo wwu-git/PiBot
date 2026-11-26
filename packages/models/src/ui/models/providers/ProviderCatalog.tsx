@@ -1,9 +1,12 @@
-import { type Provider, providerFamily } from "@pibot/models-contract/full";
+// Displays searchable provider tiles and configured providers.
+import { MAGPIE_PROVIDER, type Provider, providerFamily } from "@pibot/models-contract/full";
 import { setupStyles as styles, useT } from "@pibot/renderer-kit";
+import { Button } from "@pibot/ui";
 import { useState } from "react";
 import { providerIdentity } from "../../setup/operations.ts";
 import modelStyles from "../models.module.css";
 import { modelCountText } from "./model-count.ts";
+import { ProviderTile } from "./ProviderTile.tsx";
 import {
   groupedProviderCatalog,
   providerGroups as groups,
@@ -18,17 +21,29 @@ export function ProviderCatalog({
   disabled,
   onSelect,
   initialGroup = "common",
+  magpieDetected = false,
+  newModels,
+  onAddModels,
 }: {
   providers: Provider[];
   selection?: string;
   disabled: boolean;
   onSelect(provider: Provider, button: HTMLElement): void;
   initialGroup?: (typeof groups)[number];
+  magpieDetected?: boolean;
+  /** Model ids a saved custom provider offers beyond its saved list. */
+  newModels?: ReadonlyMap<string, string[]>;
+  onAddModels?(provider: Provider, ids: string[], button: HTMLElement): void;
 }) {
   const t = useT();
   const [group, setGroup] = useState(initialGroup);
   const [search, setSearch] = useState("");
-  const named = namedProviders(providers, t("chatgpt.title"), t("chatgpt.codex.title"));
+  const named = namedProviders(
+    providers,
+    t("chatgpt.title"),
+    t("chatgpt.codex.title"),
+    t("models.magpie.name"),
+  );
   const catalog = groupedProviderCatalog(
     providerCatalog(named, t("setup.customLabel"), t("models.payAsYouGo")),
   );
@@ -36,54 +51,54 @@ export function ProviderCatalog({
     .filter((provider) => provider.configured)
     .sort((a, b) => a.name.localeCompare(b.name, "en"));
   const query = search.trim().toLowerCase();
-  const visible = catalog.filter((provider) =>
-    query
-      ? `${provider.id} ${provider.name} ${t(`models.auth.${provider.auth}`)}`
-          .toLowerCase()
-          .includes(query)
-      : group === "all" || provider.group === group,
+  const visible = catalog.filter(
+    (provider) =>
+      (provider.id !== MAGPIE_PROVIDER.id || magpieDetected) &&
+      (query
+        ? `${provider.id} ${provider.name} ${t(`models.auth.${provider.auth}`)}`
+            .toLowerCase()
+            .includes(query)
+        : group === "all" || provider.group === group),
   );
   const renderProvider = (provider: Provider, saved = false) => (
-    <button
+    <ProviderTile
       key={providerIdentity(provider)}
-      type="button"
-      className={`${modelStyles.tile} ${saved ? modelStyles.configuredTile : ""}`}
-      aria-pressed={providerIdentity(provider) === selection}
-      data-add={provider.id === "new-custom" || undefined}
+      selected={providerIdentity(provider) === selection}
+      add={provider.id === "new-custom"}
+      saved={saved}
       title={provider.unavailableReason ? t(`errors.${provider.unavailableReason}`) : undefined}
       disabled={disabled || !provider.available}
       onClick={(event) => onSelect(provider, event.currentTarget)}
-    >
-      <span aria-hidden="true" className={modelStyles.monogram} data-group={provider.group}>
-        {providerMonogram(provider.id, provider.name)}
-      </span>
-      <span className={modelStyles.tileText}>
-        <strong>
+      group={provider.group}
+      monogram={providerMonogram(provider.id, provider.name)}
+      name={
+        <>
           {provider.name}
           {saved && provider.auth !== "custom" && providerFamily(provider.id)
             ? ` · ${t(`models.region.${providerFamily(provider.id)?.variants.find(([id]) => id === provider.id)?.[1] ?? "global"}`)}`
             : ""}
-        </strong>
-        <span className={modelStyles.tileNote}>
-          {!provider.available
-            ? t(
-                provider.unavailableReason
-                  ? `errors.${provider.unavailableReason}`
-                  : "common.comingSoon",
-              )
-            : saved
-              ? provider.auth === "oauth"
-                ? t("auth.state.connected")
-                : provider.keyHint === undefined
-                  ? t("setup.saved")
-                  : t("models.keySaved", { hint: provider.keyHint })
-              : `${t(`models.auth.${provider.auth}`)} · ${provider.available ? modelCountText(provider, t) : t("common.comingSoon")}`}
-        </span>
-      </span>
+        </>
+      }
+      note={
+        !provider.available
+          ? t(
+              provider.unavailableReason
+                ? `errors.${provider.unavailableReason}`
+                : "common.comingSoon",
+            )
+          : saved
+            ? provider.auth === "oauth"
+              ? t("auth.state.connected")
+              : provider.keyHint === undefined
+                ? t("setup.saved")
+                : t("models.keySaved", { hint: provider.keyHint })
+            : `${t(`models.auth.${provider.auth}`)} · ${provider.available ? modelCountText(provider, t) : t("common.comingSoon")}`
+      }
+    >
       {!saved && provider.configured && (
         <span role="img" className={modelStyles.configuredDot} aria-label={t("setup.saved")} />
       )}
-    </button>
+    </ProviderTile>
   );
   return (
     <div className={modelStyles.modelsList}>
@@ -98,7 +113,30 @@ export function ProviderCatalog({
         </h2>
         {configured.length ? (
           <div className={modelStyles.configuredProviders}>
-            {configured.map((provider) => renderProvider(provider, true))}
+            {configured.map((provider) => {
+              const fresh = newModels?.get(provider.id);
+              if (!fresh?.length || !onAddModels) return renderProvider(provider, true);
+              return (
+                <div key={providerIdentity(provider)} className={modelStyles.tileWithHint}>
+                  {renderProvider(provider, true)}
+                  <p className={modelStyles.newModels}>
+                    <span>
+                      {t(fresh.length === 1 ? "models.newModels.one" : "models.newModels", {
+                        count: fresh.length,
+                      })}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      disabled={disabled}
+                      aria-label={`${t("models.newModels.add")} · ${provider.name}`}
+                      onClick={(event) => onAddModels(provider, fresh, event.currentTarget)}
+                    >
+                      {t("models.newModels.add")}
+                    </Button>
+                  </p>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className={styles.note}>{t("models.noConfigured")}</p>

@@ -41,6 +41,7 @@ export { DANGEROUS_RULES, dangerousReasons } from "./commands/dangerous.ts";
 export { isReadonlyCommand, READONLY_PROGRAMS } from "./commands/readonly-programs.ts";
 export { agentLaunchPolicy } from "./core/agent-launch.ts";
 export {
+  BOT_SEND_CONFIRMATION_REASON,
   PRIVATE_NETWORK_REASON,
   WINDOWS_ORDINARY_COMMAND,
   WINDOWS_READ_ONLY,
@@ -119,6 +120,7 @@ export { browserSecretPolicy } from "./secrets/browser-secret-policy.ts";
 export { type SecretUsePolicyInput, secretUsePolicy } from "./secrets/secret-use.ts";
 export { secretWriteOutDenied } from "./secrets/secret-write-out.ts";
 export {
+  browserPrivateNetworkHost,
   privateCommandHosts,
   privateNetworkHost,
   privateNetworkOrigin,

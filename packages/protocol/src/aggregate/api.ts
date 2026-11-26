@@ -167,7 +167,13 @@ import {
   TeachMethods,
   WorkflowMethods,
 } from "@pibot/skills-contract";
-import { BuiltinMethods, RoleCatalogMethods, TeamMethods } from "@pibot/teams-contract";
+import {
+  BuiltinMethods,
+  PiDispatchEvents,
+  PiDispatchMethods,
+  RoleCatalogMethods,
+  TeamMethods,
+} from "@pibot/teams-contract";
 import {
   ChangesEvents,
   ChangesMethods,
@@ -229,6 +235,7 @@ export const Events = {
   ...GoogleCompatEvents,
   ...AutoCheckEvents,
   ...BotHooksEvents,
+  ...PiDispatchEvents,
   "ui.navigate": UiNavigationSchema,
   "chat.delta": z.strictObject({
     ...ChatRouteFields,
@@ -268,6 +275,7 @@ export const EventEnvelopeSchema = z.discriminatedUnion("method", [
   eventSchema("import.progress"),
   eventSchema("capabilities.changed"),
   eventSchema("botHooks.changed"),
+  eventSchema("teams.dispatch.changed"),
   eventSchema("devices.changed"),
   eventSchema("endpoints.changed"),
   eventSchema("remote.state"),
@@ -316,7 +324,9 @@ export const EventEnvelopeSchema = z.discriminatedUnion("method", [
   eventSchema("group.task"),
   eventSchema("group.paused"),
   eventSchema("memory.sortProgress"),
+  eventSchema("memory.dream.finished"),
   eventSchema("memory.changed"),
+  eventSchema("memory.status.changed"),
   eventSchema("groups.resources.changed"),
   eventSchema("inbox.changed"),
   eventSchema("providers.loginState"),
@@ -325,6 +335,7 @@ export const EventEnvelopeSchema = z.discriminatedUnion("method", [
   eventSchema("runtime.health"),
   eventSchema("runtime.commands"),
   eventSchema("runtime.activeRuns"),
+  eventSchema("runtime.liveActivity"),
   eventSchema("continuations.pending"),
   eventSchema("computer.step"),
   eventSchema("computer.state"),
@@ -476,88 +487,44 @@ const AppMethods = {
 } as const;
 // TS7056: the merged literal type is too large to serialize into declarations, so the
 // annotation names each table instead of expanding every method signature.
+// Kernel-owned tables below already inherit their method types from KernelMethods;
+// intersecting a second copy makes TypeScript recursively expand identical Zod schemas.
 export const Methods: // Spread order lets InboxMethods replace the kernel's narrower inbox.list; the
 // intersection must drop it the same way or the two result types conflict.
 Omit<typeof KernelMethods, keyof typeof InboxMethods | keyof typeof AppMethods> &
-  typeof CapabilityMethods &
   typeof EndpointMethods &
   typeof RemoteMethods &
   typeof InboxMethods &
-  typeof ContinuationMethods &
-  typeof PersonalTodoMethods &
   typeof OfficeMethods &
   typeof ImportMethods &
-  typeof PreviewMethods &
-  typeof ChatRecoveryMethods &
-  typeof MessageActionMethods &
-  typeof GroupExecutionMethods &
   typeof ConnectorMethods &
   typeof ConnectorAppMethods &
   typeof ConnectorImportMethods &
   typeof ConnectorActivityMethods &
   typeof DiscoveryMethods &
   typeof KnowledgeMethods &
-  typeof DraftMethods &
-  typeof ExecutionCollectionMethods &
   typeof BrowserDebugMethods &
-  typeof TaskExecutionMethods &
-  typeof ReviewExecutionMethods &
-  typeof DeliveryEvidenceMethods &
   typeof ManagedWorktreeMethods &
   typeof FileCheckpointMethods &
-  typeof ExecutionMethods &
   typeof ImageArtifactMethods &
   typeof ExternalAgentMethods &
-  typeof ChatAdditionMethods &
-  typeof WorkplaceMethods &
-  typeof ApprovalMethods &
-  typeof PermissionMethods &
-  typeof GrantMethods &
-  typeof AuditMethods &
-  typeof RunLogMethods &
-  typeof RunRetentionMethods &
-  typeof FileMethods &
   typeof RoutineMethods &
-  typeof TopicWorkplaceMethods &
-  typeof GroupFileMethods &
-  typeof GroupTopicMethods &
-  typeof RunsRetryMethods &
-  typeof RunsResumeMethods &
-  typeof RunReceiptMethods &
-  typeof RuntimeMethods &
-  typeof BotMethods &
-  typeof TopicMethods &
-  typeof GroupMethods &
-  typeof GroupPlanMethods &
-  typeof ChatMethods &
-  typeof ConversationRetryMethods &
-  typeof MemoryMethods &
-  typeof InboxCountMethods &
-  typeof SidebarMethods &
-  typeof SearchMethods &
   typeof ModelProviderMethods &
   typeof TeamMethods &
+  typeof PiDispatchMethods &
   typeof ComputerMethods &
   typeof BrowserMethods &
   typeof BrowserExtensionMethods &
   typeof SkillMethods &
   typeof SkillLinkMethods &
   typeof WorkflowMethods &
-  typeof GroupResourceMethods &
   typeof TeachMethods &
   typeof ChangesMethods &
-  typeof ChatNoticeMethods &
   typeof CredentialMethods &
   typeof UserSecretMethods &
-  typeof BackgroundCommandMethods &
-  typeof YoloMethods &
   typeof GoogleCompatMethods &
   typeof BuiltinMethods &
   typeof RoleCatalogMethods &
-  typeof AutoCheckMethods &
-  typeof BotHooksMethods &
-  typeof AppProfileMethods &
-  typeof ExternalImageMethods &
   typeof AppMethods = {
   ...KernelMethods,
   ...CapabilityMethods,
@@ -618,6 +585,7 @@ Omit<typeof KernelMethods, keyof typeof InboxMethods | keyof typeof AppMethods> 
   ...SearchMethods,
   ...ModelProviderMethods,
   ...TeamMethods,
+  ...PiDispatchMethods,
   ...ComputerMethods,
   ...BrowserMethods,
   ...BrowserExtensionMethods,
@@ -695,6 +663,15 @@ export const HostMethods = {
   },
   // One SKILL.md (its folder's skill) or a .zip; brain reads and checks the file itself.
   "host.skills.pickFile": { params: noParams, result: AbsolutePathSchema.nullable() },
+  "host.memoryDreamActivity": {
+    params: noParams,
+    result: z
+      .strictObject({
+        idleSeconds: z.number().nonnegative(),
+        supply: z.enum(["ac", "battery", "unknown"]),
+      })
+      .nullable(),
+  },
   "host.notify": {
     params: z.strictObject({
       title: z.string().trim().min(1).max(200),

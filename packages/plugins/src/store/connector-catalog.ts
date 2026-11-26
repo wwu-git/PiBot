@@ -76,6 +76,7 @@ export class ConnectorCatalogRepo {
     tools: Pick<
       ConnectorTool,
       | "tool"
+      | "title"
       | "description"
       | "schema"
       | "suggestedReadOnly"
@@ -165,8 +166,8 @@ export class ConnectorCatalogRepo {
       const insert = this.db.prepare(`INSERT INTO connector_tools
         (connector_id,catalog_version,tool_name,description,schema_json,enabled,read_only,
           suggested_read_only,read_only_hint,idempotent_hint,destructive_hint,draft_binding,
-          capability_id,capability_tool,capability_read_only)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+          capability_id,capability_tool,capability_read_only,title)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       for (const tool of changed ? tools : [])
         insert.run(
           current.id,
@@ -184,7 +185,16 @@ export class ConnectorCatalogRepo {
           tool.capabilityId ?? null,
           tool.capabilityTool ?? null,
           sqlBoolean(tool.capabilityReadOnly),
+          tool.title ?? null,
         );
+      // A title is display only, so a renamed tool keeps its catalog generation (and the grants and
+      // drafts bound to it); only the shown name follows the server.
+      if (!changed) {
+        const retitle = this.db.prepare(
+          "UPDATE connector_tools SET title=? WHERE connector_id=? AND catalog_version=? AND tool_name=?",
+        );
+        for (const tool of tools) retitle.run(tool.title ?? null, current.id, version, tool.tool);
+      }
       const now = new Date().toISOString();
       this.db
         .prepare(

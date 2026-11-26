@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { fileURLToPath } from "node:url";
 import { until } from "../chat/harness.ts";
 import { draft, type Exercise } from "./shared.ts";
 
@@ -31,15 +30,7 @@ export async function connectionUpgradeAcceptance(exercise: Exercise) {
           id: "github",
           transport: "stdio",
           command: process.execPath,
-          args: [
-            fileURLToPath(
-              new URL(
-                "../../fixtures/fake-github-mcp.mjs",
-                import.meta.url,
-              ),
-            ),
-            data,
-          ],
+          args: [f.githubServer, data],
           auth: { kind: "none", secretNames: [] },
           networkDomains: [],
         },

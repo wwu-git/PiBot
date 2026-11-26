@@ -3,9 +3,10 @@ import { inspectChatRecovery, resumeRun, retryRun } from "@pibot/brain/orchestra
 import { RpcError } from "@pibot/protocol-base";
 import { GroupTaskExecutionRepo, GroupTaskHistoryRepo, type RunsRepo } from "@pibot/storage";
 import { GroupAcpRuntime } from "./group-acp-runtime.ts";
-import { planProgress, stopPlan } from "./group-plan-progress.ts";
+import { choosePlan, planProgress, stopPlan } from "./group-plan-progress.ts";
 import { planTemplateDocument } from "./group-plan-template.ts";
 import type { GroupService } from "./group-service.ts";
+import { taskBrief } from "./group-task-brief.ts";
 
 export function registerGroupRpc(handle: KernelRegisterRpc, groups: GroupService, runs: RunsRepo) {
   const acp = new GroupAcpRuntime(groups);
@@ -58,6 +59,7 @@ export function registerGroupRpc(handle: KernelRegisterRpc, groups: GroupService
   handle("groups.plan.template", async (params) => planTemplateDocument(groups, params));
   handle("groups.plan.progress", async (params) => planProgress(groups, params));
   handle("groups.plan.stop", async (params) => stopPlan(groups, params));
+  handle("groups.plan.choose", async (params) => choosePlan(groups, params));
   const get = (id: string) => {
     const group = groups.groups.get(id);
     if (!group) throw new RpcError(-32602, "Unknown group");
@@ -137,6 +139,9 @@ export function registerGroupRpc(handle: KernelRegisterRpc, groups: GroupService
     get(params.groupId);
     return new GroupTaskExecutionRepo(groups.deps.db).page(params);
   });
+  handle("groups.tasks.brief", (params, { signal }) =>
+    taskBrief(groups, get(params.groupId), params, signal),
+  );
   handle("groups.tasks.summary", async (params) => {
     get(params.groupId);
     return groups.tasks.summary(params);

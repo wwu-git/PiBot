@@ -23,7 +23,7 @@ Pi Bot 是一款在自己电脑上运行的多 Bot 协作桌面应用，支持 m
 ## 下载与安装
 
 **我该下载哪个版本？**
-在[下载页](https://pibot.space/cn/download/)按设备选择安装包。Mac 上可在苹果菜单「关于本机」查看是 Apple 芯片还是 Intel。Windows 选 EXE，Linux 选 AppImage，安卓手机选 APK。另一台电脑只负责执行时，下载「执行端」。
+在[下载页](https://pibot.space/cn/download/)按设备选择安装包。Mac 上可在苹果菜单「关于本机」查看是 Apple 芯片还是 Intel。Windows 选 EXE，Debian 或 Ubuntu 选 DEB（其他 Linux 发行版选 AppImage），安卓手机选 APK。另一台电脑只负责执行时，下载「执行端」。
 
 **macOS 说无法验证 Pi Bot，怎么办？**
 Pi Bot 目前还没有经过 Apple 公证。如果确认安装包来自官网并决定继续，先尝试打开一次，再到「系统设置 › 隐私与安全性」点「仍要打开」。参见 [1 · 安装](01-getting-started.md#macos)。

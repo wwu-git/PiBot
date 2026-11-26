@@ -1,3 +1,5 @@
+/** The Devices tab manages paired computers and phone settings. */
+
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
@@ -19,6 +21,8 @@ import { TabHeader } from "../../ui/headers.tsx";
 import { SettingRow } from "../../ui/rows.tsx";
 import { Sheet, SheetText, SheetTitle } from "../../ui/sheet.tsx";
 import { useTabBarInset } from "../../ui/tab-bar.tsx";
+import { AndroidUpdateCard } from "../updates/AndroidUpdateCard.tsx";
+import { useAndroidUpdate } from "../updates/AndroidUpdateProvider.tsx";
 import { DisplaySettings } from "./DisplaySettings.tsx";
 import { LinkCard } from "./LinkCard.tsx";
 import { useBackgroundLimits } from "./use-background-limits.ts";
@@ -81,6 +85,7 @@ export function DevicesScreen() {
     battery = useBackgroundLimits(),
     router = useRouter(),
     tabInset = useTabBarInset();
+  const androidUpdate = useAndroidUpdate();
   const current = devices.devices.find((d) => d.id === devices.selectedId) ?? devices.devices[0];
   const others = devices.devices.filter((d) => d.id !== current?.id);
   const host = current ? new URL(current.relay).host : "";
@@ -228,16 +233,30 @@ export function DevicesScreen() {
             </>
           )}
         </ListCard>
+        {Platform.OS === "android" && (
+          <ListCard style={{ marginTop: 10 }}>
+            <SettingRow
+              icon="download"
+              title={t("updateCheck")}
+              chevron={false}
+              disabled={androidUpdate.checkDisabled}
+              onPress={() => void androidUpdate.check()}
+            />
+          </ListCard>
+        )}
+        <AndroidUpdateCard update={androidUpdate} />
         {/* A count would only grow with every reload of the same list; the fact is what matters. */}
         {devices.skipped > 0 && <FootNote text={t("skippedItems")} />}
         <FootNote
           text={[
             t("devicesFoot"),
-            t("appVersion", { version: Constants.expoConfig?.version ?? "" }),
-            // Both numbers, so a mismatch is visible even when no update is needed.
-            ...(current && devices.desktop?.computerId === current.id && devices.desktop.version
-              ? [t("desktopVersion", { version: devices.desktop.version })]
-              : []),
+            t("versionFooter", {
+              phone: Constants.expoConfig?.version ?? "",
+              desktop:
+                current && devices.desktop?.computerId === current.id
+                  ? (devices.desktop.version ?? "")
+                  : "",
+            }),
           ].join("\n")}
         />
       </ScrollView>

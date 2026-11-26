@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { IdSchema } from "../core/ids.ts";
+import { ProviderImportPreviewSchema } from "../providers/import-link.ts";
 
 export const BotPanelTabSchema = z.enum(["details", "topics", "memory", "permissions"]);
 export const BotNavigationSchema = z
@@ -18,8 +19,11 @@ export type BotNavigation = z.infer<typeof BotNavigationSchema>;
  */
 export const ShellNavigationSchema = z.discriminatedUnion("view", [
   z.strictObject({ view: z.literal("inbox") }),
+  z.strictObject({ view: z.literal("provider-import"), preview: ProviderImportPreviewSchema }),
   z.strictObject({ view: z.enum(["settings", "about", "updates"]) }),
   z.strictObject({ view: z.literal("new-chat"), botId: IdSchema.optional() }),
+  // A group chat, optionally one task's thread (the live island opens a busy group step).
+  z.strictObject({ view: z.literal("group"), groupId: IdSchema, threadId: IdSchema.optional() }),
   z.strictObject({
     view: z.literal("role-import"),
     kind: z.enum(["role", "group"]),

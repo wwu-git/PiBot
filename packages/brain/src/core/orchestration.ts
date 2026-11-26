@@ -158,6 +158,9 @@ export interface ExecutionPort {
     context: Pick<ToolRunContext, "botId" | "conversationId"> & Partial<ToolRunContext>,
     tool: string,
   ): boolean;
+  catalogAvailability(
+    context: Pick<ToolRunContext, "botId" | "conversationId"> & Partial<ToolRunContext>,
+  ): (tool: string) => boolean;
   todo(scope: ExecutionScope): TodoPlan;
   updateTodo(
     scope: ExecutionScope,
@@ -240,6 +243,8 @@ export interface GroupOrchestrationPort extends CollaborationPort {
   update(params: KernelMethodParams["groups.update"]): Promise<Group>;
   addMember(groupId: string, botId: string): Promise<Group>;
   removeMember(groupId: string, botId: string): Promise<Group>;
+  archive(groupId: string): Promise<Group | { ok: true }>;
+  restore(groupId: string): Promise<Group | { ok: true }>;
   remove(groupId: string): Promise<{ ok: true }>;
   history(
     groupId: string,

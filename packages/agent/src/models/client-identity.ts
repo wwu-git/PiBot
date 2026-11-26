@@ -1,4 +1,5 @@
 import type { ClientIdentity, Provider } from "@earendil-works/pi-ai";
+import { withAnthropicThreadPolicy } from "./anthropic-threads.ts";
 
 function retention(model: { api: string; provider: string }, current?: "none" | "short" | "long") {
   if (current === "none") return current;
@@ -59,7 +60,7 @@ export function identifyProvider(provider: Provider): Provider {
     ...provider,
     stream: (model, context, options) =>
       provider.stream(
-        model,
+        withAnthropicThreadPolicy(model),
         context,
         Object.assign({}, options, {
           identity: identity(options?.identity),
@@ -73,7 +74,7 @@ export function identifyProvider(provider: Provider): Provider {
         }),
       ),
     streamSimple: (model, context, options) =>
-      provider.streamSimple(model, context, {
+      provider.streamSimple(withAnthropicThreadPolicy(model), context, {
         ...options,
         identity: identity(options?.identity),
         cacheRetention: retention(model, options?.cacheRetention),

@@ -1,6 +1,25 @@
+// Provides English model settings strings.
 import type { providersZh } from "./zh.ts";
 
 export const providersEn: { [K in keyof typeof providersZh]: string } = {
+  "models.magpie.name": "Magpie (local gateway)",
+  "models.magpie.discoveryTitle": "Magpie detected",
+  "models.magpie.discoveryNote": "Local gateway · {version} · Add its models to Pi Bot.",
+  "models.magpie.addAction": "Add",
+  "models.magpie.notNow": "Not now",
+  "models.magpie.welcomeTitle": "Use Magpie's models",
+  "models.magpie.welcomeNote": "Local gateway detected. Magpie forwards model requests.",
+  "models.magpie.checking": "Checking for Magpie…",
+  "models.magpie.detected": "Magpie detected · {version}",
+  "models.magpie.notDetected": "Magpie was not detected. You can enter its port manually.",
+  "models.magpie.detect": "Detect Magpie",
+  "models.magpie.add": "Add Magpie",
+  "models.magpie.refresh": "Refresh Magpie models",
+  "models.magpie.port": "Magpie port",
+  "models.magpie.portHint": "Connects to 127.0.0.1. The default port is 3425.",
+  "models.magpie.saved": "Saved {count} Magpie models",
+  "models.magpie.modelsUnavailable":
+    "Could not get Magpie models. Check the port and make sure the gateway has models available.",
   "models.health.unavailable": "This model is unavailable now: {reason}",
   "models.health.change": "Choose another",
   "models.health.notFound": "This model is missing from the current catalog.",
@@ -18,6 +37,7 @@ export const providersEn: { [K in keyof typeof providersZh]: string } = {
   "models.region.europe": "Europe (Amsterdam)",
   "models.region.singapore": "Singapore",
   "models.region.individual": "Individual plan",
+  "models.region.individualChina": "Mainland China individual plan",
   "models.region.custom": "Custom URL",
   "models.regionNote":
     "Each region keeps its own keys and models. Save or clear your inputs before switching regions.",
@@ -162,6 +182,24 @@ export const providersEn: { [K in keyof typeof providersZh]: string } = {
   "setup.modelRemove": "Remove model",
   "setup.preview": "Hi, I’m Pi",
   "setup.modelSaved": "Default model updated",
+  "models.addModel.title": "Add a model by id",
+  "models.addModel.note":
+    "For a model this provider offers that is not listed yet. It uses this provider's key and address only.",
+  "models.addModel.placeholder": "e.g. gpt-6.3-sol",
+  "models.addModel.add": "Add",
+  "models.addModel.remove": "Remove",
+  "models.addModel.invalid":
+    "A model id uses letters, digits and . _ - : / @ + only, up to 200 characters.",
+  "models.addModel.exists": "{id} is already in this provider's list.",
+  "models.addModel.works": "Added {id}. A test request succeeded.",
+  "models.addModel.rejected":
+    "{provider} does not recognize {id}. Check the spelling, or whether your account can use this model. You can remove it below.",
+  "models.addModel.untested":
+    "Added {id}, but the test request did not complete. Try Test connection again later.",
+  "models.addedByUser": "Added by you",
+  "models.newModels": "{count} new models",
+  "models.newModels.one": "1 new model",
+  "models.newModels.add": "Add",
   "models.configured": "Configured providers",
   "models.noConfigured":
     "No providers configured yet. Add an API key or connect a local model to start chatting.",

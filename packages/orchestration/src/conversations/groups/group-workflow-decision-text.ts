@@ -39,6 +39,10 @@ export function decisionText(decision: GroupWorkflowDecision, language: "zh" | "
     return zh
       ? `步骤${title}的成员反复调用无效工具或参数，程序只停了这一步，其他步骤照常进行。`
       : `The member on step ${title} kept repeating invalid tool calls, so the program stopped only this step; other steps continue.`;
+  if (decision.reasonCode === "context_full")
+    return zh
+      ? `步骤${title}上下文装不下，已停下${decision.reading ? `：正在读 ${decision.reading}` : ""}。可以缩小范围重试。`
+      : `Step ${title} stopped: its context was full${decision.reading ? ` while reading ${decision.reading}` : ""}. You can retry with a narrower scope.`;
   // The note is the program's fixed facts about what the coordinator saw and chose.
   if (
     decision.reasonCode === "coordinator_handed_over" ||

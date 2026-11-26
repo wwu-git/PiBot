@@ -1,9 +1,11 @@
+// Keeps model selections consistent with the available catalog.
 import type { DatabaseSync } from "node:sqlite";
 import type { AgentRuntime } from "@pibot/agent";
 import { abortable, requireImageModel } from "@pibot/brain/kit";
 import {
   type Bot,
   type CustomProvider,
+  MAGPIE_PROVIDER,
   type MethodParams,
   type ModelInfo,
   RpcError,
@@ -25,12 +27,24 @@ export class ModelSettings {
     },
   ) {}
 
-  upsert(config: CustomProvider): Promise<string> {
+  upsert(config: CustomProvider, signal?: AbortSignal): Promise<string> {
     const { agent, providers, bots, settings } = this.deps;
     return providers.serialize(async () => {
+      signal?.throwIfAborted();
+      if (config.id === MAGPIE_PROVIDER.id) {
+        const previous = providers.configs().find((item) => item.id === config.id);
+        const byId = new Map(
+          previous?.baseUrl === config.baseUrl
+            ? previous.models.map((model) => [model.id, model])
+            : [],
+        );
+        config = { ...config, models: config.models.map((model) => byId.get(model.id) ?? model) };
+      }
       const models = await agent.resolveCustomModels(config.models);
+      signal?.throwIfAborted();
       const capabilities = new Map(models.map((model) => [model.id, model.capabilities]));
       return providers.upsert(config, (providerId) => {
+        signal?.throwIfAborted();
         const current = settings.get().defaultModel;
         const model = current?.provider === providerId ? capabilities.get(current.id) : undefined;
         if (current && model) {

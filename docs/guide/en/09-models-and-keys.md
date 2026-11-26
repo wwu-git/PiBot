@@ -39,7 +39,12 @@ Cloud providers (Amazon Bedrock, Azure, Google Vertex AI, Cloudflare) use cloud 
 
 ![The ChatGPT plan selected in the welcome flow](../images/en/welcome-model-chatgpt.png)
 
-With a ChatGPT Go, Plus, Pro or Business plan you can run OpenAI models (including GPT-6.2 Astra and GPT-6.2 Sol) on your plan's allowance instead of an API key. The plan and an OpenAI API key are two separate providers you can use at the same time: each Bot picks an OpenAI model or a ChatGPT plan model, and model pickers list them in two groups, **OpenAI** and **ChatGPT plan**.
+When choosing a model for a Bot, you can select **OpenAI** (API key), **ChatGPT plan**, or **ChatGPT (Codex sign-in)**. Both sign-in options are under **Subscriptions** and use your ChatGPT plan allowance.
+
+- **ChatGPT plan** uses OpenAI’s official sign-in for other apps. The steps below use this option.
+- **ChatGPT (Codex sign-in)** signs in as the Codex command-line tool and uses ChatGPT’s Codex service. It has its own sign-in and can be disconnected separately.
+
+Both options list the same ChatGPT models, such as GPT-6.2 Astra and GPT-6.2 Sol. The list changes with app releases. OpenAI decides which models your account and plan can actually use.
 
 1. Settings › Models & API keys, click the **Subscriptions** group and choose **ChatGPT plan**.
 2. Click **Continue with ChatGPT**.
@@ -51,7 +56,7 @@ Notes:
 
 - When the plan's usage runs out you see **Usage limit reached**. Manage usage in ChatGPT, or give the Bot an OpenAI (API key) model in its settings.
 - When the sign-in expires you're asked to sign in again.
-- **Subscriptions** also has **ChatGPT (Codex sign-in)**: it also runs on your ChatGPT plan, but signs in as the Codex command-line tool, and works with any account that can use ChatGPT on the web. Try **ChatGPT plan** first; use this one if it says your account isn't eligible. It isn't OpenAI's route for third-party apps, and OpenAI may restrict it later. Its sign-in tokens are likewise stored encrypted on this computer only, and you can disconnect at any time.
+- If the official sign-in says your account is ineligible, you can try **ChatGPT (Codex sign-in)**. Accounts that work on the ChatGPT website still need to meet OpenAI’s requirements for that sign-in.
 - Subscription sign-ins stay on the computer and are not synced to the phone's offline mode (see [11 · Phone app](11-phone-app.md)).
 
 ## Claude plans

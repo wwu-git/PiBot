@@ -239,6 +239,7 @@ export default defineConfig(({ command }) => ({
           for (const entry of [
             "attachments",
             "computer-guard",
+            "live-island",
             "browser-takeover",
             "link-bridge",
             "office-render",
@@ -250,6 +251,7 @@ export default defineConfig(({ command }) => ({
           for (const entry of [
             "attachments",
             "computer-guard",
+            "live-island",
             "browser-takeover",
             "link-bridge",
             "office-render",

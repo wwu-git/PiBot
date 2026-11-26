@@ -4,6 +4,10 @@ import { UiNavigationSchema } from "../bots/navigation.ts";
 import { AbsolutePathSchema } from "../core/boundaries.ts";
 import { IdSchema } from "../core/ids.ts";
 import { WebUrlSchema } from "../core/values.ts";
+import {
+  ProviderImportDecisionSchema,
+  ProviderImportIntentSchema,
+} from "../providers/import-link.ts";
 
 export const GuiHostMethods = {
   "gui.updates.proxy": {
@@ -212,6 +216,12 @@ export const BackgroundControlSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("diagnostics") }),
   z.strictObject({ type: z.literal("ui-ready") }),
   z.strictObject({ type: z.literal("navigate"), target: UiNavigationSchema }),
+  z.strictObject({ type: z.literal("provider-import"), intent: ProviderImportIntentSchema }),
+  z.strictObject({
+    type: z.literal("provider-import-decide"),
+    decision: ProviderImportDecisionSchema,
+  }),
+  z.strictObject({ type: z.literal("provider-import-dismiss") }),
   z.strictObject({ type: z.literal("preferences"), patch: BackgroundPreferencesPatchSchema }),
   z.strictObject({ type: z.literal("state") }),
   z.strictObject({ type: z.literal("stop-service") }),

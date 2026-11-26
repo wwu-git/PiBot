@@ -9,6 +9,7 @@ import type { prelaunchBackground } from "./background/background-prelaunch.ts";
 import type { prelaunchBrainProcess } from "./brain/brain-process.ts";
 import { monitorMainEventLoop } from "./event-loop-monitor.ts";
 import { createMainStartupTiming } from "./startup-timing.ts";
+import type { ProviderLinkInbox } from "./window/provider-link-inbox.ts";
 
 /** Loaded after app ready; native owner and GUI graphs remain separate dynamic chunks. */
 export async function startMain(options: {
@@ -21,6 +22,9 @@ export async function startMain(options: {
   prelaunch?: ReturnType<typeof prelaunchBackground>;
   compileCache?: Promise<{ status: number; durationMs: number } | undefined>;
   signal: AbortSignal;
+  providerLinks: ProviderLinkInbox;
+  /** The role's file logger, for work the entry point schedules later (the compile-cache flush). */
+  onLogger?(logger: { info(message: string): void; warn(message: string): void }): void;
   bootstrap: {
     entryAtMs: number;
     cacheMs: number;
@@ -34,11 +38,13 @@ export async function startMain(options: {
   const { dataDir, version, dev, background, embedded, originalEnv, prelaunch, signal, bootstrap } =
     options;
   const redactor = createRedactor();
+  const logsDir = join(dataDir, background ? "host-logs" : "gui-logs");
   const logger = createLogger({
-    dir: join(dataDir, background ? "host-logs" : "gui-logs"),
+    dir: logsDir,
     redactor,
     dev,
   });
+  options.onLogger?.(logger);
   logger[
     bootstrap.cacheDeferred || bootstrap.status === 0 || bootstrap.status === 1 ? "info" : "warn"
   ](
@@ -139,6 +145,7 @@ export async function startMain(options: {
         prelaunch,
         early,
         systemLocale,
+        providerLinks: options.providerLinks,
       });
       return;
     }
@@ -266,6 +273,7 @@ export async function startMain(options: {
         prelaunchedBrain,
         timing,
         early: preparedOwner,
+        providerLinks: options.providerLinks,
       });
   } catch (error) {
     prelaunch?.dispose();
@@ -286,8 +294,10 @@ export async function startMain(options: {
       );
       // The old text told a fresh install to "quit the old version", which is wrong for
       // the common slow-start timeout; name the actual reason and let the user retry.
-      const failureKey = (failure: string): TranslationKey =>
-        failure === "database_newer_than_app"
+      const failureKey = (failure: string): TranslationKey => {
+        if (failure === "background_windows_security_security_rejected_listener_missing")
+          return "background.startupWindowsListenerUnverified";
+        return failure === "database_newer_than_app"
           ? "startup.newerData"
           : failure.startsWith("background_windows_security_timeout")
             ? "background.startupSecurityTimeout"
@@ -305,6 +315,7 @@ export async function startMain(options: {
                     failure === "background_socket_path_too_long"
                     ? "background.startupDataFolderPathTooLong"
                     : "background.startupFailed";
+      };
       // showErrorBox blocks the main thread until it is dismissed, so a failed GUI startup could
       // not handle SIGTERM and had to be force-quit. The async box keeps the process
       // responsive; closing it exits and "retry" starts a fresh process.
@@ -315,6 +326,7 @@ export async function startMain(options: {
           // The folder is named only in this local dialog, never in the log line above.
           message: t(failureKey(code), {
             folder: dataDir,
+            logsFolder: logsDir,
             max: DATA_DIR_SOCKET_BUDGET_BYTES,
           }),
           buttons: [t("background.startupRetry"), t("background.startupQuit")],

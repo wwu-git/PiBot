@@ -5,36 +5,71 @@ import {
   type Connector,
   type ConnectorAccess,
   ConnectorFailureCodeSchema,
-  type ConnectorSourceDetails,
-  type ConnectorTool,
   supportsDirectConnectionWrites,
 } from "@pibot/plugins-contract/full";
-import { connectorsZh } from "@pibot/plugins-contract/i18n";
-import { hostPlatform, type Peer, useRpc, useSettings } from "@pibot/renderer-kit";
-import { Button, Chip, IconTile, SegmentedControl, Switch } from "@pibot/ui";
+import {
+  hostPlatform,
+  type Peer,
+  SettingsLine,
+  SettingsRow,
+  SettingsSection,
+  useRpc,
+  useRpcEvent,
+  useSettings,
+  useWorkspace,
+} from "@pibot/renderer-kit";
+import { Button, Chip, Icon } from "@pibot/ui";
 import { useCallback, useEffect, useState } from "react";
 import { operationPending, type useConnectorOperations } from "../shell/operations.ts";
 import { useConnectorAction, useConnectorPage, useConnectorRead } from "../shell/remote.ts";
 import { ConnectionAccessProposal } from "./ConnectionAccessProposal.tsx";
 import { ConnectorAccessEditor } from "./ConnectorAccessEditor.tsx";
 import { ConnectorDataDestinations } from "./ConnectorDataDestinations.tsx";
-import { ConnectorFeedback, ConnectorPagination, OperationStatus } from "./ConnectorFeedback.tsx";
-import { ConnectorNetworkEditor } from "./ConnectorNetworkEditor.tsx";
+import { ConnectorFeedback, OperationStatus } from "./ConnectorFeedback.tsx";
 import { ConnectorPanel } from "./ConnectorPanel.tsx";
 import { ConnectorRecentUse } from "./ConnectorRecentUse.tsx";
-import { ConnectorSandboxSection, ConnectorStartFailureView } from "./ConnectorSandbox.tsx";
-import { ConnectorSourceDiff } from "./ConnectorSourceDiff.tsx";
+import { ConnectorStartFailureView } from "./ConnectorSandbox.tsx";
 import {
   connectionFailureCode,
   connectorSwitchChecked,
   runsOutsideSandbox,
 } from "./connection-state.ts";
+import { DrawerHero, DrawerTabs } from "./connections/DrawerParts.tsx";
+import drawerStyles from "./connections/drawer.module.css";
 import styles from "./connectors.module.css";
 import { DirectToolGrants } from "./DirectToolGrants.tsx";
+import { AdvancedTab, type SourceUpdate } from "./details/AdvancedTab.tsx";
+import { ToolKindRows, ToolsTab, useToolLabels } from "./details/ToolsTab.tsx";
 import { ImportedSkillAssignment } from "./ImportedSkillAssignment.tsx";
 import { connectorName } from "./presentation.ts";
 
 type Operations = ReturnType<typeof useConnectorOperations>;
+type Tab = "access" | "tools" | "confirm" | "activity" | "advanced";
+const MODES = ["read_write", "always_ask", "read_only", "direct_read_write"] as const;
+
+function relativeTime(at: string, language: "zh" | "en") {
+  const seconds = Math.round((Date.parse(at) - Date.now()) / 1000);
+  const format = new Intl.RelativeTimeFormat(language, { numeric: "auto" });
+  const steps: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["second", 60],
+    ["minute", 60],
+    ["hour", 24],
+    ["day", 30],
+    ["month", 12],
+  ];
+  let value = seconds;
+  for (const [unit, size] of steps) {
+    if (Math.abs(value) < size) return format.format(value, unit);
+    value = Math.round(value / size);
+  }
+  return format.format(value, "year");
+}
+
+/**
+ * A connection's detail drawer: a hero (status, key, last use, 测试连接 / 断开) and five tabs —
+ * 谁能用 · 能做什么 · 确认方式 · 记录 · 高级. The controls call the same RPCs as before; only the
+ * presentation is new.
+ */
 export function ConnectorDetails({
   id,
   initialSection,
@@ -43,6 +78,7 @@ export function ConnectorDetails({
   snapshot,
   operations,
   suggestedCapabilities = [],
+  remove,
   changed,
   close,
 }: {
@@ -54,11 +90,14 @@ export function ConnectorDetails({
   operations: Operations;
   /** Confirmed catalog mappings; only overlaps with a built-in tool are worth telling the user. */
   suggestedCapabilities?: readonly CapabilityId[];
+  /** Removes the package this connection came from (高级 → 删除). */
+  remove?(): void;
   changed(): void;
   close(): void;
 }) {
   const { t, language } = useSettings();
   const { peer } = useRpc();
+  const workspace = useWorkspace();
   const load = useCallback(
     (peer: Peer, signal: AbortSignal) => peer.call("connectors.get", { id }, { signal }),
     [id],
@@ -84,23 +123,54 @@ export function ConnectorDetails({
       [id],
     ),
   );
+  // Names and presence only; a key's value never reaches this window.
+  const tokens = useConnectorRead(
+    useCallback(
+      (peer: Peer, signal: AbortSignal) => peer.call("connections.tokens", {}, { signal }),
+      [],
+    ),
+  );
+  const lastUse = useConnectorRead(
+    useCallback(
+      (peer: Peer, signal: AbortSignal) =>
+        peer.call("connectors.recentUse", { id, limit: 1 }, { signal }),
+      [id],
+    ),
+  );
   const refreshDetail = detail.refresh;
   const refreshDiagnostics = diagnostics.refresh;
+  const refreshTokens = tokens.refresh;
+  const refreshLastUse = lastUse.refresh;
   // biome-ignore lint/correctness/useExhaustiveDependencies: All connector events retire the selected detail snapshot.
   useEffect(() => {
     refreshDetail();
     refreshDiagnostics();
-  }, [snapshot, refreshDetail, refreshDiagnostics]);
+    refreshTokens();
+    refreshLastUse();
+  }, [snapshot, refreshDetail, refreshDiagnostics, refreshTokens, refreshLastUse]);
+  useRpcEvent("chat.done", refreshLastUse);
   const refresh = () => {
     detail.refresh();
     diagnostics.refresh();
     tools.refresh();
+    tokens.refresh();
     changed();
   };
   const action = useConnectorAction(refresh);
   const connector = detail.value?.connector;
-  const localApp =
-    catalog.value?.items.find((app) => app.id === connector?.appId)?.category === "local";
+  const name = connector
+    ? connectorName(connector, catalog.value?.items ?? [], language)
+    : t("connectors.title");
+  const app = catalog.value?.items.find((row) => row.id === connector?.appId);
+  const localApp = app?.category === "local";
+  const labels = useToolLabels(connector?.name ?? "", tools.value?.items);
+  const [tab, setTab] = useState<Tab>(
+    initialSection === "advanced"
+      ? "advanced"
+      : initialSection === "access" || requestedTarget
+        ? "access"
+        : "tools",
+  );
   const connectionFailed =
     connector && ["needs_setup", "needs_auth", "error"].includes(connector.status);
   const failure = ConnectorFailureCodeSchema.safeParse(
@@ -149,18 +219,7 @@ export function ConnectorDetails({
     expiresAt: string;
   }>();
   const [token, setToken] = useState("");
-  const [sourceUpdate, setSourceUpdate] = useState<{
-    state: "preview" | "source_not_found" | "updated";
-    details?: ConnectorSourceDetails;
-    sourceDigest?: string;
-    changes: {
-      commands: number;
-      arguments: number;
-      envNames: number;
-      websites: number;
-      files: number;
-    };
-  }>();
+  const [sourceUpdate, setSourceUpdate] = useState<SourceUpdate>();
   const updateFromSource = async (confirmed: boolean) => {
     if (!connector || disabled) return;
     const result = await action.run(
@@ -209,6 +268,18 @@ export function ConnectorDetails({
       ),
     );
     if (result && detail.value?.auth === "oauth") setAuthorization(result);
+  };
+  // Same path as 访问令牌's replace: the new value is checked by reconnecting.
+  const replaceToken = async (tokenName: string, value: string) => {
+    if (!connector) return false;
+    const result = await action.run((peer, signal) =>
+      peer.call(
+        "connectors.authorize",
+        { id, expectedRevision: connector.revision, token: value, tokenName },
+        { signal },
+      ),
+    );
+    return !!result;
   };
   const [waitingNative, setWaitingNative] = useState(false);
   const lifecycle = async (kind: "enable" | "disable" | "restart" | "disconnect") => {
@@ -279,408 +350,411 @@ export function ConnectorDetails({
       ),
     );
   };
-  return (
-    <ConnectorPanel
-      title={
-        connector
-          ? connectorName(connector, catalog.value?.items ?? [], language)
-          : t("connectors.title")
+  const ownTokens = (tokens.value?.items ?? []).filter((row) => row.connectorId === id);
+  const toolItems = tools.value?.items ?? [];
+  const access = detail.value?.access;
+  const bots = workspace.bots.filter((bot) => !bot.archivedAt);
+  const accessCount = !access
+    ? undefined
+    : access.mode === "all"
+      ? bots.length
+      : access.mode === "selected"
+        ? access.bots.length + access.groups.length
+        : undefined;
+  const healthy = connector?.status === "ready" || connector?.status === "idle";
+  const statusChip = connector && (
+    <Chip
+      className={drawerStyles.statusChip}
+      tone={
+        healthy
+          ? "ok"
+          : connectionFailed
+            ? "warn"
+            : connector.status === "disabled"
+              ? "neutral"
+              : "blue"
       }
-      close={close}
-      busy={action.busy}
     >
-      {waitingNative && (
-        <p role="status" className={styles.note}>
-          {t("connectors.nativeConfirmationWaiting")}
-        </p>
+      {healthy && <Icon name="check" size={11} strokeWidth={3} />}
+      {t(
+        healthy
+          ? "connections.drawer.status.ok"
+          : connectionFailed
+            ? "connections.drawer.status.attention"
+            : connector.status === "disabled"
+              ? "connections.drawer.status.off"
+              : `connectors.status.${connector.status}`,
       )}
-      <ConnectorFeedback
-        loading={detail.loading}
-        error={detail.error ?? action.error}
-        retry={refresh}
-      />
-      {connector && (
-        <>
-          <div className={styles.statusCard}>
-            <IconTile icon="plug" tone="blue" size="lg" />
-            <Chip
-              tone={
-                connector.status === "ready" || connector.status === "idle"
-                  ? "ok"
-                  : connectionFailed
-                    ? "warn"
-                    : "neutral"
+    </Chip>
+  );
+  const keyHint = ownTokens.length
+    ? t(
+        ownTokens.every((row) => row.hasValue)
+          ? "connections.drawer.keySaved"
+          : "connections.drawer.keyMissing",
+      )
+    : undefined;
+  const used = lastUse.value?.items[0]?.at;
+  const heroNote = [
+    keyHint,
+    lastUse.value &&
+      (used
+        ? t("connections.drawer.lastUsed", { time: relativeTime(used, language) })
+        : t("connections.drawer.neverUsed")),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const heroActions = connector && (
+    <>
+      {connector.status === "disabled" ? (
+        <Button disabled={disabled} onClick={() => void lifecycle("enable")}>
+          {t("connections.drawer.enable")}
+        </Button>
+      ) : (
+        <Button
+          variant="secondary"
+          title={t("connections.drawer.testNote")}
+          disabled={disabled || connector.status === "starting"}
+          onClick={() => void lifecycle("restart")}
+        >
+          {t("connections.drawer.test")}
+        </Button>
+      )}
+      {!localApp && connector.status !== "disabled" && (
+        <Button variant="ghost" disabled={stopDisabled} onClick={() => setConfirmDisconnect(true)}>
+          {t("connectors.disconnect")}
+        </Button>
+      )}
+    </>
+  );
+  return (
+    <ConnectorPanel title={name} close={close} busy={action.busy}>
+      <div className={drawerStyles.drawer}>
+        {waitingNative && (
+          <p role="status" className={styles.note}>
+            {t("connectors.nativeConfirmationWaiting")}
+          </p>
+        )}
+        <ConnectorFeedback
+          loading={detail.loading}
+          error={detail.error ?? action.error}
+          retry={refresh}
+        />
+        {connector && (
+          <>
+            <DrawerHero
+              name={name}
+              status={statusChip}
+              note={heroNote}
+              chips={
+                runsOutsideSandbox(connector, hostPlatform()) ? (
+                  <Chip tone="warn">{t("connectors.outsideSandbox.badge")}</Chip>
+                ) : undefined
               }
-            >
-              {t(`connectors.status.${connector.status}`)}
-            </Chip>
-            {runsOutsideSandbox(connector, hostPlatform()) && (
-              <Chip tone="warn">{t("connectors.outsideSandbox.badge")}</Chip>
-            )}
-            <span className={`${styles.note} ${styles.grow}`}>
-              {t(
-                localApp
-                  ? "connectors.category.local"
-                  : connector.identity === "user"
-                    ? "connectors.userIdentity"
-                    : "connectors.botIdentity",
-              )}
-            </span>
-            <Switch
-              checked={connectorSwitchChecked(connector)}
-              label={t(connector.enabled ? "connectors.disable" : "connectors.enable")}
-              disabled={connectionFailed || (connector.enabled ? stopDisabled : disabled)}
-              onCheckedChange={(enabled) => void lifecycle(enabled ? "enable" : "disable")}
+              actions={heroActions}
             />
-          </div>
-          {overlapNames.length > 0 && (
-            <p className={styles.note}>
-              {t("capabilities.builtinOverlap", {
-                capabilities: overlapNames.join(language === "zh" ? "、" : ", "),
-              })}
-            </p>
-          )}
-          {detail.value?.bundledNode && (
-            <p className={styles.note}>{t("connectors.bundledNode")}</p>
-          )}
-          {(["needs_setup", "needs_auth", "error"] as Connector["status"][]).includes(
-            connector.status,
-          ) &&
-            (diagnostics.value?.lastFailure ? (
-              <ConnectorStartFailureView failure={diagnostics.value.lastFailure} />
-            ) : (
-              <p className={styles.warn}>
-                {diagnostics.value?.receiptUnavailable
-                  ? t("connectors.failure.secure_storage_unavailable")
-                  : failure.success
-                    ? t(`connectors.failure.${failure.data}`)
-                    : t("connectors.setupNote")}
-                {connector.kind === "mcp_stdio" &&
-                  connector.status === "error" &&
-                  !diagnostics.value?.receiptUnavailable &&
-                  failure.data !== "secure_storage_unavailable" && (
-                    <> {t("connectors.startFailure.restartToSee")}</>
-                  )}
-              </p>
-            ))}
-          {connector.status === "error" && connector.enabled && (
-            <div className={styles.row}>
-              <Button
-                variant="secondary"
-                disabled={disabled}
-                onClick={() => void lifecycle("restart")}
-              >
-                {t("connectors.restart")}
-              </Button>
-            </div>
-          )}
-          {hostPlatform() === "win32" && connector.kind === "mcp_stdio" && (
-            <p className={styles.warn}>{t("connectors.windowsWarning")}</p>
-          )}
-          {diagnostics.value && (
-            <ConnectorSandboxSection
-              connector={connector}
-              diagnostics={diagnostics.value}
-              disabled={disabled}
-              toggle={(enabled) => void setOutsideSandbox(enabled)}
-            />
-          )}
-          {detail.value?.canEditNetworkDomains && (
-            <ConnectorNetworkEditor
-              key={`${id}:${connector.revision}`}
-              domains={detail.value.networkDomains ?? []}
-              disabled={disabled}
-              save={(networkDomains) => void update({ networkDomains })}
-            />
-          )}
-          {(connector.status === "needs_auth" ||
-            connector.status === "needs_setup" ||
-            connector.status === "disabled") &&
-            ((detail.value?.auth === "bearer" && detail.value.canReplaceCredential !== false) ||
-              detail.value?.auth === "oauth") && (
-              <section className={styles.stack}>
-                {detail.value?.auth === "bearer" && (
-                  <label className={styles.field}>
-                    {t("connectors.appToken")}
-                    <input
-                      type="password"
-                      value={token}
-                      autoComplete="new-password"
-                      disabled={action.disabled}
-                      maxLength={16384}
-                      onChange={(event) => setToken(event.currentTarget.value)}
-                    />
-                  </label>
-                )}
-                {authorization ? (
-                  <>
-                    <p role="status">{t("connectors.authorizing")}</p>
+            {confirmDisconnect && (
+              <SettingsSection title={t("connectors.disconnect")}>
+                <SettingsLine dot="warn" role="alert">
+                  {t("connectors.disconnectConfirm")}
+                </SettingsLine>
+                <div className={drawerStyles.stackedControl}>
+                  <div className={drawerStyles.inlineActions}>
                     <Button
                       variant="secondary"
-                      disabled={action.disabled}
-                      onClick={() =>
-                        void action.run(async (peer, signal) => {
-                          await peer.call(
-                            "connectors.cancelAuthorization",
-                            { authorizationId: authorization.authorizationId },
-                            { signal },
-                          );
-                          setAuthorization(undefined);
-                        })
-                      }
+                      disabled={action.busy}
+                      onClick={() => setConfirmDisconnect(false)}
                     >
-                      {t("connectors.cancelAuth")}
+                      {t("common.cancel")}
                     </Button>
-                  </>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    disabled={action.disabled || (detail.value?.auth === "bearer" && !token.trim())}
-                    onClick={() => void authorize()}
-                  >
-                    {t("connectors.reauthorize")}
-                  </Button>
-                )}
-              </section>
-            )}
-          {detail.value?.auth === "bearer" && detail.value.canReplaceCredential === false && (
-            <p className={styles.note}>{t("connectors.sharedCredentialNote")}</p>
-          )}
-          <OperationStatus
-            row={latest}
-            check={operations.check}
-            systemAuth={detail.value?.auth === "system"}
-          />
-          {!localApp && (
-            <div className={styles.row}>
-              <Button
-                variant="secondary"
-                disabled={stopDisabled}
-                onClick={() => setConfirmDisconnect(true)}
-              >
-                {t("connectors.disconnect")}
-              </Button>
-            </div>
-          )}
-          {confirmDisconnect && (
-            <section className={styles.warn}>
-              <p>{t("connectors.disconnectConfirm")}</p>
-              <div className={styles.row}>
-                <Button
-                  variant="secondary"
-                  disabled={action.busy}
-                  onClick={() => setConfirmDisconnect(false)}
-                >
-                  {t("common.cancel")}
-                </Button>
-                <Button
-                  className={styles.dangerButton}
-                  disabled={stopDisabled}
-                  onClick={() => void lifecycle("disconnect")}
-                >
-                  {t("connectors.disconnect")}
-                </Button>
-              </div>
-            </section>
-          )}
-          {!connector.appId && (
-            <ImportedSkillAssignment
-              installationId={connector.pluginInstallationId}
-              changed={changed}
-            />
-          )}
-          {detail.value &&
-            (requestedTarget &&
-            !targetConfirmed &&
-            initialSection === "access" &&
-            detail.value.access.mode !== "all" ? (
-              <ConnectionAccessProposal
-                key={`${targetKey}:${connector.revision}`}
-                access={detail.value.access}
-                target={requestedTarget}
-                disabled={disabled}
-                confirm={(access) => {
-                  void update({ access }).then((saved) => {
-                    if (saved) setConfirmedTarget(targetKey);
-                  });
-                }}
-              />
-            ) : (
-              <ConnectorAccessEditor
-                access={detail.value.access}
-                disabled={disabled}
-                resolveAndSave={(resolve) => void update({}, resolve)}
-                save={(access) => {
-                  void update({ access });
-                }}
-              />
-            ))}
-          <section className={styles.stack}>
-            <h3>{t("connectors.confirmation")}</h3>
-            <fieldset className={styles.optCards} disabled={disabled}>
-              <legend className={styles.visuallyHidden}>{t("connectors.confirmation")}</legend>
-              {(
-                [
-                  "read_write",
-                  "always_ask",
-                  "read_only",
-                  ...(supportsDirectConnectionWrites(connector.kind)
-                    ? (["direct_read_write"] as const)
-                    : []),
-                ] as const
-              ).map((mode) => (
-                <label className={styles.optCard} key={mode}>
-                  <input
-                    type="radio"
-                    name={`confirmation-${id}`}
-                    value={mode}
-                    checked={connector.confirmationMode === mode}
-                    onChange={() => update({ confirmationMode: mode })}
-                  />
-                  <span>
-                    {t(`connectors.confirmation.${mode}`)}
-                    {mode === "direct_read_write" && (
-                      <span className={styles.note} style={{ display: "block" }}>
-                        {t("connectors.directReadWriteNote")}
-                      </span>
-                    )}
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-            <p className={styles.note}>{t("connectors.confirmationNote")}</p>
-          </section>
-          <DirectToolGrants id={id} />
-          <ConnectorRecentUse id={id} snapshot={snapshot} />
-          <ConnectorDataDestinations id={id} snapshot={snapshot} />
-          <details className={styles.stack} open={initialSection === "advanced" || undefined}>
-            <summary>{t("connectors.advanced")}</summary>
-            <div className={styles.stack}>
-              <section className={styles.stack}>
-                <h3>{t("connectors.updateSource")}</h3>
-                {!sourceUpdate || sourceUpdate.state === "preview" ? (
-                  <p className={styles.note}>{t("connectors.updateSourceConfirm")}</p>
-                ) : sourceUpdate.state === "source_not_found" ? (
-                  <p className={styles.note}>{t("connectors.updateSourceNotFound")}</p>
-                ) : (
-                  <p className={styles.note}>{t("connectors.updateSourceDone")}</p>
-                )}
-                {sourceUpdate && sourceUpdate.state === "preview" && (
-                  <>
-                    <p className={styles.note}>
-                      {t("connectors.updateSourceDiff", sourceUpdate.changes)}
-                    </p>
-                    {sourceUpdate.details && <ConnectorSourceDiff details={sourceUpdate.details} />}
-                  </>
-                )}
-                <Button
-                  variant="secondary"
-                  disabled={disabled || (sourceUpdate?.state !== "preview" && !!sourceUpdate)}
-                  onClick={() => void updateFromSource(!!sourceUpdate)}
-                >
-                  {t("connectors.updateSource")}
-                </Button>
-              </section>
-              {!(connector.status === "error" && connector.enabled) && (
-                <div className={styles.row}>
-                  <Button
-                    variant="secondary"
-                    disabled={disabled || connector.status === "starting"}
-                    onClick={() => void lifecycle("restart")}
-                  >
-                    {t("connectors.restart")}
-                  </Button>
+                    <Button
+                      className={styles.dangerButton}
+                      disabled={stopDisabled}
+                      onClick={() => void lifecycle("disconnect")}
+                    >
+                      {t("connectors.disconnect")}
+                    </Button>
+                  </div>
                 </div>
+              </SettingsSection>
+            )}
+            {(["needs_setup", "needs_auth", "error"] as Connector["status"][]).includes(
+              connector.status,
+            ) &&
+              (diagnostics.value?.lastFailure ? (
+                <ConnectorStartFailureView failure={diagnostics.value.lastFailure} />
+              ) : (
+                <p className={styles.warn}>
+                  {failure.success
+                    ? t(`connectors.failure.${failure.data}`)
+                    : t("connectors.setupNote")}
+                  {connector.kind === "mcp_stdio" && connector.status === "error" && (
+                    <> {t("connectors.startFailure.restartToSee")}</>
+                  )}
+                </p>
+              ))}
+            {hostPlatform() === "win32" && connector.kind === "mcp_stdio" && (
+              <p className={styles.warn}>{t("connectors.windowsWarning")}</p>
+            )}
+            {(connector.status === "needs_auth" ||
+              connector.status === "needs_setup" ||
+              connector.status === "disabled") &&
+              ((detail.value?.auth === "bearer" && detail.value.canReplaceCredential !== false) ||
+                detail.value?.auth === "oauth") && (
+                <SettingsSection title={t("connections.drawer.fill")}>
+                  {detail.value?.auth === "bearer" && (
+                    <label className={drawerStyles.field}>
+                      <span className={drawerStyles.fieldLabel}>{t("connectors.appToken")}</span>
+                      <span className={drawerStyles.inputBox}>
+                        <Icon name="key" size={16} />
+                        <input
+                          type="password"
+                          value={token}
+                          autoComplete="new-password"
+                          disabled={action.disabled}
+                          maxLength={16384}
+                          onChange={(event) => setToken(event.currentTarget.value)}
+                        />
+                      </span>
+                      <span className={drawerStyles.fieldNote}>
+                        {t("connections.drawer.secretNote")}
+                      </span>
+                    </label>
+                  )}
+                  <div className={drawerStyles.stackedControl}>
+                    <div className={drawerStyles.inlineActions}>
+                      {authorization ? (
+                        <>
+                          <span role="status" className={drawerStyles.fieldNote}>
+                            {t("connectors.authorizing")}
+                          </span>
+                          <Button
+                            variant="secondary"
+                            disabled={action.disabled}
+                            onClick={() =>
+                              void action.run(async (peer, signal) => {
+                                await peer.call(
+                                  "connectors.cancelAuthorization",
+                                  { authorizationId: authorization.authorizationId },
+                                  { signal },
+                                );
+                                setAuthorization(undefined);
+                              })
+                            }
+                          >
+                            {t("connectors.cancelAuth")}
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          disabled={
+                            action.disabled || (detail.value?.auth === "bearer" && !token.trim())
+                          }
+                          onClick={() => void authorize()}
+                        >
+                          {t("connectors.reauthorize")}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </SettingsSection>
               )}
-              <section className={styles.stack}>
-                <h3>{t("connectors.tools")}</h3>
-                <p className={styles.note}>{t("connectors.toolsNote")}</p>
-                {tools.value?.items.map((tool) => (
-                  <ToolRow
-                    key={`${tool.catalogVersion}:${tool.tool}`}
-                    tool={tool}
-                    disabled={disabled || tools.loading || !!tools.error}
-                    save={(patch) => update({ tools: [patch] })}
+            {detail.value?.auth === "bearer" && detail.value.canReplaceCredential === false && (
+              <p className={styles.note}>{t("connectors.sharedCredentialNote")}</p>
+            )}
+            <OperationStatus
+              row={latest}
+              check={operations.check}
+              systemAuth={detail.value?.auth === "system"}
+            />
+            <DrawerTabs<Tab>
+              label={name}
+              value={tab}
+              onChange={setTab}
+              tabs={[
+                { value: "access", label: t("connections.drawer.tab.access"), count: accessCount },
+                {
+                  value: "tools",
+                  label: t("connections.drawer.tab.tools"),
+                  count: tools.value
+                    ? `${toolItems.length}${tools.next || tools.previous ? "+" : ""}`
+                    : undefined,
+                },
+                { value: "confirm", label: t("connections.drawer.tab.confirm") },
+                { value: "activity", label: t("connections.drawer.tab.activity") },
+                { value: "advanced", label: t("connections.drawer.tab.advanced") },
+              ]}
+            />
+            <div role="tabpanel" className={drawerStyles.drawer}>
+              {tab === "access" &&
+                detail.value &&
+                (requestedTarget && !targetConfirmed && detail.value.access.mode !== "all" ? (
+                  <ConnectionAccessProposal
+                    key={`${targetKey}:${connector.revision}`}
+                    access={detail.value.access}
+                    target={requestedTarget}
+                    disabled={disabled}
+                    confirm={(access) => {
+                      void update({ access }).then((saved) => {
+                        if (saved) setConfirmedTarget(targetKey);
+                      });
+                    }}
                   />
+                ) : (
+                  <>
+                    <ConnectorAccessEditor
+                      access={detail.value.access}
+                      disabled={disabled}
+                      resolveAndSave={(resolve) => void update({}, resolve)}
+                      save={(access) => {
+                        void update({ access });
+                      }}
+                    />
+                    {detail.value.access.mode === "ask_first" && (
+                      <SettingsLine>{t("connections.drawer.firstUse")}</SettingsLine>
+                    )}
+                  </>
                 ))}
-                {!tools.loading && !tools.error && !tools.value?.items.length && (
-                  <p>{t("connectors.noTools")}</p>
-                )}
-                <ConnectorFeedback
-                  loading={tools.loading}
-                  error={tools.error}
-                  retry={tools.refresh}
+              {tab === "tools" && (
+                <ToolsTab
+                  tools={tools}
+                  connector={connector}
+                  product={connector.name}
+                  disabled={disabled}
+                  note={
+                    overlapNames.length > 0 ? (
+                      <SettingsLine>
+                        {t("capabilities.builtinOverlap", {
+                          capabilities: overlapNames.join(language === "zh" ? "、" : ", "),
+                        })}
+                      </SettingsLine>
+                    ) : undefined
+                  }
+                  save={(patch) => void update({ tools: [patch] })}
                 />
-                <ConnectorPagination
-                  previous={tools.previous}
-                  next={tools.next}
-                  disabled={tools.loading || disabled}
+              )}
+              {tab === "confirm" && (
+                <>
+                  <SettingsSection title={t("connections.drawer.tab.confirm")}>
+                    {MODES.filter(
+                      (mode) =>
+                        mode !== "direct_read_write" ||
+                        supportsDirectConnectionWrites(connector.kind),
+                    ).map((mode, index) => (
+                      <label key={mode} className={drawerStyles.radioRow}>
+                        <SettingsRow
+                          icon={(["eye", "shield", "eye", "edit"] as const)[index]}
+                          tone={(["blue", "orange", "neutral", "blue"] as const)[index]}
+                          label={t(
+                            mode === "direct_read_write"
+                              ? "connectors.confirmation.direct_read_write"
+                              : `connections.drawer.confirm.${mode}`,
+                          )}
+                          note={t(
+                            mode === "direct_read_write"
+                              ? "connectors.directReadWriteNote"
+                              : `connections.drawer.confirm.${mode}Note`,
+                          )}
+                        >
+                          <input
+                            type="radio"
+                            className={drawerStyles.radio}
+                            name={`confirmation-${id}`}
+                            value={mode}
+                            disabled={disabled}
+                            checked={connector.confirmationMode === mode}
+                            onChange={() => void update({ confirmationMode: mode })}
+                          />
+                        </SettingsRow>
+                      </label>
+                    ))}
+                  </SettingsSection>
+                  <SettingsLine>{t("connections.drawer.confirmNote")}</SettingsLine>
+                  <DirectToolGrants
+                    id={id}
+                    toolLabel={(tool) =>
+                      labels.title(toolItems.find((row) => row.tool === tool) ?? { tool })
+                    }
+                  />
+                </>
+              )}
+              {tab === "activity" && (
+                <>
+                  <ConnectorRecentUse id={id} snapshot={snapshot} />
+                  <ConnectorDataDestinations id={id} snapshot={snapshot} />
+                </>
+              )}
+              {tab === "advanced" && (
+                <AdvancedTab
+                  connector={connector}
+                  switchChecked={connectorSwitchChecked(connector)}
+                  switchDisabled={
+                    !!connectionFailed || (connector.enabled ? stopDisabled : disabled)
+                  }
+                  toggle={(enabled) => void lifecycle(enabled ? "enable" : "disable")}
+                  disabled={disabled}
+                  restart={() => void lifecycle("restart")}
+                  sourceUpdate={sourceUpdate}
+                  updateFromSource={(confirmed) => void updateFromSource(confirmed)}
+                  tokens={ownTokens}
+                  replaceToken={replaceToken}
+                  network={
+                    detail.value?.canEditNetworkDomains || detail.value?.networkDomains?.length
+                      ? {
+                          domains: detail.value.networkDomains ?? [],
+                          editable: !!detail.value.canEditNetworkDomains,
+                          save: (networkDomains) => void update({ networkDomains }),
+                        }
+                      : undefined
+                  }
+                  diagnostics={diagnostics.value}
+                  setOutsideSandbox={(enabled) => void setOutsideSandbox(enabled)}
+                  toolKinds={
+                    <ToolKindRows
+                      tools={tools}
+                      product={connector.name}
+                      disabled={disabled}
+                      save={(patch) => void update({ tools: [patch] })}
+                    />
+                  }
+                  skills={
+                    !connector.appId ? (
+                      <ImportedSkillAssignment
+                        installationId={connector.pluginInstallationId}
+                        changed={changed}
+                      />
+                    ) : undefined
+                  }
+                  remove={remove}
                 />
-              </section>
+              )}
             </div>
-          </details>
-        </>
-      )}
-      {!peer && <p role="status">{t("connectors.offline")}</p>}
-    </ConnectorPanel>
-  );
-}
-
-function ToolRow({
-  tool,
-  disabled,
-  save,
-}: {
-  tool: ConnectorTool;
-  disabled: boolean;
-  save(patch: { tool: string; enabled: boolean; readOnly: boolean }): void;
-}) {
-  const { t } = useSettings();
-  const key = `connectors.tool.${tool.tool}`;
-  const label = Object.hasOwn(connectorsZh, key)
-    ? t(key as keyof typeof connectorsZh)
-    : tool.tool
-        .replace(/([a-z])([A-Z])/g, "$1 $2")
-        .replace(/[_-]+/g, " ")
-        .slice(0, 100)
-        .replace(/^./u, (char) => char.toUpperCase());
-  const mode = !tool.enabled ? "disabled" : tool.readOnly ? "read_only" : "confirm_write";
-  return (
-    <div className={styles.toolRow}>
-      <IconTile
-        icon={mode === "disabled" ? "pause" : tool.readOnly ? "search" : "edit"}
-        tone={mode === "disabled" ? "neutral" : tool.readOnly ? "teal" : "orange"}
-        size="lg"
-      />
-      <div className={styles.toolText}>
-        <strong>{label}</strong>
-        <small>
-          {t(tool.readOnly ? "connectors.readToolSummary" : "connectors.writeToolSummary")}
-        </small>
-        {tool.suggestedReadOnly && <small>{t("connectors.suggested")}</small>}
-        {tool.readOnlyLocked && <small>{t("connectors.toolMode.readOnlyLocked")}</small>}
+            {tab === "advanced" && (
+              <SettingsSection title={t("connections.drawer.run")}>
+                <SettingsRow
+                  icon="terminal"
+                  tone="teal"
+                  label={t(
+                    localApp
+                      ? "connections.drawer.run.builtin"
+                      : connector.kind === "mcp_stdio"
+                        ? detail.value?.bundledNode
+                          ? "connections.drawer.run.node"
+                          : "connections.drawer.chip.local"
+                        : "connections.drawer.chip.remote",
+                  )}
+                  note={t(
+                    connector.identity === "user"
+                      ? "connectors.userIdentity"
+                      : "connectors.botIdentity",
+                  )}
+                />
+              </SettingsSection>
+            )}
+          </>
+        )}
+        {!peer && <p role="status">{t("connectors.offline")}</p>}
       </div>
-      <SegmentedControl
-        label={t("connectors.toolModeFor", { name: label })}
-        disabled={disabled}
-        value={mode}
-        options={[
-          {
-            value: "read_only",
-            label: t("connectors.toolMode.readOnly"),
-            disabled: tool.readOnlyLocked,
-          },
-          { value: "confirm_write", label: t("connectors.toolMode.confirmWrite") },
-          { value: "disabled", label: t("connectors.toolMode.disabled") },
-        ]}
-        onValueChange={(next) =>
-          save({
-            tool: tool.tool,
-            enabled: next !== "disabled",
-            readOnly: next === "read_only",
-          })
-        }
-      />
-    </div>
+    </ConnectorPanel>
   );
 }

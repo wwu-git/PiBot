@@ -87,6 +87,9 @@ function inputs(platform: Platform) {
     phone_data: { category: "phone_data", operation: "media" },
     background: { category: "background", operation: "list" },
     browser_tabs: { category: "browser_tabs" },
+    // The default Pi in its own direct chat (the kernel sets mainDirect); other callers below.
+    bot_management: { category: "bot_management", operation: "change", mainDirect: true },
+    work_dispatch: { category: "work_dispatch", mainDirect: true },
   } satisfies Record<PolicyRequest["category"], PolicyRequest>;
   const extra: Record<string, PolicyRequest> = {
     "read_file/outside": { category: "read_file", path: targets.outside },
@@ -108,6 +111,9 @@ function inputs(platform: Platform) {
     "web/private": { category: "web", url: "http://127.0.0.1/" },
     "web/unlisted": { category: "web", url: "https://example.org/" },
     "web/invalid": { category: "web", url: "not-a-url" },
+    "bot_management/list": { category: "bot_management", operation: "list", mainDirect: true },
+    "bot_management/not_main": { category: "bot_management", operation: "change" },
+    "work_dispatch/not_main": { category: "work_dispatch", mainDirect: false },
   };
   const base = {
     botId: id,
@@ -264,7 +270,11 @@ for (const platform of platforms) {
     name: string,
     level: (typeof levels)[number],
     request: PolicyRequest,
-    extra: Omit<ScriptCase, "request"> & { boundary?: EvaluationInput["boundary"] } = {},
+    extra: Omit<ScriptCase, "request"> & {
+      boundary?: EvaluationInput["boundary"];
+      confirmEverySend?: boolean;
+      yolo?: boolean;
+    } = {},
   ) => {
     // Intrinsic categories have no permission level. Vary every real setting to prove
     // intrinsic decisions (especially memory_read) do not accidentally depend on one.
@@ -275,6 +285,8 @@ for (const platform of platforms) {
       ...(name === "read_file/remote_unresolved" ? { boundary: remoteBoundary } : {}),
       ...(extra.boundary ? { boundary: extra.boundary } : {}),
       ...(extra.grants ? { grants: extra.grants } : {}),
+      ...(extra.confirmEverySend ? { confirmEverySend: true } : {}),
+      ...(extra.yolo ? { yolo: true } : {}),
       settings: {
         levels: PermissionLevelsSchema.parse({
           ...Object.fromEntries(CategorySchema.options.map((category) => [category, level])),
@@ -314,6 +326,54 @@ for (const platform of platforms) {
       for (const level of levels) {
         const result = await evaluate(name, level, request, boundary);
         row.push(`${result.decision}:${result.reason}:${cell(result)}`);
+      }
+      rows.set(name, row);
+    }
+    // A Bot-identity send that a remembered target or YOLO would let through, and the same send
+    // from a Bot that confirms every send (owner decision 2026-11-24): only the mark keeps asking.
+    const botSend = {
+      category: "send_out",
+      identity: "bot",
+      connectorId: id,
+      tool: "matrix_send",
+      target: "matrix",
+      definitionDigest: digest,
+      targetDigest: digest,
+      rememberable: true,
+    } satisfies PolicyRequest;
+    const sendGrant = [
+      {
+        id,
+        botId: id,
+        category: "send_out" as const,
+        scope: {
+          kind: "send_target" as const,
+          connectorId: id,
+          tool: "matrix_send",
+          target: "matrix",
+          definitionDigest: digest,
+          targetDigest: digest,
+        },
+        createdAt: "2026-11-24T00:00:00.000Z",
+        revokedAt: null,
+      },
+    ];
+    const sendCases: Record<string, [PolicyRequest, Parameters<typeof evaluate>[3]]> = {
+      "send_out/bot_grant": [botSend, { grants: sendGrant }],
+      "send_out/bot_yolo": [botSend, { yolo: true }],
+      "send_out/bot_confirm_every": [
+        botSend,
+        { grants: sendGrant, yolo: true, confirmEverySend: true },
+      ],
+      "send_out/user_confirm_every": [cases.send_out, { yolo: true, confirmEverySend: true }],
+    };
+    for (const [name, [request, extra]] of Object.entries(sendCases)) {
+      const row = rows.get(name) ?? [];
+      for (const level of levels) {
+        const result = await evaluate(name, level, request, extra);
+        if (extra?.confirmEverySend && result.canRemember)
+          throw new Error(`Confirm-every send offered remember: ${name}/${platform}/${level}`);
+        row.push(`${result.decision}:${result.reason}`);
       }
       rows.set(name, row);
     }

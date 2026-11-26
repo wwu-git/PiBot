@@ -86,6 +86,7 @@ export function parseConnectorTool(row: Record<string, unknown>) {
     connectorId: row.connector_id,
     catalogVersion: row.catalog_version,
     tool: row.tool_name,
+    ...(typeof row.title === "string" && row.title ? { title: row.title } : {}),
     description: row.description,
     schema: JSON.parse(String(row.schema_json)),
     enabled: row.enabled === 1,

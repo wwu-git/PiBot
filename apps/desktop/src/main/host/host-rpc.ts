@@ -48,6 +48,7 @@ export function registerHostRpc(
     openExternal(url: string): Promise<void>;
     setLoginItem(openAtLogin: boolean): Promise<void>;
     onBusyChange?(busy: boolean): void;
+    memoryDreamActivity?(): HostResults["host.memoryDreamActivity"];
     remoteKeepAwake?(enabled: boolean): HostResults["host.remote.keepAwake"];
     routines?: {
       keepAwake(params: HostParams["host.keepAwake"]): Promise<HostResults["host.keepAwake"]>;
@@ -261,6 +262,7 @@ export function registerHostRpc(
     signal.throwIfAborted();
     return options.remoteKeepAwake?.(enabled) ?? "unsupported";
   });
+  handle("host.memoryDreamActivity", async () => options.memoryDreamActivity?.() ?? null);
   handle("host.keepAwake", (params) => routines().keepAwake(params));
   handle("host.backgroundState", () => routines().backgroundState());
   handle("tray.update", async (params) => {

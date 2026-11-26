@@ -2,12 +2,13 @@ import { existsSync, realpathSync, statSync } from "node:fs";
 import { BlockList, isIP } from "node:net";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-
 import {
   type BrowserBlocked,
   type BrowserRules,
+  browserPrivateNetworkHost,
   LocalBrowserDocumentExtensionSchema,
   localServiceTarget,
+  privateNetworkOrigin,
 } from "@pibot/browser-contract/full";
 import type { AddressPolicy, Session } from "./platform.ts";
 
@@ -23,6 +24,8 @@ const isLoopbackPeer = (ip: string) => {
 
 export interface SessionHooks {
   rules(): BrowserRules | undefined;
+  /** Exact approved origin must have a live preconnection checked session transport. */
+  privateRoute?(rules: BrowserRules, url: URL): Promise<boolean>;
   /** Bot-driven requests ask the guard; the user's own takeover browsing does not. */
   takeover(): boolean;
   site(domain: string, url: string): boolean;
@@ -69,13 +72,8 @@ export function ownLocalService(rules: BrowserRules | undefined, url: string): b
  */
 export function approvedPrivateOrigin(rules: BrowserRules | undefined, url: URL): boolean {
   if (!rules?.privateOrigins?.length) return false;
-  const scheme =
-    url.protocol === "ws:" ? "http:" : url.protocol === "wss:" ? "https:" : url.protocol;
-  if (scheme !== "http:" && scheme !== "https:") return false;
-  const host = hostOf(url);
-  const port = url.port || (scheme === "https:" ? "443" : "80");
-  const origin = `${scheme}//${isIP(host) === 6 ? `[${host}]` : host}:${port}`;
-  return rules.privateOrigins.includes(origin);
+  const origin = privateNetworkOrigin(url.href);
+  return origin !== undefined && rules.privateOrigins.includes(origin);
 }
 
 export function localWorkplaceFileInfo(
@@ -201,11 +199,11 @@ export function createNavigationCheck(address: AddressPolicy) {
     // The user's browser never opens local files or other schemes for a Bot.
     if (url.protocol !== "http:" && url.protocol !== "https:") return entry("site");
     if (ownLocalService(rules, href)) return undefined;
-    const allowedPrivate = approvedPrivateOrigin(rules, url);
-    if (!allowedPrivate && rules.allowList && !listedHost(rules.allowList, host))
-      return entry("not_listed");
-    if (!allowedPrivate && !(await addressOk(url, rules.proxy !== null))) return entry("private");
-    if (!allowedPrivate && !request.site(host)) return entry("site");
+    // An extension cannot constrain the actual socket; private browsing stays in the Bot session.
+    if (browserPrivateNetworkHost(host)) return entry("private");
+    if (rules.allowList && !listedHost(rules.allowList, host)) return entry("not_listed");
+    if (!(await addressOk(url, rules.proxy !== null))) return entry("private");
+    if (!request.site(host)) return entry("site");
     if (request.submit && !request.allowSubmit(host)) return entry("submit");
     return undefined;
   };
@@ -261,6 +259,9 @@ export function installSessionRules(session: Session, hooks: SessionHooks, addre
     // The user allowed exactly this local-network origin for the run (its own card, asked each
     // time); it is the user's own device, so neither the site list nor the address ban applies.
     const allowedPrivate = approvedPrivateOrigin(rules, url);
+    if (allowedPrivate && !(await hooks.privateRoute?.(rules, url))) return report("private", host);
+    // Tailnet and .local names must never slip through a public DNS answer or manual proxy.
+    if (!allowedPrivate && browserPrivateNetworkHost(host)) return report("private", host);
     // Applies to subresources too: a site's CDN stays blocked until the user lists it.
     if (!allowedPrivate && rules.allowList && !listedHost(rules.allowList, host))
       return report("not_listed", host);
@@ -288,14 +289,15 @@ export function installSessionRules(session: Session, hooks: SessionHooks, addre
     // Electron's typings omit it, but Chromium reports the peer address here.
     const ip = (details as { ip?: unknown }).ip;
     if (!rules || rules.proxy || typeof ip !== "string" || isIP(ip) === 0) return;
+    // This response's peer is the authenticated loopback proxy. The transport verified and
+    // pinned the actual destination before sending bytes; post-response DNS checks cannot.
+    try {
+      if (hooks.privateRoute && approvedPrivateOrigin(rules, new URL(details.url))) return;
+    } catch {
+      // Malformed URLs fall through to the existing refusal below.
+    }
     if (isPublicAddress(ip) || fakeIp.check(ip)) return;
     if (ownLocalService(rules, details.url) && isLoopbackPeer(ip)) return;
-    // An allowed local-network origin answers from the LAN; loopback (rebinding) still stops it.
-    try {
-      if (approvedPrivateOrigin(rules, new URL(details.url)) && !isLoopbackPeer(ip)) return;
-    } catch {
-      // Unparseable: reported below like any other private answer.
-    }
     let host: string | undefined;
     try {
       host = hostOf(new URL(details.url));

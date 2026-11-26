@@ -5,6 +5,9 @@ import { requireOptionalNativeModule } from "expo";
  * builds made before `expo prebuild` picked it up; callers treat absence as "unsupported".
  */
 export interface PibotAndroidModule {
+  installApk(uri: string): Promise<"started" | "unknown_sources">;
+  sha256File(uri: string): Promise<string>;
+  openInstallSettings(): Promise<void>;
   addListener(event: "linkTick", listener: () => void): { remove(): void };
   /** Remote-control foreground service; false when Android refused the start (background). */
   startLinkService(title: string, body: string, channel: string): Promise<boolean>;

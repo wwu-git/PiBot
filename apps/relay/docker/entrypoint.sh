@@ -7,12 +7,16 @@ mode="${TLS_MODE:-internal}"
 case "$mode" in
   internal)
     # Caddy's own CA, kept on the data volume; DOMAIN may be a LAN name or an IP address.
+    # A client that connects to an IP address sends no SNI, and Caddy then had no certificate
+    # to choose and answered with an internal-error alert (runner pairing looped at stage=tls).
+    # default_sni only applies to such clients; a client that sends a hostname is unchanged.
     cat > /tmp/Caddyfile <<'CADDY'
 {
   admin off
   persist_config off
   skip_install_trust
   auto_https disable_redirects
+  default_sni {$DOMAIN:localhost}
 }
 https://{$DOMAIN:localhost}:{$HTTPS_PORT} {
   tls internal

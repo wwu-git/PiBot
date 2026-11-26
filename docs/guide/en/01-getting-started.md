@@ -16,7 +16,7 @@ On this page:
 |---|---|---|
 | macOS | `.dmg` (one for Apple silicon, one for Intel) | Requires macOS 13 Ventura or later; in-app updates need Pi Bot in the Applications folder |
 | Windows | `.exe` installer | 64-bit Windows 10 / 11 |
-| Linux | `.AppImage` (also `.tar.gz`) | Command isolation needs `bubblewrap` and `socat`; only the AppImage updates in-app |
+| Linux | `.deb` (Debian / Ubuntu), `.AppImage` (also `.tar.gz`) | 64-bit x86; use the `.deb` on Ubuntu 24.04 and later. Command isolation needs `bubblewrap` and `socat`; only the AppImage updates in-app |
 
 You also need a model: an API key for an online provider, a ChatGPT plan, or a model running on your computer (such as Ollama). See [9 · Models and keys](09-models-and-keys.md).
 
@@ -43,13 +43,22 @@ Uninstalling keeps your data (chats and keys live in the data folder, see [12 ·
 
 ### Linux
 
+**Debian / Ubuntu (`.deb`, recommended on Ubuntu 24.04 and later)**
+
+1. Install it with apt, which also installs the command isolation tools (`bubblewrap`, `socat`): `sudo apt install ./PiBot-*.deb`
+2. Open Pi Bot from the applications menu, or run `pi-bot` as a regular user (not with `sudo` or as root).
+
+The package installs to `/opt/Pi Bot` and adds an AppArmor profile, `/etc/apparmor.d/pi-bot`. Ubuntu 24.04 and later restrict unprivileged user namespaces by default; the profile lets Pi Bot, and the programs it starts, create the user namespaces its process sandbox needs, the way the Chrome and VS Code profiles do. It changes no system settings. `sudo apt remove pibot` removes the profile with the app; your data stays. The `.deb` doesn't update in-app: install the new version's `.deb` the same way.
+
+**AppImage (other distributions)**
+
 1. Make the AppImage executable: `chmod +x PiBot-*.AppImage`, then run it.
 2. Install the command isolation tools (used when Bots run commands):
    - Debian / Ubuntu: `sudo apt install bubblewrap socat`
    - Fedora: `sudo dnf install bubblewrap socat`
 3. Run it as a regular user: not with `sudo` or as root, and without `--no-sandbox`.
 
-Ubuntu 24.04 and later restrict unprivileged user namespaces by default. If Pi Bot can't start safely, it shows a page with the AppArmor profile to add; follow it, then open Pi Bot again.
+If the AppImage can't start safely because of the user namespace restriction, it shows a page that points to the `.deb` and gives the AppArmor profile to add by hand; follow one of them, then open Pi Bot again.
 
 ## First launch: the welcome flow
 
@@ -133,6 +142,18 @@ The avatar menu switches language and appearance (Light / Dark / System) directl
 ### Tray and background
 
 When you close the window, Pi Bot keeps running in the background (routines keep running), and you can reopen it from the tray (Windows / Linux) or menu bar (macOS). To quit completely, use **Quit completely (routines stop too)** in the tray menu. In Settings › General › Startup you choose what happens when you sign in to the computer (Don't start / Open window / Background only) and whether to show the tray icon.
+
+### Live island
+
+When Pi Bot is not in front (you switched to another app, minimised or closed its window), a small pill appears at the top centre of the screen while Bots work, with each busy Bot's avatar, name, what it is doing and for how long. When several Bots are busy, flip through them with the up/down arrows or the mouse wheel / trackpad; click to open that chat, group task, routine or the card waiting for you. It shows only names and short titles (plan step, group task, routine name, approval card title), never message text or file contents.
+
+In Settings › General › Live island you can:
+
+- turn the island on or off (on by default);
+- under **Display**, choose **Avatar and task** or **Avatars only** (smaller; expands when you point at it);
+- under **Show**, tick what it shows: Direct chats, Group task steps, Routines, Waiting for you (all on by default).
+
+It goes away when you come back to the Pi Bot window. While a Bot uses the computer, the computer-use bar takes the top of the screen and the island steps aside. The live island is desktop only (macOS, Windows, Linux on X11); the phone app doesn't have it. Wayland sessions on Linux can't keep a small window at the top of the screen, and Settings says so.
 
 ## Next steps
 

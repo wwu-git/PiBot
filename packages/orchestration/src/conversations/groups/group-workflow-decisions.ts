@@ -12,7 +12,7 @@ import {
   transaction,
 } from "@pibot/storage";
 import { assertPlanWorkplace } from "./group-plan-workplace.ts";
-import { stepFailureReason } from "./group-step-failure.ts";
+import { contextFullReading, stepFailureReason } from "./group-step-failure.ts";
 import { confirmationRequired } from "./group-workflow-brief.ts";
 import { decisionText } from "./group-workflow-decision-text.ts";
 import {
@@ -29,6 +29,8 @@ import {
   type WorkflowEngine,
   workflowOf,
 } from "./group-workflow-snapshot.ts";
+import { closeStepTasks } from "./group-workflow-step-tasks.ts";
+import { verdictResolution } from "./group-workflow-verdicts.ts";
 
 /** Blocked steps, their disposition cards and the user's retry / skip / reassign / accept. */
 export class GroupWorkflowDecisions {
@@ -73,6 +75,7 @@ export class GroupWorkflowDecisions {
       owner = params.ownerBotId;
     }
     let replanCancelled = false;
+    let held: string[] = [];
     transaction(service.deps.db, () => {
       const latest = repo.steps(record.id).find((step) => step.stepId === params.stepId);
       if (latest?.status !== "blocked")
@@ -116,6 +119,7 @@ export class GroupWorkflowDecisions {
           params.stepId,
           params.action === "reassign" ? owner : undefined,
         );
+      held = params.action === "skip" && dynamic ? this.holdSkippedFix(record, params.stepId) : [];
       if (params.action === "accept" && latest.taskId) {
         service.handoffs.repo.confirmByUser(latest.taskId);
         service.handoffs.repo.setState(latest.taskId, "met");
@@ -137,7 +141,7 @@ export class GroupWorkflowDecisions {
         record.id,
         service.cycles.get(group.id).cycleId ?? service.cycles.reset(group.id),
       );
-      repo.updateRun(record.id, "running");
+      repo.updateRun(record.id, held.length ? "waiting" : "running");
       if (latest.decisionMessageId) {
         const messages = new MessagesRepo(service.deps.db);
         const message = messages.get(latest.decisionMessageId);
@@ -178,11 +182,26 @@ export class GroupWorkflowDecisions {
           ...(replanCancelled ? { reasonCode: "replan_cancelled_by_user" } : {}),
         },
       );
+      if (held.length)
+        this.engine.audit(
+          record,
+          "group.workflow.disposition",
+          "Repair skipped; recheck skipped, waiting for the user / 修复已跳过，复验不再进行，等你选择",
+          { actor: "user", stepId: params.stepId, reasonCode: "verdict_fix_skipped" },
+        );
     });
     if (current.taskId) {
       const task = service.tasks.get(current.taskId);
       if (task) service.taskChanged(task);
     }
+    if (params.action === "skip" || params.action === "accept")
+      closeStepTasks(
+        service,
+        record,
+        [params.stepId],
+        params.action === "skip" ? "step_skipped" : "step_accepted",
+        "user",
+      );
     service.changed(record.groupId, "updated");
     // A step the ledger had parked for the cancelled replan now needs its own disposition card.
     if (replanCancelled) {
@@ -230,6 +249,53 @@ export class GroupWorkflowDecisions {
     return true;
   }
 
+  /**
+   * Inside the disposition transaction: skipping a repair ends that repair loop. Its recheck
+   * would only review the unchanged work again (the program used to dispatch it), so it is
+   * skipped too, the reviewed step keeps its FAIL verdict, and the plan waits for the user to
+   * accept it as it is or stop. Returns the reviewed steps now waiting for that choice.
+   */
+  private holdSkippedFix(record: GroupWorkflowRunRecord, stepId: string) {
+    const { service, repo, progress } = this.engine;
+    const latest = repo.get(record.id) ?? record;
+    const ledger = progressOf(latest);
+    const reviewed = Object.entries(ledger.verdictFixes)
+      .filter(([failed, fix]) => fix === stepId && !verdictResolution(ledger, failed))
+      .map(([failed]) => failed);
+    if (!reviewed.length) return [];
+    const states = repo.steps(record.id);
+    for (const failed of reviewed) {
+      const recheck = ledger.verdictRepairs[failed];
+      const state = states.find((item) => item.stepId === recheck);
+      if (recheck && state && ["waiting", "ready"].includes(state.status))
+        repo.updateStep(record.id, recheck, { status: "skipped" });
+    }
+    const already = ledger.hold?.kind === "fix_skipped" ? ledger.hold.stepIds : [];
+    progress.save(latest, {
+      ...ledger,
+      requested: false,
+      hold: { kind: "fix_skipped", stepIds: [...new Set([...already, ...reviewed])].slice(0, 20) },
+    });
+    const workflow = workflowOf(latest);
+    const title = (id: string) =>
+      workflow.contract.steps?.find((step) => step.id === id)?.title ?? id;
+    const zh = service.deps.chat.currentLanguage() === "zh";
+    const names = reviewed.map(title).join(zh ? "、" : ", ");
+    new MessagesRepo(service.deps.db).create({
+      conversationId: service.groups.get(record.groupId)?.conversationId ?? "",
+      botId: record.coordinatorBotId,
+      role: "assistant",
+      status: "done",
+      markUnread: false,
+      content: service.deps.redactor.redact(
+        zh
+          ? `修复「${title(stepId)}」已跳过，不再复验；「${names}」保持不通过。请在计划卡片上选择按现状接受，或停止计划。`
+          : `The repair “${title(stepId)}” was skipped, so there is no recheck; “${names}” keeps its FAIL verdict. On the plan card, accept it as it is or stop the plan.`,
+      ),
+    });
+    return reviewed;
+  }
+
   private canConfirm(current: GroupWorkflowStepRecord) {
     const { service } = this.engine;
     if (
@@ -263,6 +329,14 @@ export class GroupWorkflowDecisions {
         current.attempt !== attempt
       )
         return false;
+      const code = reasonCode ?? this.reason(current);
+      const reading =
+        code === "context_full"
+          ? contextFullReading(
+              service,
+              current.executionRunId ? service.runs.get(current.executionRunId) : undefined,
+            )
+          : undefined;
       const decision: GroupWorkflowDecision = {
         groupId: record.groupId,
         workflowRunId: record.id,
@@ -271,9 +345,10 @@ export class GroupWorkflowDecisions {
         ownerBotId: current.ownerBotId,
         attempt,
         state: "pending",
-        reasonCode: reasonCode ?? this.reason(current),
+        reasonCode: code,
         confirmationRequired: this.canConfirm(current),
         ...(note ? { note } : {}),
+        ...(reading ? { reading } : {}),
       };
       const messages = new MessagesRepo(service.deps.db);
       const existing = current.decisionMessageId
@@ -364,7 +439,8 @@ export class GroupWorkflowDecisions {
       latest,
       "group.workflow.disposition",
       "Group workflow dispositions handed to the user / 群工作流处置交回用户",
-      { actor: "system", kind, steps: stuck.map((item) => item.state.stepId) },
+      // The audit detail is a closed schema: the kind is its reason code, the steps a count.
+      { actor: "system", reasonCode: kind, stepCount: stuck.length },
     );
     // The group sees this step move to "stuck, the coordinator handles it".
     this.engine.announce(repo.get(latest.id) ?? latest);
@@ -405,6 +481,14 @@ export class GroupWorkflowDecisions {
       repo.updateStep(record.id, definition.id, { status: "blocked" });
       repo.updateRun(record.id, "waiting");
       if (state.taskId) service.cycles.claimWake(state.taskId);
+      if (reason === "context_full") {
+        // The next attempt's brief carries one fixed line about it (no extra model call).
+        const ledger = progressOf(repo.get(record.id) ?? record);
+        progress.save(record, {
+          ...ledger,
+          contextFull: { ...ledger.contextFull, [definition.id]: true },
+        });
+      }
       this.engine.audit(
         record,
         "group.workflow.step_blocked",

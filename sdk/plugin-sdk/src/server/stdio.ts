@@ -235,6 +235,8 @@ export async function serveStdio(input: {
       return {
         tools: tools.map((definition) => ({
           name: definition.name,
+          // A name for people; "中文 / English" is shown in the reader's language.
+          ...(definition.title ? { title: definition.title } : {}),
           description: definition.description,
           // Zod emits a JSON object; MCP's narrower recursive JSON type cannot express it.
           inputSchema: {
@@ -242,6 +244,7 @@ export async function serveStdio(input: {
             type: "object",
           } as unknown as Tool["inputSchema"],
           annotations: {
+            ...(definition.title ? { title: definition.title } : {}),
             ...(definition.readOnlyHint === undefined
               ? {}
               : { readOnlyHint: definition.readOnlyHint }),

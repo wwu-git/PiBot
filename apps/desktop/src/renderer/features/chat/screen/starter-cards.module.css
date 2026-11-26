@@ -1,6 +1,11 @@
+/*
+ * Two columns while each card has room for a line of words, otherwise one. Keyed to the grid's
+ * own width, not the window: with the Tasks panel open at 960 px the chat column is about
+ * 330 px and two columns squeezed the text to one word per line.
+ */
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, max(200px, calc(50% - 6px))), 1fr));
   gap: 12px;
   width: 100%;
   max-width: 640px;
@@ -8,6 +13,7 @@
 /* Starters are soft cards that lift on hover, glowing in their own mark's colour. */
 .card {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 12px;
   min-height: 58px;
@@ -55,11 +61,6 @@
   from {
     opacity: 0;
     transform: translateY(8px);
-  }
-}
-@media (max-width: 560px) {
-  .grid {
-    grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-motion: reduce) {

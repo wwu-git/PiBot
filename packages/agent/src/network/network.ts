@@ -1,12 +1,18 @@
+// Scope SDK transport, local endpoint checks, and diagnostics to the current request.
 import { AsyncLocalStorage } from "node:async_hooks";
 import { isIP } from "node:net";
 import type { Api, Model, Provider, StreamOptions, TranscriptContext } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
+import { IMPORTED_PROVIDER_PREFIX, parseProviderImportEndpoint } from "@pibot/protocol-base";
+import { MAGPIE_PROVIDER, magpieBaseUrl, magpiePort } from "@pibot/protocol-base/provider-catalog";
 import { AgentError, mapAgentError } from "../core/errors.ts";
+import { cacheRequestFields } from "./cache-request-fields.ts";
 
 export interface AgentNetwork {
   enabled(): boolean;
   wrap(provider: Provider): Provider;
+  withLocalModelOrigin?<T>(origin: string, send: () => T): T;
+  observeRequest?<T>(record: (fields: string[]) => void, send: () => T): T;
   dispose(): void;
 }
 /**
@@ -42,27 +48,45 @@ export function installAgentNetwork(
   const ownership = Symbol.for("pibot.agent.network");
   if (Reflect.get(original, ownership)) throw new AgentError("internal");
   const scope = new AsyncLocalStorage<{
+    pinnedOrigin?: string;
     proxyFailure?: "proxy_unavailable" | "proxy_credentials_unavailable" | "proxy_auth_failed";
     response?(response: Response): Promise<void>;
   }>();
+  const localModelOrigin = new AsyncLocalStorage<string>();
+  const requestMetrics = new AsyncLocalStorage<(fields: string[]) => void>();
   let disposed = false;
   const fetch: typeof globalThis.fetch = async (input, init) => {
     if (disposed) throw new AgentError("aborted");
     try {
       const url = new URL(input instanceof Request ? input.url : String(input));
+      const pinnedOrigin = scope.getStore()?.pinnedOrigin;
+      if (pinnedOrigin && (url.origin !== pinnedOrigin || url.username || url.password))
+        throw new AgentError("provider_error");
+      const dreamOrigin = localModelOrigin.getStore();
+      const loopback = isLoopbackHost(url.hostname);
+      if (dreamOrigin && (!loopback || url.origin !== dreamOrigin || url.username || url.password))
+        throw new AgentError("provider_error");
+      const record = requestMetrics.getStore();
+      if (record) {
+        const fields = cacheRequestFields(init?.body);
+        if (fields) record(fields);
+      }
       // Local model servers (Ollama, LM Studio, vLLM) and local MCP servers stay on this machine.
       // A followed redirect would leave loopback without the proxy, so it fails instead.
-      if (enabled() && isLoopbackHost(url.hostname)) {
+      if (loopback && (dreamOrigin || pinnedOrigin || enabled())) {
         const response = await original(input, {
           ...init,
-          redirect: init?.redirect === "manual" ? "manual" : "error",
+          redirect: !dreamOrigin && init?.redirect === "manual" ? "manual" : "error",
         });
         await scope.getStore()?.response?.(response);
         return response;
       }
       // pi's fixed Codex refresh endpoint omits a redirect policy; never forward the refresh token.
       const oauthRefresh = url.hostname === "auth.openai.com" && url.pathname === "/oauth/token";
-      const response = await transport(input, oauthRefresh ? { ...init, redirect: "error" } : init);
+      const response = await transport(
+        input,
+        oauthRefresh || pinnedOrigin ? { ...init, redirect: "error" } : init,
+      );
       await scope.getStore()?.response?.(response);
       return response;
     } catch (error) {
@@ -122,10 +146,28 @@ export function installAgentNetwork(
         throw new AgentError("proxy_unsupported");
       const bedrock =
         enabled() && model.api === "bedrock-converse-stream" ? bedrockProxy() : undefined;
+      const magpie = model.provider === MAGPIE_PROVIDER.id;
+      const base = magpie ? model.baseUrl.replace(/\/$/, "") : undefined;
+      // URL canonicalization removes an explicit HTTP port 80 from the SDK's base URL.
+      if (
+        base !== undefined &&
+        magpiePort(base) === undefined &&
+        base !== new URL(magpieBaseUrl(80)).href
+      )
+        throw new AgentError("provider_error");
+      const imported = model.provider.startsWith(IMPORTED_PROVIDER_PREFIX);
+      const pinnedOrigin = magpie
+        ? new URL(model.baseUrl).origin
+        : imported
+          ? parseProviderImportEndpoint(model.baseUrl)?.origin
+          : undefined;
+      if (imported && !pinnedOrigin) throw new AgentError("provider_error");
       const state: {
+        pinnedOrigin?: string;
         proxyFailure?: "proxy_unavailable" | "proxy_credentials_unavailable" | "proxy_auth_failed";
         response?(response: Response): Promise<void>;
       } = {
+        pinnedOrigin,
         // SDKs can flatten HTTP errors before onResponse runs. Forward only Retry-After,
         // scoped to this provider attempt; never retain headers or share a process-wide value.
         async response(response) {
@@ -201,6 +243,8 @@ export function installAgentNetwork(
   }
   return {
     enabled,
+    withLocalModelOrigin: (origin, send) => localModelOrigin.run(origin, send),
+    observeRequest: (record, send) => requestMetrics.run(record, send),
     wrap(provider) {
       const generateImages = provider.generateImages;
       const fetchOnly = Reflect.get(provider, FETCH_ONLY_PROVIDER) === true;
@@ -232,6 +276,8 @@ export function installAgentNetwork(
       disposed = true;
       if (globalThis.fetch === fetch) globalThis.fetch = original;
       scope.disable();
+      localModelOrigin.disable();
+      requestMetrics.disable();
     },
   };
 }

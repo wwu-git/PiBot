@@ -34,6 +34,8 @@ const RETRYABLE = new Set([
 ]);
 
 const errors: Record<string, string> = {
+  browser_private_open_required:
+    "用户浏览器扩展不能安全访问此内网目标，刚才的点击或表单没有转移或重放。请用 browser_open 明确打开目标网址，改用独立 Bot 浏览器并重新读取快照；不要自动重放原表单 / The browser extension cannot safely reach this private target. The click or form was not transferred or replayed. Explicitly open the target URL with browser_open to use the isolated Bot browser, then take a fresh snapshot. Do not automatically replay the original form",
   browser_snapshot_stale:
     "页面在读取时变了，请重新读取快照 / The page changed while reading; take a new snapshot",
   browser_screenshot_stale:

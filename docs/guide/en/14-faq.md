@@ -23,7 +23,7 @@ Configure Ollama on the same computer to keep model requests on that machine. Fe
 ## Download and installation
 
 **Which installer should I choose?**
-Choose an installer from the [download page](https://pibot.space/en/download/). On a Mac, use Apple menu → About This Mac to check whether it uses Apple silicon or Intel. Choose EXE for Windows, AppImage for Linux, and APK for Android. Install a runner on a computer that will only execute delegated work.
+Choose an installer from the [download page](https://pibot.space/en/download/). On a Mac, use Apple menu → About This Mac to check whether it uses Apple silicon or Intel. Choose EXE for Windows, DEB for Debian or Ubuntu (AppImage for other Linux distributions), and APK for Android. Install a runner on a computer that will only execute delegated work.
 
 **macOS says it cannot verify Pi Bot. What should I do?**
 Pi Bot has not been notarized by Apple yet. If you downloaded it from the official site and choose to proceed, try opening it once, then select **Open Anyway** under System Settings → Privacy & Security. See [1 · Install](01-getting-started.md#macos).

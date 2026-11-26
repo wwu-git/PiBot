@@ -324,6 +324,7 @@ export class GroupWorkflowDispatcher {
         text,
         !!ownFolder,
         continued ? { lost, ...(summary ? { summary } : {}) } : undefined,
+        !!ledger.contextFull?.[definition.id],
       );
     const reviewText =
       review && reviewPrompt(service, review, workflow.contract.steps ?? [], states);
@@ -352,6 +353,7 @@ export class GroupWorkflowDispatcher {
         }
       }
       const latest = repo.steps(record.id).find((item) => item.stepId === state.stepId);
+      if (workflow.source.kind === "dynamic" && progressOf(active).hold) return undefined;
       if (latest?.status !== "ready" || service.pausedFor(record.groupId)) return undefined;
       if (review && isSummary) this.engine.progress.save(active, { ...progressOf(active), review });
       if (marker) {
@@ -361,6 +363,15 @@ export class GroupWorkflowDispatcher {
         this.engine.progress.save(active, {
           ...current,
           resumed: Object.keys(rest).length ? rest : undefined,
+        });
+      }
+      if (ledger.contextFull?.[definition.id]) {
+        // This attempt's brief carries the narrower-scope line; a later attempt starts plain.
+        const current = progressOf(repo.get(record.id) ?? active);
+        const { [definition.id]: _consumed, ...rest } = current.contextFull ?? {};
+        this.engine.progress.save(active, {
+          ...current,
+          contextFull: Object.keys(rest).length ? rest : undefined,
         });
       }
       const created = service.tasks.create({

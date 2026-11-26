@@ -1,3 +1,4 @@
+// Define and adapt the host operations shared by local and remote execution.
 import { lstat } from "node:fs/promises";
 import { createExec } from "../command/command.ts";
 import { fileIdentity } from "../core/file-identity.ts";
@@ -106,7 +107,7 @@ export interface ExecutionTarget {
    * data. Never lists inside private folders and never shows them. `null`: the drive list (Windows)
    * or "/". Grants nothing: picking a folder still goes through `canonicalizePath`.
    */
-  listFolders?(path: string | null, signal: AbortSignal): Promise<FolderLevel>;
+  listFolders?(path: string | null | undefined, signal: AbortSignal): Promise<FolderLevel>;
   dispose: LocalExec["dispose"];
 }
 

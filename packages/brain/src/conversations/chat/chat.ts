@@ -393,6 +393,8 @@ export class ChatService {
     ]);
     let prepared: PreparedAttachments | undefined;
     try {
+      await this.local?.memoryExtraction?.waitForCorrection(botId, selected?.id, signal);
+      signal.throwIfAborted();
       const folders =
         newTopic && this.local ? (workplace ?? this.local.workplaces.initial(botId)) : null;
       if (folders?.writable?.length && this.local)

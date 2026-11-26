@@ -1,0 +1,54 @@
+.intro {
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.card {
+  padding: 14px;
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--avatar-green) 9%, var(--card));
+}
+.card h2 {
+  font-size: 14px;
+  color: var(--ink-green);
+  margin: 0 0 8px;
+}
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+.facts dt {
+  font-weight: 600;
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  unicode-bidi: isolate;
+}
+.picker {
+  border-radius: var(--radius-card);
+  padding: 12px;
+  max-height: 250px;
+  overflow: auto;
+  background: var(--card);
+}
+.note {
+  color: var(--text2);
+  margin: 10px 0;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+@media (max-width: 600px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

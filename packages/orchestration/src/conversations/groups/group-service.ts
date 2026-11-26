@@ -750,6 +750,8 @@ export class GroupService implements CollaborationPort {
       { ...context, signal: activeSignal },
       this.deps.local.groupMemory.prompt(context.groupId as string, context.botId, {
         query: context.memoryQuery ?? "",
+        runId: context.runId,
+        runSignal: context.signal,
         signal: activeSignal,
       }),
       instruction,
@@ -832,6 +834,8 @@ export class GroupService implements CollaborationPort {
       { ...context, signal },
       this.deps.local.groupMemory.prompt(context.groupId as string, context.botId, {
         query: context.memoryQuery ?? "",
+        runId: context.runId,
+        runSignal: context.signal,
         signal,
       }),
       instruction,

@@ -8,6 +8,7 @@ import {
 import { phoneToolGroup, phoneTools, runnerToolGroup, runnerTools } from "@pibot/remote-contract";
 import { routineToolGroup, routineTools } from "@pibot/routines-contract";
 import { skillReferenceTools } from "@pibot/skills-contract";
+import { piManagerTools } from "@pibot/teams-contract";
 
 /**
  * Model-facing tools the enabled capabilities contribute, composed here at the
@@ -23,6 +24,7 @@ export const capabilityTools = {
   ...pluginInstallTools,
   ...agentDelegationTools,
   ...skillReferenceTools,
+  ...piManagerTools,
 } as const satisfies Record<string, CapabilityToolSpec>;
 
 export const capabilityToolGroups = [

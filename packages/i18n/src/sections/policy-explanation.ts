@@ -152,6 +152,7 @@ export const policyExplanationZh = {
   "policy.reason.connector_read": "这是已授权连接的只读操作",
   "policy.reason.connector_write_draft": "这里只创建草稿，发送仍需独立授权",
   "policy.reason.user_send_confirmation": "以你的身份发送需要你明确确认",
+  "policy.reason.bot_send_confirmation": "这个 Bot 每次对外发送都要你确认，不会记住",
   "policy.reason.search_disclosure_required": "使用搜索服务前需同意发送查询词",
   "policy.reason.search_provider_disclosure_required": "这个搜索提供商尚未获得发送查询词的同意",
   "policy.reason.search_disclosed": "已同意向当前搜索服务发送查询词",
@@ -474,6 +475,8 @@ export const policyExplanationEn: Record<keyof typeof policyExplanationZh, strin
   "policy.reason.connector_write_draft":
     "This only creates a draft; sending needs separate authorization",
   "policy.reason.user_send_confirmation": "Sending as you requires your explicit confirmation",
+  "policy.reason.bot_send_confirmation":
+    "This Bot asks you before every send, and the answer is never remembered",
   "policy.reason.search_disclosure_required":
     "Sending queries to the search service requires consent",
   "policy.reason.search_provider_disclosure_required":

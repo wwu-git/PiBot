@@ -58,9 +58,13 @@ export async function schedulerAcceptance(exercise: Exercise) {
       "routines.create",
       draft(f, { name: "太旧", triggers: [{ kind: "cron", expr: "0 0 1 1 *", timezone: "UTC" }] }),
     );
+    // Stop the service's own timer first: a timer tick already scanning when the direct recovery
+    // tick started cleared the recovery flag under it, so the run landed as an ordinary one
+    // ("running") or not within the wait (both seen under a niced run on 2026-11-25). Resuming
+    // is a real recovery: it marks the downtime and ticks through the same queue.
+    await f.service.pauseAutomation();
     watermark(f, old, "2025-01-01T00:00:00.000Z");
-    f.service.recovered();
-    await f.service.tick();
+    await f.service.resumeAutomation();
     // The service's own 1 s timer ticks through its queue as well; when it takes this routine
     // first, the direct tick above finds nothing new and the run lands a moment later. Wait for
     // the scheduler to go idle instead of racing it (failed under load on 2026-11-15).

@@ -2,6 +2,8 @@
   "name": "@pibot/desktop",
   "version": "0.0.4",
   "private": true,
+  "homepage": "https://pibot.space",
+  "license": "Apache-2.0",
   "pibot": {
     "layer": "L5"
   },
@@ -26,9 +28,9 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "2.0.2",
     "@anthropic-ai/sandbox-runtime": "0.0.81",
-    "@earendil-works/pi-ai": "1.4.0",
-    "@earendil-works/pi-coding-agent": "1.4.0",
-    "@google/genai": "2.21.0",
+    "@earendil-works/pi-ai": "1.6.0",
+    "@earendil-works/pi-coding-agent": "1.6.0",
+    "@google/genai": "2.32.0",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1",
     "@mozilla/readability": "0.6.0",

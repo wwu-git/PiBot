@@ -147,6 +147,7 @@ export function memoryVertex(
         const toolMode = resolveGoogleFunctionCallingMode(tools, options?.toolChoice, strict);
         const config: GenerateContentConfig = {
           abortSignal: signal,
+          automaticContinuation: false,
           maxOutputTokens: options?.maxTokens ?? model.maxTokens,
           temperature: options?.temperature,
           systemInstruction: system ? getSystemMessageText(system) : undefined,
@@ -327,6 +328,7 @@ export function memoryVertex(
         ],
         config: {
           abortSignal: signal,
+          automaticContinuation: false,
           responseModalities: ["IMAGE", "TEXT"],
           candidateCount: 1,
         } as GenerateContentConfig,

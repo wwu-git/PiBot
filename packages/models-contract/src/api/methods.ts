@@ -1,4 +1,6 @@
+// Defines shared provider and model RPC contracts.
 import {
+  AddedModelIdSchema,
   AgentErrorCodeSchema,
   ApiSchema,
   CloudConfigSchema,
@@ -12,6 +14,10 @@ import {
   LoginStepSchema,
   ModelInfoSchema,
   ProviderAuthStateSchema,
+  ProviderImportDecisionSchema,
+  ProviderImportIntentSchema,
+  ProviderImportPreviewSchema,
+  ProviderImportResultSchema,
   ProviderSchema,
   ResolvedCustomModelSchema,
   SafeSecretSchema,
@@ -25,6 +31,7 @@ const count = z.number().int().nonnegative().safe();
 const ok = z.strictObject({ ok: z.literal(true) });
 const noParams = z.union([z.undefined(), z.strictObject({})]);
 const providerId = z.strictObject({ providerId: name });
+const magpiePort = z.number().int().min(1).max(65535);
 const models = z.array(z.strictObject({ id: name }));
 const headers = z.record(
   name,
@@ -86,6 +93,14 @@ export const ModelHealthReasonSchema = z.enum([
 ]);
 
 export const ModelProviderMethods = {
+  "providerImport.stage": {
+    params: ProviderImportIntentSchema,
+    result: ProviderImportPreviewSchema,
+  },
+  "providerImport.resolve": {
+    params: ProviderImportDecisionSchema,
+    result: ProviderImportResultSchema,
+  },
   ...ProviderMethods,
   ...AuthMethods,
   "models.health": {
@@ -100,6 +115,15 @@ export const ModelProviderMethods = {
     result: ok,
   },
   "providers.importFromEnv": { params: providerId, result: ok },
+  /** A model id for a built-in API-key provider that its pinned catalog does not list yet. */
+  "providers.addModel": {
+    params: z.strictObject({ providerId: name, modelId: AddedModelIdSchema }),
+    result: ok,
+  },
+  "providers.removeModel": {
+    params: z.strictObject({ providerId: name, modelId: AddedModelIdSchema }),
+    result: ok,
+  },
   "providers.remove": {
     params: providerId.extend({ auth: z.enum(["apiKey", "cloud"]).optional() }),
     result: ok,
@@ -149,6 +173,22 @@ export const ModelProviderMethods = {
   "models.images": {
     params: ImageModelPageSchema,
     result: z.array(ImageModelInfoSchema).max(200),
+  },
+  "local.detectMagpie": {
+    params: z.strictObject({ port: magpiePort.optional() }),
+    result: z.discriminatedUnion("running", [
+      z.strictObject({ running: z.literal(false) }),
+      z.strictObject({
+        running: z.literal(true),
+        port: magpiePort,
+        version: z.string().min(1).max(80),
+      }),
+    ]),
+  },
+  "local.configureMagpie": {
+    timeoutMs: 15_000,
+    params: z.strictObject({ port: magpiePort }),
+    result: z.strictObject({ count: count.positive().max(10000) }),
   },
   "local.detectOllama": {
     params: noParams,

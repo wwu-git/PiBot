@@ -1,6 +1,7 @@
 import pathApi from "node:path";
 import {
   folderName,
+  planFolderName,
   resolveWorkflowFolder,
   type WorkspaceFileAccess,
   workflowOutputRoots,
@@ -33,7 +34,8 @@ function canonicalPath(path: string, name: string, folder: string, paths = pathA
     if (roots.has(two)) parts.splice(0, 2);
     else if (roots.has(parts[0]?.toLowerCase() ?? "")) parts.shift();
     else break;
-    if (equal(parts[0] ?? "", folderName(name))) {
+    // Models copy either the plan name or its folder segment (older plans used the name).
+    if (equal(parts[0] ?? "", planFolderName(name)) || equal(parts[0] ?? "", folderName(name))) {
       parts.shift();
       if (period.test(parts[0] ?? "")) parts.shift();
     }
@@ -180,6 +182,7 @@ export async function preparePlanDelivery(
     workspaceRoot,
     {
       name: input.name,
+      root: planFolderName(input.name),
       contract: SkillContractSchema.parse({}),
       ...(previous ? { folder: previous.folder } : {}),
     },

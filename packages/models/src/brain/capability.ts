@@ -9,6 +9,7 @@ import { registerProviderAuthRpc } from "./auth/provider-auth-rpc.ts";
 import { ProviderStore, providerScope } from "./catalog/providers.ts";
 import { registerModelProviderRpc } from "./catalog/rpc.ts";
 import { ModelSettings } from "./settings/model-settings.ts";
+import { registerProviderImport } from "./settings/provider-import.ts";
 
 export function providersCapability(): BrainCapability {
   return {
@@ -24,6 +25,7 @@ export function providersCapability(): BrainCapability {
       await providers.initialize();
       const audit = new AuditRepo(db, redactor);
       const changed = () => peer.emit("providers.changed", {});
+      const cancelProviderImport = registerProviderImport(ctx, providers);
       const auth = new ProviderAuth(
         db,
         ctx.host.secrets,
@@ -85,6 +87,7 @@ export function providersCapability(): BrainCapability {
         hasApiKey: (id) => providers.secrets.has(providerScope(id), "apiKey"),
         getApiKey: (id) => providers.secrets.get(providerScope(id), "apiKey"),
         customProviders: providers.configs,
+        addedModels: providers.addedModels,
         auth: auth.ports,
         settings: modelSettings,
         credentials: (id) => providers.requireCredentials(id),
@@ -106,6 +109,7 @@ export function providersCapability(): BrainCapability {
         drainInteractive: () => auth.drainInteractive(),
         cancelAll: () => auth.cancelAll(),
         async stop() {
+          cancelProviderImport();
           await auth.stop();
           await providers.settled();
         },

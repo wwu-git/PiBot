@@ -21,19 +21,21 @@ export function TaskStatus({ task, data }: { task: GroupTask; data: GroupSnapsho
     <span className={styles.taskStatus} data-status={status}>
       {task.handoff?.state === "unmet"
         ? t("group.handoff.state.unmet")
-        : finishing
-          ? t("group.taskFinishing")
-          : status === "paused"
-            ? t("group.taskState.paused")
-            : task.status === "open" && task.activity?.waitingForUser
-              ? t("group.taskWaitingUser")
-              : task.status === "open" && task.activity?.waitingForTasks
-                ? t("group.taskWaitingAssignments")
-                : task.status === "open" && task.activity?.waitingForChildren
-                  ? t("group.taskWaitingChildren")
-                  : name
-                    ? t("group.taskWaitingFor", { name })
-                    : t(`group.taskState.${status}`)}
+        : task.status === "open" && task.activity?.stop?.code === "context_full"
+          ? t("group.taskState.contextFull")
+          : finishing
+            ? t("group.taskFinishing")
+            : status === "paused"
+              ? t("group.taskState.paused")
+              : task.status === "open" && task.activity?.waitingForUser
+                ? t("group.taskWaitingUser")
+                : task.status === "open" && task.activity?.waitingForTasks
+                  ? t("group.taskWaitingAssignments")
+                  : task.status === "open" && task.activity?.waitingForChildren
+                    ? t("group.taskWaitingChildren")
+                    : name
+                      ? t("group.taskWaitingFor", { name })
+                      : t(`group.taskState.${status}`)}
     </span>
   );
 }

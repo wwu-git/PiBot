@@ -8,10 +8,10 @@
 
 ```
 builtin/
-├── roles/<roleId>.pibot/        一个角色 = 只有 1 个 Bot、0 个群的团队文件（随应用打包 11 个，见 `tools/dev/builtin-minimal.ts`）
+├── roles/<roleId>.pibot/        一个角色 = 只有 1 个 Bot、0 个群的团队文件（随应用打包 15 个，见 `tools/dev/builtin-minimal.ts`）
 │   ├── team.json
 │   └── skills/<roleId>/<skillId>/{zh,en}/SKILL.md（可带 scripts/、references/）
-├── groups/<groupId>.pibot/      一个群聊模板 = 群 + 成员 Bot + 成员的技能（随应用打包 2 个）
+├── groups/<groupId>.pibot/      一个群聊模板 = 群 + 成员 Bot + 成员的技能（随应用打包 3 个）
 │   ├── team.json
 │   └── skills/<roleId>/<skillId>/{zh,en}/…
 ├── professions.json             欢迎向导的 13 个职业 → 推荐的群聊和角色（只是索引）
@@ -23,7 +23,7 @@ builtin/
 - **改角色只改 `roles/<roleId>.pibot/`**，然后运行 `pnpm builtin:pack sync`，把它同步进所有包含这个角色的群聊目录；`pnpm builtin:pack check` 单独做一遍检查。
 - 要点：
   - `avatarShape` / `avatarColor` / `avatarEyes` 只能用 `packages/brain/src/conversations/bots/avatars.ts` 里的取值；22 个角色的「外形 + 颜色」互不相同，也不和 Pi（blob + violet）相同。
-  - `permissionOverrides` 通常只能是 `"ask"` 或 `"never"`；随包内置角色可以用 `run_command: "always"`（隔离内命令直接运行，非包仓库联网、安装、后台和目录外写仍确认）。用户导入仍收紧，不能借此获得 always；已有 Bot 显式 ask/never 保守保留。键是 `packages/protocol` 的 `CategorySchema`，不能有 `network`；通用助手为空对象。`model` 一律为 `null`（用默认模型）。
+  - `permissionOverrides` 通常只能是 `"ask"` 或 `"never"`；随包内置角色可以用 `run_command: "always"`（隔离内命令直接运行，非包仓库联网、安装、后台和目录外写仍确认）。用户导入仍收紧，不能借此获得 always；已有 Bot 显式 ask/never 保守保留。键是 `packages/protocol` 的 `CategorySchema`，不能有 `network`；通用助手为空对象。另可写 `"confirmEverySend": true`（不是权限档位）：这个 Bot 每次对外发送都要用户确认，记住的授权、连接同意、例行任务预授权和 YOLO 都不能代答，卡片也不提供「记住」；一人公司的幕僚长、财务、运营、客服带这个标记。它不进版本指纹，已建的 Bot 不会因「采用新版」获得或失去它。`model` 一律为 `null`（用默认模型）。
   - `skills` 写 `{ "folder": "<skillId>", "enabled": true }`，内容在 `skills/<roleId>/<skillId>/`；通用助手没有默认技能，其余角色 2–3 个。图片角色的技能不会复制给 Bot（图片 Bot 的对话不经过系统提示和 read_file），所以生图设计师名下的两个技能（`image-prompt-writing`、`image-brief`）是给文字角色（新媒体运营、视频脚本）写配图需求时参考的模板，图片运行既读不到也不用它们。
   - 群聊 `members` 2–6 个，统筹排第一个，统筹不能是图片角色（`"category": "image"`）；`template.id` 等于目录名。
   - `professions.json` 的 `icon` 是语义名（code、lightbulb、palette、pen、megaphone、chart、book、school、cart、briefcase、server、rocket），由界面映射到自己的图标，没有对应图标时用通用图标。

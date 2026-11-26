@@ -34,7 +34,17 @@ const reasonHelp = {
   dispositions_exhausted: "group.workflow.handedOverHelp",
 } as const;
 
-export function GroupWorkflowDecisionCard({ message }: { message: Message }) {
+export function GroupWorkflowDecisionCard({
+  message,
+  embedded = false,
+}: {
+  message: Message;
+  /**
+   * Inside another card (the inbox): no frame, shadow or decision edge of its own; the content
+   * lines up with the host card's text column and the actions sit left in one wrapping row.
+   */
+  embedded?: boolean;
+}) {
   const usage = message.usage;
   const parsed = GroupWorkflowDecisionSchema.safeParse(
     usage && typeof usage === "object" && !Array.isArray(usage)
@@ -103,10 +113,15 @@ export function GroupWorkflowDecisionCard({ message }: { message: Message }) {
     const note = decision.note ?? (action === "accept" ? t("group.workflow.accept") : undefined);
     return (
       <section
-        className={`${styles.inlineCard} ${styles.cardHead} ${cardStyles.card}`}
+        className={
+          embedded
+            ? `${styles.embeddedDecision} ${styles.embeddedResolved}`
+            : `${styles.inlineCard} ${styles.cardHead} ${cardStyles.card}`
+        }
         role="status"
       >
-        <IconTile icon="check" tone="green" size="sm" />
+        {/* The host card already shows the item's mark. */}
+        {!embedded && <IconTile icon="check" tone="green" size="sm" />}
         <span className={styles.planStep} title={summary}>
           <span className={styles.planCount}>{summary}</span>
         </span>
@@ -118,6 +133,8 @@ export function GroupWorkflowDecisionCard({ message }: { message: Message }) {
       </section>
     );
   }
+  // A run that stopped with a full context would only stop again on a plain retry.
+  const contextFull = decision.reasonCode === "context_full" && !decision.confirmationRequired;
   const submit = async (action: "retry" | "skip" | "reassign" | "accept") => {
     const signal = lifetime.current?.signal;
     if (!peer || !signal || signal.aborted || busy || (action === "reassign" && !owner)) return;
@@ -145,25 +162,33 @@ export function GroupWorkflowDecisionCard({ message }: { message: Message }) {
   };
   return (
     <section
-      className={`${styles.inlineCard} ${styles.planCard} ${cardStyles.card} ${cardStyles.decision}`}
+      className={
+        embedded
+          ? styles.embeddedDecision
+          : `${styles.inlineCard} ${styles.planCard} ${cardStyles.card} ${cardStyles.decision}`
+      }
       aria-label={t("group.workflow.decisionTitle")}
     >
       <div className={styles.cardHead}>
-        <IconTile icon="warning" tone="amber" size="sm" />
+        {!embedded && <IconTile icon="warning" tone="amber" size="sm" />}
         <b>{decision.title}</b>
         {!decision.reviewSteps && (
           <small>{t("group.workflow.attempt", { count: decision.attempt + 1 })}</small>
         )}
       </div>
-      <p>
-        {t(
-          decision.reviewSteps
-            ? "group.workflow.finalReviewHelp"
-            : decision.confirmationRequired
-              ? "group.workflow.confirmationHelp"
-              : (reasonHelp[decision.reasonCode as keyof typeof reasonHelp] ??
-                "group.workflow.blockedHelp"),
-        )}
+      <p className={embedded ? styles.embeddedText : undefined}>
+        {contextFull
+          ? t("group.workflow.contextFullHelp", {
+              files: decision.reading || t("group.workflow.contextFullFiles"),
+            })
+          : t(
+              decision.reviewSteps
+                ? "group.workflow.finalReviewHelp"
+                : decision.confirmationRequired
+                  ? "group.workflow.confirmationHelp"
+                  : (reasonHelp[decision.reasonCode as keyof typeof reasonHelp] ??
+                    "group.workflow.blockedHelp"),
+            )}
       </p>
       {decision.note && (
         <small className={`${styles.planStep} ${styles.hint}`} title={decision.note}>
@@ -182,7 +207,9 @@ export function GroupWorkflowDecisionCard({ message }: { message: Message }) {
           ))}
         </ul>
       )}
-      <div className={`${styles.cardHead} ${cardStyles.actions}`}>
+      <div
+        className={embedded ? styles.embeddedActions : `${styles.cardHead} ${cardStyles.actions}`}
+      >
         {decision.confirmationRequired && (
           <Button variant="secondary" disabled={busy} onClick={() => void submit("accept")}>
             {t("group.workflow.accept")}
@@ -191,7 +218,7 @@ export function GroupWorkflowDecisionCard({ message }: { message: Message }) {
         {!decision.reviewSteps && (
           <>
             <Button variant="secondary" disabled={busy} onClick={() => void submit("retry")}>
-              {t("group.workflow.retry")}
+              {t(contextFull ? "group.workflow.retryNarrower" : "group.workflow.retry")}
             </Button>
             <Button variant="secondary" disabled={busy} onClick={() => void submit("skip")}>
               {t("group.workflow.skip")}

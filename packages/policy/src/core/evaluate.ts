@@ -7,6 +7,7 @@ import { finish } from "./finish.ts";
 import { intrinsicDecision } from "./intrinsic-decisions.ts";
 import { effectiveLevel } from "./levels.ts";
 import { memoryWritePolicy } from "./memory-write.ts";
+import { piManagerPolicy } from "./pi-manager.ts";
 import { preparePolicyFacts } from "./prepare-facts.ts";
 import { parseInput } from "./request-input.ts";
 import type { CommandAnalysis, EvaluationInput, PolicyOptions, PolicyResult } from "./types.ts";
@@ -48,6 +49,8 @@ function judge(
       return evaluateComputer({ ...input, request: input.request }, trace);
     if (input.request.category === "memory") return memoryWritePolicy(input.request);
     if (input.request.category === "agent_delegation") return agentDelegationPolicy(input, trace);
+    if (input.request.category === "bot_management" || input.request.category === "work_dispatch")
+      return piManagerPolicy(input, trace);
     // The Bot's own background commands, which the user already approved when they started;
     // listing, reading their output and stopping them reach nothing new.
     if (input.request.category === "background") return ownBackgroundDecision(trace);

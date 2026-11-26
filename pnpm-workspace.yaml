@@ -27,10 +27,10 @@ ignoredOptionalDependencies:
   - '@napi-rs/canvas'
 
 patchedDependencies:
-  '@google/genai@2.21.0': patches/@google__genai@2.21.0.patch
-  '@earendil-works/pi-ai@1.4.0': patches/@earendil-works__pi-ai@1.4.0.patch
+  '@google/genai@2.32.0': patches/@google__genai@2.32.0.patch
+  '@earendil-works/pi-ai@1.6.0': patches/@earendil-works__pi-ai@1.6.0.patch
   '@anthropic-ai/sandbox-runtime@0.0.81': patches/@anthropic-ai__sandbox-runtime@0.0.81.patch
-  '@earendil-works/pi-coding-agent@1.4.0': patches/@earendil-works__pi-coding-agent@1.4.0.patch
+  '@earendil-works/pi-coding-agent@1.6.0': patches/@earendil-works__pi-coding-agent@1.6.0.patch
   # Release phone builds printed every peer-connection call (rn-webrtc:pc:DEBUG); dev keeps it.
   'react-native-webrtc@155.0.1': patches/react-native-webrtc@155.0.1.patch
 

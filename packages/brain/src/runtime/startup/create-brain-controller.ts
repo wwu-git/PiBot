@@ -37,6 +37,8 @@ interface StartupContext {
   stopSessionRecovery(): Promise<void>;
   stopStartupMaintenance(): Promise<void>;
   loopWatch?: { stop(): void };
+  quietForMs(): number;
+  markPhase(phase: string): void;
   chat: ChatService;
   groups: GroupOrchestrationPort;
   clientChange: Promise<void>;
@@ -97,6 +99,8 @@ export function createBrainController(ctx: StartupContext): Awaited<ReturnType<t
     updateTerminalPath(path) {
       ctx.updateTerminalPath(path);
     },
+    quietForMs: () => ctx.quietForMs(),
+    markPhase: (phase) => ctx.markPhase(phase),
     backgroundSleep(input) {
       if (ctx.stopping) return Promise.reject(new RpcError(RpcErrorCodes.closed, "Brain stopping"));
       return ctx.sleepService.control(BrainWakeControlSchema.parse(input));

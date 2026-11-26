@@ -1,0 +1,21 @@
+/* Use the same warning tokens as the existing status banners. */
+.bannerWarn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  line-height: 18px;
+  background: var(--warnBg);
+  color: var(--warn);
+}
+
+.bannerWarn > svg {
+  flex: none;
+}
+
+.bannerWarn > span {
+  flex: 1 1 120px;
+}

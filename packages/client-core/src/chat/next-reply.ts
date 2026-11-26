@@ -1,5 +1,10 @@
 import type { TranslationKey } from "@pibot/i18n";
-import { AGENT_SETUP_ERROR_CODES, type ChatNotice, type Message } from "@pibot/protocol";
+import {
+  AGENT_SETUP_ERROR_CODES,
+  attachmentContinuationOf,
+  type ChatNotice,
+  type Message,
+} from "@pibot/protocol";
 import type { ExecutionTopic } from "../tasks/types.ts";
 
 /** Local state only: suggestions never request a model, grant permission, or execute a tool. */
@@ -10,7 +15,9 @@ export function nextReply(
   notices: readonly ChatNotice[],
 ) {
   if (!conversationId) return;
-  const latest = messages.findLast((message) => message.conversationId === conversationId);
+  const latest = messages.findLast(
+    (message) => message.conversationId === conversationId && !attachmentContinuationOf(message),
+  );
   if (!latest || latest.role === "user" || latest.status === "streaming") return;
   if (
     !messages.some(

@@ -7,7 +7,7 @@ import {
   KernelMethods,
 } from "@pibot/protocol-base";
 import { transaction } from "../database/database.ts";
-import { ConversationsRepo, importProjection } from "./conversations.ts";
+import { ConversationsRepo, importProjection, visibleImportedRows } from "./conversations.ts";
 import { TopicFoldersRepo } from "./topic-folders.ts";
 
 export class TopicsRepo {
@@ -50,7 +50,7 @@ export class TopicsRepo {
       ${sortAt} AS sortAt
       FROM conversations c LEFT JOIN working_folders wf ON wf.bot_id=c.bot_id AND wf.id=c.workplace_folder_id
       WHERE c.kind='dm' AND c.bot_id=? AND (CASE WHEN ? THEN c.archived_at IS NOT NULL ELSE c.archived_at IS NULL END) AND c.internal_task_id IS NULL
-      AND (c.import_id IS NULL OR c.import_id IN (SELECT id FROM import_jobs WHERE state='completed'))
+      AND ${visibleImportedRows("c.import_id")}
       AND (? OR c.routine_id IS NOT NULL OR c.import_id IS NOT NULL OR c.id=? OR EXISTS(SELECT 1 FROM messages m WHERE m.conversation_id=c.id) OR EXISTS(SELECT 1 FROM conversation_retries cr WHERE cr.conversation_id=c.id AND cr.state='done'))
       AND instr(lower(c.title),lower(?))>0 AND (?=0 OR c.id=?)) t
       WHERE t.sortAt IS NOT NULL AND (? IS NULL OR t.sortAt<? OR (t.sortAt=? AND t.id<?))

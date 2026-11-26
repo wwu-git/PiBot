@@ -131,6 +131,7 @@ export async function startBrain(opts: BrainOptions) {
       ...kernel,
       orchestration: createOrchestrationFactory(),
       port: bridge.port,
+      isPhoneRequest: bridge.isPhoneRequest,
       capabilities: capabilities({
         routineDev,
         routineHost,

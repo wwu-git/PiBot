@@ -1,3 +1,4 @@
+// Own the headless brain and its exclusive data-directory claim.
 import { lstat, mkdir, open, realpath, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { startBrain } from "@pibot/brain-app";
@@ -61,6 +62,7 @@ export function createHeadless(
   dataDir: string,
   options?: {
     pickFolder?: ReturnType<typeof cliHost>["pickFolder"];
+    modelRequest?: Parameters<typeof startBrain>[0]["modelRequest"];
     executionTarget?: ExecutionTarget;
     executionLocation?: {
       target: ExecutionLocationTarget;
@@ -82,6 +84,7 @@ export function createHeadless(
     if (closing) return;
     brain = await startBrain({
       port: brainPort,
+      modelRequest: options?.modelRequest,
       host: cliHost({ pickFolder: options?.pickFolder }),
       executionTarget: options?.executionTarget,
       executionLocation: options?.executionLocation,

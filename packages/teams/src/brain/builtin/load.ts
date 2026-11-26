@@ -70,7 +70,7 @@ function botIssues(template: TeamTemplate): string[] {
     else if (bot.role.id !== bot.ref) issues.push(`${bot.ref}: ref must equal role.id`);
     if (!bot.role?.name || !bot.role.category) issues.push(`${bot.ref}: role name/category`);
     if (bot.model) issues.push(`${bot.ref}: built-ins use the default model (model: null)`);
-    const { network, ...levels } = bot.permissionOverrides;
+    const { network, confirmEverySend: _confirm, ...levels } = bot.permissionOverrides;
     if (network) issues.push(`${bot.ref}: no network override`);
     for (const [category, level] of Object.entries(levels))
       if (

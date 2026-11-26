@@ -93,8 +93,11 @@ class StreamBridgeTransport implements Transport {
 
 function toRemoteTool(tool: CatalogTool): ConnectorRemoteTool {
   const annotations = tool.definition.annotations;
+  // The spec's `title` wins over the older annotations.title; both are display names only.
+  const title = (tool.definition.title ?? annotations?.title)?.trim().slice(0, 200);
   return {
     name: tool.definition.name,
+    ...(title ? { title } : {}),
     ...(tool.definition.description !== undefined
       ? { description: tool.definition.description }
       : {}),

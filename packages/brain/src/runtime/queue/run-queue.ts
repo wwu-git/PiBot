@@ -1,3 +1,4 @@
+// Serializes admitted runs and owns their admission and drain state.
 import {
   abortStep,
   abortTreeStep,
@@ -107,13 +108,14 @@ export class RunQueue {
     };
   }
   botPreparing?: (botId: string) => boolean;
-  isBotIdle(botId: string) {
+  // A correction can settle during preflight, before it has admitted any new model work.
+  isBotIdle(botId: string, allowWaitingPreflights = false) {
     return (
       this.drainHealthy &&
       !this.stopping &&
       !this.pausedBots.has(botId) &&
       !this.retired.has(botId) &&
-      !this.botPreparing?.(botId) &&
+      (allowWaitingPreflights || !this.botPreparing?.(botId)) &&
       ![...this.busy].some((key) => (JSON.parse(key) as string[])[0] === botId) &&
       !this.deps.db
         .prepare("SELECT 1 FROM approvals WHERE bot_id=? AND status='pending' LIMIT 1")

@@ -85,6 +85,15 @@ const requestSchema = z.discriminatedUnion("category", [
     agent: z.string().min(1).max(200).optional(),
   }),
   z.strictObject({
+    category: z.literal("bot_management"),
+    operation: z.enum(["list", "change"]),
+    mainDirect: z.boolean().optional(),
+  }),
+  z.strictObject({
+    category: z.literal("work_dispatch"),
+    mainDirect: z.boolean().optional(),
+  }),
+  z.strictObject({
     category: z.literal("memory"),
     operation: z.enum(["add", "update", "remove"]),
     text: z.string().max(16000).optional(),
@@ -187,6 +196,8 @@ function hasControlCharacters(value: string): boolean {
 export function parseInput(input: EvaluationInput, platform: Platform): EvaluationInput {
   if (input.commandIsolation !== undefined && typeof input.commandIsolation !== "function")
     throw new PolicyInputError("Invalid command isolation probe");
+  if (input.confirmEverySend !== undefined && typeof input.confirmEverySend !== "boolean")
+    throw new PolicyInputError("Invalid send confirmation fact");
   const settings = PermissionsSettingsSchema.parse(input.settings);
   const botOverrides = BotPermissionOverridesSchema.parse(input.botOverrides ?? {});
   const gitConfiguration =

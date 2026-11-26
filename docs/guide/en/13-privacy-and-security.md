@@ -59,7 +59,7 @@ Pi Bot collects no usage data and doesn't report crashes automatically. There ar
 
 - **Permission checks**: every tool a Bot calls goes through a permission check, with no way around it (see [5 · Approvals and permissions](05-approvals-and-permissions.md)).
 - **Work location**: by default Bots write only in working folders; writes elsewhere are confirmed each time, and read-only references can't be written.
-- **Command isolation**: on macOS and Linux, commands run in a sandbox and network access is limited by the Allowed websites list. Windows doesn't support command isolation yet, so every command needs your approval.
+- **Command isolation**: on macOS and Linux, commands run in a sandbox and network access is limited by the Allowed websites list. Windows has no command sandbox. Verified read-only commands within your permissions can run without asking. Ordinary commands usually ask, unless you have consented to their automatic use in YOLO topics.
 - **The Bot's browser**: completely separate from your browser, with none of your sign-ins; by default it can't open this computer's or private network addresses.
 - **Computer use**: each task asks first; password managers, terminals and system security apps are always blocked; a global shortcut stops everything.
 - **Sending externally**: sending as you (for example an email) is confirmed every time.

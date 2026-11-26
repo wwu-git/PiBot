@@ -167,6 +167,12 @@ export const BrowserExtensionStatusSchema = z.strictObject({
   supported: z.boolean(),
   extension: z.enum(["connected", "installed", "not_installed", "unsupported"]),
   preference: z.enum(["user", "bot"]),
+  /**
+   * Why this instance did not register the extension's native host: it runs on a separate data
+   * folder (a test or second copy) and was not asked to, or the manifests point at another Pi Bot
+   * whose data folder still exists. Either way only an explicit "connect here" takes it over.
+   */
+  registration: z.enum(["separate_data_dir", "other_instance"]).optional(),
 });
 export const HostBrowserTabSchema = z.strictObject({
   tab: HostBrowserTabIdSchema,
@@ -261,7 +267,13 @@ export const BrowserHostMethods = {
   },
   /** Writes (enabled) or removes the native messaging manifests of installed browsers. */
   "host.browser.extensionRegister": {
-    params: z.strictObject({ enabled: z.boolean() }),
+    params: z.strictObject({
+      enabled: z.boolean(),
+      /** The user turned it on in this instance; a separate data folder registers only then. */
+      explicit: z.boolean().optional(),
+      /** The user confirmed taking the manifests over from another Pi Bot. */
+      takeOver: z.boolean().optional(),
+    }),
     result: z.null(),
   },
   "host.browser.open": {

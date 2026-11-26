@@ -14,6 +14,7 @@ export const memoryInputSchemas = {
     category: MemoryCategorySchema,
     why: MemoryNoteSchema.optional(),
     how: MemoryNoteSchema.optional(),
+    expiresAt: MemorySchema.shape.expiresAt,
   }),
   memory_update: z
     .strictObject({
@@ -24,6 +25,7 @@ export const memoryInputSchemas = {
       // null clears a field; undefined leaves it as stored.
       why: MemoryNoteSchema.nullable().optional(),
       how: MemoryNoteSchema.nullable().optional(),
+      expiresAt: MemorySchema.shape.expiresAt,
     })
     .refine(
       (value) =>

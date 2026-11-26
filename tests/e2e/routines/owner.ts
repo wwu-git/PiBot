@@ -1,3 +1,4 @@
+// Owns the restart fixture worker and bounds each owner lifecycle without hiding a hung run.
 import assert from "node:assert/strict";
 import { Worker } from "node:worker_threads";
 import type { M3Fixture } from "./fixture.ts";
@@ -30,7 +31,7 @@ async function owner(input: Record<string, unknown>, park: boolean) {
         clearTimeout(timer);
         timer = setTimeout(
           () => reject(new Error(`Own brain worker idle deadline (last step: ${step})`)),
-          120_000,
+          step === "bootstrap" ? 180_000 : 120_000,
         );
       };
       const finish = (value: unknown) => {
@@ -57,10 +58,14 @@ async function owner(input: Record<string, unknown>, park: boolean) {
         clearTimeout(timer);
         reject(new Error("Own brain worker exited before receipt"));
       };
-      idle();
       worker.on("message", onMessage);
       worker.once("error", failed);
       worker.once("exit", prematureExit);
+      // The worker reports bootstrap before importing owner-runner. That import is legitimate
+      // transpilation work, measured at about 15 s on an idle Mac and observed to exceed 120 s
+      // only when the suite shares the machine with other heavy jobs. Keep a larger bound for
+      // that phase, then return to the 120 s hang detector for fixture and run progress.
+      idle();
     });
     assert(
       message && typeof message === "object" && "status" in message && message.status === "ready",

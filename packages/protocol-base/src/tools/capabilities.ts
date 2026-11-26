@@ -189,6 +189,12 @@ export const GENERAL_TOOLS = [
   "execution_targets",
   "workplace_use_runner",
   "delegate_to_agent",
+  // The default Pi's management and hand-off tools (offered only in its own direct chat).
+  "team_list",
+  "bot_manage",
+  "group_manage",
+  "send_to_bot",
+  "send_to_group",
 ] as const;
 
 export const CapabilitySourceSchema = z.enum(["default", "global", "group", "bot"]);

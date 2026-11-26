@@ -352,6 +352,7 @@ export function writeLockRootsStep(this: LocalRunOperations, prepared: PreparedT
 export function assertDispatchStep(this: LocalRunOperations, prepared: PreparedTool): void {
   this.local.endpoints?.check(prepared.call.tool, this.context);
   this.context.signal.throwIfAborted();
+  this.context.projectNotesChange?.assertCurrent?.();
   const memoryFacts = memoryWriteFacts(
     this.local,
     this.context,

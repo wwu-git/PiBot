@@ -121,8 +121,42 @@ linux:
   target:
     - AppImage
     - tar.gz
+    # Ubuntu 24.04+ restricts unprivileged user namespaces; the package installs under /opt and
+    # loads an AppArmor profile that lets Chromium's sandbox create one (the Chrome/VS Code model).
+    - deb
   icon: build/icons/linux
   category: Utility
+deb:
+  packageName: pibot
+  synopsis: A team of Bots that works on your own computer
+  # Also the desktop entry's Comment, so it stays one sentence.
+  description: Chats, group chats, routines, computer use and connected apps, run by Bots on your own computer.
+  maintainer: Pi Bot <noreply@pibot.space>
+  vendor: Pi Bot
+  priority: optional
+  packageCategory: utils
+  # Replaces builder's defaults, which miss Electron's ALSA/GBM libraries and the command sandbox.
+  # bubblewrap and socat are hard requirements: without them every Bot command is refused.
+  depends:
+    - libgtk-3-0 | libgtk-3-0t64
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0 | libatspi2.0-0t64
+    - libuuid1
+    - libsecret-1-0
+    - libgbm1
+    - libasound2 | libasound2t64
+    - bubblewrap
+    - socat
+  # Electron's tray speaks StatusNotifierItem itself; builder's libappindicator3-1 default no longer
+  # exists on current Ubuntu.
+  recommends: []
+  afterInstall: build/linux/after-install.tpl
+  afterRemove: build/linux/after-remove.tpl
+  appArmorProfile: build/linux/apparmor-profile.tpl
 
 # An empty list overrides builder's unsafe AppImage --no-sandbox default.
 appImage:

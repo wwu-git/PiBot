@@ -1,3 +1,4 @@
+// Browse authenticated runners without creating workplace authority.
 import { posix, win32 } from "node:path";
 import { ExecError } from "@pibot/execution";
 import { RpcError, RpcErrorCodes, type RunnerBrowse } from "@pibot/protocol-base";
@@ -11,8 +12,8 @@ import type { ExecutionTargets } from "./execution-targets.ts";
  */
 
 // One level above the user's own folder, so the user picks their name the way a dialog shows it.
-const starts = { win32: "C:\\Users", darwin: "/Users", linux: "/home" } as const;
-const DRIVES = "CDEFGHIJKLMNOPQRSTUVWXYZ";
+const starts = { darwin: "/Users", linux: "/home" } as const;
+const DRIVES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const browseTimeoutMs = 20_000;
 const driveTimeoutMs = 5_000;
 
@@ -61,9 +62,11 @@ async function drives(entry: Target, signal: AbortSignal): Promise<RunnerBrowse>
       const path = `${letter}:\\`;
       const probe = AbortSignal.any([signal, AbortSignal.timeout(driveTimeoutMs)]);
       try {
-        await entry.target.canonicalizePath(path, path, probe);
+        const root = await entry.target.canonicalizePath(path, path, probe);
+        if (root.device === null || root.inode === null) return [];
         return [{ name: `${letter}:`, path }];
       } catch (error) {
+        signal.throwIfAborted();
         if (error instanceof RpcError && error.code === RpcErrorCodes.closed) throw error;
         // A missing or unready drive is simply not listed.
         return [];
@@ -89,22 +92,25 @@ async function viaRunner(
   path: string | null | undefined,
   signal: AbortSignal,
 ): Promise<RunnerBrowse | undefined> {
-  if (!entry.target.listFolders) return undefined;
-  const list = async (at: string | null) => {
+  const listFolders = entry.target.listFolders?.bind(entry.target);
+  if (!listFolders) return undefined;
+  const list = async (at: string | null | undefined): Promise<RunnerBrowse | undefined> => {
     try {
-      return { platform: entry.platform, ...(await entry.target.listFolders?.(at, signal)) };
+      return { platform: entry.platform, ...(await listFolders(at, signal)) };
     } catch (error) {
       if (error instanceof RpcError && error.code === RpcErrorCodes.methodNotFound)
         return undefined;
       throw error;
     }
   };
-  if (path !== undefined) return (await list(path)) as RunnerBrowse | undefined;
+  if (path !== undefined) return list(path);
   try {
-    return (await list(starts[entry.platform])) as RunnerBrowse | undefined;
+    return await list(entry.platform === "win32" ? undefined : starts[entry.platform]);
   } catch (error) {
+    signal.throwIfAborted();
     if (error instanceof RpcError && error.code === RpcErrorCodes.closed) throw error;
-    return (await list(entry.platform === "win32" ? null : "/")) as RunnerBrowse | undefined;
+    // Older runners with a strict required-path schema can still list drive roots.
+    return list(entry.platform === "win32" ? null : "/");
   }
 }
 
@@ -121,15 +127,17 @@ export async function browseRunner(
     throw new RpcError(RpcErrorCodes.invalidParams, "runner_folder_invalid");
   const listed = await viaRunner(entry, path, signal).catch((error: unknown) => unreadable(error));
   if (listed) return listed;
-  if (path === null && entry.platform === "win32") return drives(entry, signal);
+  if (path == null && entry.platform === "win32") return drives(entry, signal);
   try {
     if (path) return await level(entry, paths.normalize(path), signal);
     if (path === null) return await level(entry, "/", signal);
+    if (entry.platform === "win32")
+      throw new RpcError(RpcErrorCodes.invalidParams, "runner_folder_invalid");
     try {
       return await level(entry, starts[entry.platform], signal);
     } catch (error) {
       if (error instanceof RpcError) throw error;
-      return await level(entry, entry.platform === "win32" ? "C:\\" : "/", signal);
+      return await level(entry, "/", signal);
     }
   } catch (error) {
     unreadable(error);

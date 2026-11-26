@@ -1,6 +1,6 @@
 # pi SDK 摸底
 
-> 当前版本（2026-10-31）：pi-ai / pi-coding-agent 及传递的 pi-agent-core 精确锁定 **1.4.0**，chord 已随上游移除。下面的早期记录保留当时的 1.1.0 证据，不代表当前全部能力。`probe` 现核对 1.4.0。
+> 当前版本（2026-11-23）：pi-ai / pi-coding-agent 及传递的 pi-agent-core 精确锁定 **1.6.0**，`probe` 核对该版本。下方 1.1.0 的早期记录供溯源。
 
 2026-10-09，Node **26.11.1**、pnpm **10.28.2**。安装时 npm `latest` 为
 [`@earendil-works/pi-coding-agent@1.1.0`](https://registry.npmjs.org/@earendil-works/pi-coding-agent/latest)，
@@ -505,4 +505,4 @@ pi.on("before_agent_start", (event, ctx) => {
 
 ## 本地补丁
 
-`patches/@earendil-works__pi-ai@1.4.0.patch` 改写 pi-ai 的 OAuth 回调页（`dist/utils/oauth-page.js`），换成 Pi Bot 品牌、中英文和浅深色，并清除地址栏里的授权码。补丁只对 1.4.0 生效；升级 pi 时先看上游这个文件是否改动，再用 `pnpm patch` 重做，并确认 `packages/agent` 解析到的是带 `patch_hash` 的那份。升级到 1.4.0 时已从原始文件重新生成 diff，删除旧补丁；安装结果与目标文件逐字节一致。
+`patches/@earendil-works__pi-ai@1.6.0.patch` 保留 Pi Bot OAuth 回调页（`dist/utils/oauth-page.js`）的双语、深浅色和清理授权 URL 行为，以及旧 Codex 回调的 GET/state 校验。升级时核对工作区解析到带 `patch_hash` 的对应包，步骤见 [pi 补丁升级手册](../../tools/dev/pi-patch-upgrade.md)。

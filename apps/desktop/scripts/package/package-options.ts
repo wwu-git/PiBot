@@ -61,7 +61,8 @@ export function packageOptions(args: string[], host = process.platform, hostArch
             : ["dir"]
           : platform === "win"
             ? ["nsis"]
-            : ["AppImage", "tar.gz"],
+            : // The .deb carries the AppArmor profile Ubuntu 24.04+ needs (electron-builder.yml).
+              ["AppImage", "tar.gz", "deb"],
     })),
   );
 }

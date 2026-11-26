@@ -4896,6 +4896,125 @@
           }
         }
       ]
+    },
+    "chief-of-staff": {
+      "1": [
+        {
+          "thinkingLevel": "low",
+          "permissionOverrides": {
+            "run_command": "never",
+            "send_out": "ask"
+          },
+          "norms": {
+            "zh": "b9da88e24cfaa9e6",
+            "en": "3315b61f6ae7f57d"
+          },
+          "skills": {
+            "daily-briefing": {
+              "zh": "81fc3c00e4ab2ff8",
+              "en": "928d79ce7a2f603e"
+            },
+            "decision-log": {
+              "zh": "d181d508c7be7021",
+              "en": "258faac721801409"
+            },
+            "weekly-business-review": {
+              "zh": "0277d96630c9d696",
+              "en": "31352ff0e20114e4"
+            }
+          }
+        }
+      ]
+    },
+    "customer-support": {
+      "1": [
+        {
+          "thinkingLevel": "low",
+          "permissionOverrides": {
+            "run_command": "never",
+            "send_out": "ask"
+          },
+          "norms": {
+            "zh": "acd27230ba312849",
+            "en": "907e61fdb6a3d88b"
+          },
+          "skills": {
+            "ticket-triage": {
+              "zh": "483507e4b5ef3771",
+              "en": "64e1308ef5d14d75"
+            },
+            "reply-draft": {
+              "zh": "1e66540e36839a68",
+              "en": "a7b18ef15c2acbe0"
+            },
+            "faq-upkeep": {
+              "zh": "3d72239757261086",
+              "en": "0af26d6e58adf6a4"
+            }
+          }
+        }
+      ]
+    },
+    "finance-assistant": {
+      "1": [
+        {
+          "thinkingLevel": "low",
+          "permissionOverrides": {
+            "computer": "never",
+            "connector": "never",
+            "run_command": "ask",
+            "send_out": "never",
+            "web": "ask"
+          },
+          "norms": {
+            "zh": "3e5788a90d89b470",
+            "en": "29a197dac1dbd8dc"
+          },
+          "skills": {
+            "monthly-close": {
+              "zh": "261bfc8b93342727",
+              "en": "47d71e3c8c4f8f35"
+            },
+            "cash-flow-report": {
+              "zh": "67ffdb30ef551493",
+              "en": "a50da0550ed78f3c"
+            },
+            "tax-calendar": {
+              "zh": "e3a0e47f8566e824",
+              "en": "c1d161404f77dee7"
+            }
+          }
+        }
+      ]
+    },
+    "operations-manager": {
+      "1": [
+        {
+          "thinkingLevel": "low",
+          "permissionOverrides": {
+            "run_command": "never",
+            "send_out": "ask"
+          },
+          "norms": {
+            "zh": "0a245e12ecc04503",
+            "en": "5e3a1c0c503e0bc4"
+          },
+          "skills": {
+            "content-calendar": {
+              "zh": "1cfbd3c91d85d575",
+              "en": "5572debb605c6938"
+            },
+            "post-drafts": {
+              "zh": "a3aca47d0bb79a21",
+              "en": "eb51a9e8a5dea92f"
+            },
+            "weekly-metrics": {
+              "zh": "4d0bd85dbdc993a2",
+              "en": "eeff4bc5ce416554"
+            }
+          }
+        }
+      ]
     }
   },
   "groups": {
@@ -6037,6 +6156,34 @@
           "autoRoundLimit": 3
         }
       ]
+    },
+    "opc-team": {
+      "1": [
+        {
+          "name": {
+            "zh": "一人公司",
+            "en": "One-Person Company"
+          },
+          "coordinator": "chief-of-staff",
+          "members": [
+            "chief-of-staff",
+            "finance-assistant",
+            "fullstack-dev",
+            "operations-manager",
+            "customer-support",
+            "code-reviewer"
+          ],
+          "announcement": {
+            "zh": "75b86cc2151dd957",
+            "en": "71b3cb6e2ee9cf93"
+          },
+          "quickStarts": {
+            "zh": "775fd3a41a7fffa7",
+            "en": "0f78efc75d684d22"
+          },
+          "autoRoundLimit": 3
+        }
+      ]
     }
   },
   "skills": {
@@ -6927,6 +7074,102 @@
         {
           "zh": "d8da810ca45e9e9b",
           "en": "1e9b63e2d5f4f38f"
+        }
+      ]
+    },
+    "daily-briefing": {
+      "1": [
+        {
+          "zh": "81fc3c00e4ab2ff8",
+          "en": "928d79ce7a2f603e"
+        }
+      ]
+    },
+    "decision-log": {
+      "1": [
+        {
+          "zh": "d181d508c7be7021",
+          "en": "258faac721801409"
+        }
+      ]
+    },
+    "weekly-business-review": {
+      "1": [
+        {
+          "zh": "0277d96630c9d696",
+          "en": "31352ff0e20114e4"
+        }
+      ]
+    },
+    "ticket-triage": {
+      "1": [
+        {
+          "zh": "483507e4b5ef3771",
+          "en": "64e1308ef5d14d75"
+        }
+      ]
+    },
+    "reply-draft": {
+      "1": [
+        {
+          "zh": "1e66540e36839a68",
+          "en": "a7b18ef15c2acbe0"
+        }
+      ]
+    },
+    "faq-upkeep": {
+      "1": [
+        {
+          "zh": "3d72239757261086",
+          "en": "0af26d6e58adf6a4"
+        }
+      ]
+    },
+    "monthly-close": {
+      "1": [
+        {
+          "zh": "261bfc8b93342727",
+          "en": "47d71e3c8c4f8f35"
+        }
+      ]
+    },
+    "cash-flow-report": {
+      "1": [
+        {
+          "zh": "67ffdb30ef551493",
+          "en": "a50da0550ed78f3c"
+        }
+      ]
+    },
+    "tax-calendar": {
+      "1": [
+        {
+          "zh": "e3a0e47f8566e824",
+          "en": "c1d161404f77dee7"
+        }
+      ]
+    },
+    "content-calendar": {
+      "1": [
+        {
+          "zh": "1cfbd3c91d85d575",
+          "en": "5572debb605c6938"
+        }
+      ]
+    },
+    "post-drafts": {
+      "1": [
+        {
+          "zh": "a3aca47d0bb79a21",
+          "en": "eb51a9e8a5dea92f"
+        }
+      ]
+    },
+    "weekly-metrics": {
+      "1": [
+        {
+          "zh": "4d0bd85dbdc993a2",
+          "en": "eeff4bc5ce416554"
         }
       ]
     }

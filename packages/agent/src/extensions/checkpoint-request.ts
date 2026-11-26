@@ -1,3 +1,4 @@
+// Run a checkpoint model request under the compaction deadline and accounting.
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/models";
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { AgentError, agentHttpStatus, mapAgentError } from "../core/errors.ts";
@@ -40,22 +41,24 @@ export async function checkpointRequest(input: {
   const receipt = state.accounting?.begin(model, "compaction", state.toolSet?.());
   try {
     reset();
-    const stream = registry.streamSimple(
-      model,
-      {
-        systemPrompt,
-        messages: [{ role: "user", content: [{ type: "text", text }], timestamp: Date.now() }],
-      },
-      {
-        signal,
-        maxTokens,
-        ...(reasoning ? { reasoning } : {}),
-        // Some adapters interpret this as an absolute request deadline. Our event timer owns idle.
-        timeoutMs: state.diagnostic?.totalDeadlineMs ?? 1_200_000,
-        cacheRetention: "none",
-        maxRetries: 0,
-      },
-    );
+    const send = () =>
+      registry.streamSimple(
+        model,
+        {
+          systemPrompt,
+          messages: [{ role: "user", content: [{ type: "text", text }], timestamp: Date.now() }],
+        },
+        {
+          signal,
+          maxTokens,
+          ...(reasoning ? { reasoning } : {}),
+          // Some adapters interpret this as an absolute request deadline. Our event timer owns idle.
+          timeoutMs: state.diagnostic?.totalDeadlineMs ?? 1_200_000,
+          cacheRetention: "none",
+          maxRetries: 0,
+        },
+      );
+    const stream = receipt ? receipt.send(send) : send();
     const result = stream.result();
     if (receipt) state.accounting?.observe(receipt, result);
     let output = 0;

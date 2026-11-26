@@ -1,10 +1,13 @@
 // A reply's actual changed files must reach the user without another model request.
 import { stat } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
-import { FILE_LIMIT } from "@pibot/protocol-base";
+import { FILE_LIMIT, MAX_REPLY_ATTACHMENTS } from "@pibot/protocol-base";
 import { AttachmentsRepo, RunFileChangesRepo } from "@pibot/storage";
 import { isOutputDeliverable } from "../../conversations/attachments/output-path.ts";
-import { sendFiles } from "../../conversations/attachments/send-files.ts";
+import {
+  type OutputAttachmentPages,
+  sendFiles,
+} from "../../conversations/attachments/send-files.ts";
 import type { ToolRunContext } from "../../core/local-types.ts";
 import type { LocalService } from "../../local-service.ts";
 import { authorizationSnapshot } from "../tools/local-prepare.ts";
@@ -42,8 +45,6 @@ const NEW_RESULT = new Set(
     " ",
   ),
 );
-/** One reply carries at most this many files; the rest are named in a note under it. */
-const REPLY_FILES = 10;
 /** A command's file changes reach the run's record up to about a second after it returns. */
 const COMMAND_SETTLE_MS = 1_200;
 
@@ -95,9 +96,16 @@ export async function attachNamedOutputs(input: {
   const sentByModel = sent.size;
   const skipped: Skip[] = [];
   let attached = 0;
-  const count =
-    new AttachmentsRepo(local.deps.db).forMessages([context.messageId]).get(context.messageId)
-      ?.length ?? 0;
+  // Group results and task notices still project one reply. A direct chat already renders
+  // multiple assistant messages of one run.
+  const pages: OutputAttachmentPages | undefined =
+    !context.groupId && !context.threadId && !context.executionTaskId && !context.routineRunId
+      ? {}
+      : undefined;
+  const count = pages
+    ? 0
+    : (new AttachmentsRepo(local.deps.db).forMessages([context.messageId]).get(context.messageId)
+        ?.length ?? 0);
   const roots = place?.boundary.writeRoots ?? [];
   const output = (path: string) => isOutputDeliverable(path, roots);
   const named = (path: string) =>
@@ -118,16 +126,13 @@ export async function attachNamedOutputs(input: {
   const declared = new Set(
     (input.declared ?? []).map((path) => same(resolve(place?.cwd ?? "", path))),
   );
-  const alreadySent = (path: string) => {
-    const key = same(path);
-    for (const item of sent) if (same(item) === key) return true;
-    return false;
-  };
+  const sentPaths = new Set(Array.from(sent, same));
   let overflow: AttachmentOverflow | undefined;
   for (const candidate of candidates) {
     signal.throwIfAborted();
     const path = resolve(place?.cwd ?? "", candidate);
-    if (alreadySent(path)) continue;
+    const key = same(path);
+    if (sentPaths.has(key)) continue;
     const root = place?.boundary.writeRoots.find((entry) => {
       const part = relative(entry, path);
       return part && !part.startsWith(`..${sep}`) && part !== ".." && !isAbsolute(part);
@@ -167,7 +172,7 @@ export async function attachNamedOutputs(input: {
       skipped.push({ reason: "too_large" });
       continue;
     }
-    if (count + attached >= REPLY_FILES) {
+    if (!pages && count + attached >= MAX_REPLY_ATTACHMENTS) {
       skipped.push({ reason: "limit" });
       const folder = dirname(path);
       overflow = overflow
@@ -188,7 +193,9 @@ export async function attachNamedOutputs(input: {
         },
         signal,
         "automatic_delivery",
+        pages,
       );
+      sentPaths.add(key);
       attached++;
     } catch {
       signal.throwIfAborted();

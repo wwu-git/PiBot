@@ -208,7 +208,7 @@
       "en": "From idea to product, a team of one"
     },
     "icon": "rocket",
-    "groups": ["product-team"],
+    "groups": ["opc-team", "product-team"],
     "roles": ["personal-assistant"],
     "quickStart": {
       "zh": "帮我梳理这个想法的第一个版本",

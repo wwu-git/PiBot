@@ -75,6 +75,12 @@ export function MemoryProposalReview({
           {t(sourceError)}
         </p>
       )}
+      {proposal.projectPath && proposal.projectDiff && (
+        <div className={styles.memoryProposal}>
+          <p>{proposal.projectPath}</p>
+          <pre>{proposal.projectDiff}</pre>
+        </div>
+      )}
       {action === "move" ? (
         <>
           <p>

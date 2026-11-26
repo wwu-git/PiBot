@@ -46,5 +46,6 @@ export {
   type StatusDotProps,
   type Tone,
 } from "./components/lively.tsx";
+export { type TabOption, Tabs, type TabsProps } from "./components/Tabs.tsx";
 export { ThemeProvider, type ThemeProviderProps, useTheme } from "./theme/ThemeProvider.tsx";
 export { resolveTheme, type Theme, type ThemeSetting } from "./theme/theme.ts";

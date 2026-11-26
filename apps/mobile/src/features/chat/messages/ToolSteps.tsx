@@ -1,4 +1,4 @@
-import { toolGroupSummary, toolNameKey, toolTarget } from "@pibot/client-core";
+import { toolGroupSummary, toolNameKey, toolSummaryLabel, toolTarget } from "@pibot/client-core";
 import type { Message } from "@pibot/protocol";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
@@ -12,7 +12,8 @@ function Step({ tool }: { tool: Tool }) {
   const colors = useColors(),
     t = useText(),
     shared = useSharedText();
-  const target = toolTarget(tool.tool, tool.summary);
+  const summaryLabel = toolSummaryLabel(tool);
+  const target = summaryLabel ? undefined : toolTarget(tool.tool, tool.summary);
   const running = tool.status === "pending" || tool.status === "running";
   const done = tool.status === "done";
   return (
@@ -36,7 +37,7 @@ function Step({ tool }: { tool: Tool }) {
         />
       )}
       <Text style={[type.tool, { flex: 1, minWidth: 0, color: colors.text }]}>
-        {shared(toolNameKey(tool.tool))}
+        {summaryLabel ?? shared(toolNameKey(tool.tool))}
         {!!target && <Text style={mono(12.5)}> {target}</Text>}
       </Text>
       {running && (

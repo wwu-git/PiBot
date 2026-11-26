@@ -1,6 +1,8 @@
+// Build the platform-specific environment assigned to agent commands.
 import { statSync } from "node:fs";
 import { posix, win32 } from "node:path";
 import { ExecError } from "../core/types.ts";
+import { installedWindowsRoot } from "../core/windows-environment.ts";
 import { bundledGit, bundledGitReady } from "../git/bundled-git.ts";
 import { commandPaths } from "./command-paths.ts";
 
@@ -66,8 +68,7 @@ export function commandEnvironment(
   )
     throw new ExecError("invalid_input");
   const windows = platform === "win32";
-  const systemRoot =
-    Object.entries(original).find(([key]) => key.toUpperCase() === "SYSTEMROOT")?.[1] ?? "";
+  const systemRoot = windows ? (installedWindowsRoot(original) ?? "") : "";
   if (windows && (!isAbsolute(systemRoot) || /[\0\r\n]/.test(systemRoot)))
     throw new ExecError("invalid_input");
   const paths = windows

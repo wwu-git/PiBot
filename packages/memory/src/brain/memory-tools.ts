@@ -205,6 +205,12 @@ export async function executeMemoryTool(
   let result: ReturnType<MemoryService["execute"]>;
   try {
     automatic?.assertCurrent();
+    // A new project note is also a line in the folder's AGENTS.md: the owner confirms it on the
+    // card with the diff, so neither the Bot's memory mode nor YOLO applies it.
+    const projectMeta =
+      scope === "project" && input.tool === "memory_add" && project
+        ? memory.projectProposalForPath(project, input.args.text)
+        : undefined;
     result = memory.execute(
       context.botId,
       context.messageId,
@@ -214,8 +220,10 @@ export async function executeMemoryTool(
       groupId,
       assertCurrent,
       projectId,
+      false,
+      projectMeta,
     );
-    if (result.proposal.status === "pending") {
+    if (result.proposal.status === "pending" && !projectMeta) {
       const proposalId = result.proposal.id;
       local.yolo.onRunEnabled(context, async () => {
         const confirmation = businessConfirmation(local, context, call);

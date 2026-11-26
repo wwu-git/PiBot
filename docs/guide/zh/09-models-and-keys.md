@@ -39,7 +39,12 @@ Key 由这台电脑的系统密钥库加密保存（macOS 钥匙串、Windows �
 
 ![欢迎流程选择「ChatGPT 计划」后的页面](../images/zh/welcome-model-chatgpt.png)
 
-如果你有 ChatGPT Go、Plus、Pro 或 Business 计划，可以不用 API Key，直接用计划的额度运行 OpenAI 模型（包括 GPT-6.2 Astra、GPT-6.2 Sol）。计划和 OpenAI API Key 是两个独立的厂商，可以同时用：每个 Bot 各自选 OpenAI 的模型或 ChatGPT 计划的模型，模型选择器里分成「OpenAI」和「ChatGPT 计划」两组。
+设定 Bot 的模型时，可以分别选择 **OpenAI**（API Key）、**ChatGPT 计划**或 **ChatGPT（Codex 登录）**。两种登录都在「订阅」下，使用你的 ChatGPT 计划额度。
+
+- **ChatGPT 计划**：使用 OpenAI 为其他应用提供的官方登录方式。下文以这个选项为例。
+- **ChatGPT（Codex 登录）**：以 Codex 命令行工具的身份登录，使用 ChatGPT 的 Codex 服务。它有自己的登录状态，可以单独断开。
+
+两组选项列出相同的 ChatGPT 模型，例如 GPT-6.2 Astra 和 GPT-6.2 Sol。列表会随版本更新。你的账号和计划能实际使用哪些模型，由 OpenAI 决定。
 
 1. 设置 › 模型与密钥，在厂商分组里点「订阅」，选「ChatGPT 计划」。
 2. 点「通过 ChatGPT 继续」。
@@ -51,7 +56,7 @@ Key 由这台电脑的系统密钥库加密保存（macOS 钥匙串、Windows �
 
 - 计划额度用完时会提示「已达用量上限」，可以在 ChatGPT 里管理用量，或在 Bot 设置里改选 OpenAI（API Key）的模型继续。
 - 登录过期会提示重新登录。
-- 「订阅」里还有一个 **ChatGPT（Codex 登录）**：同样用你的 ChatGPT 计划额度，但以 Codex 命令行工具的身份登录，网页上能用 ChatGPT 的账号都能用。先试「ChatGPT 计划」；用的时候提示账号不符合条件，再改用它。它不是 OpenAI 给第三方应用的方式，OpenAI 以后可能限制；登录令牌同样只加密保存在这台电脑上，可以随时断开。
+- 如果官方登录提示账号不符合条件，可以试试「ChatGPT（Codex 登录）」。能在网页上使用 ChatGPT 的账号，仍须符合 OpenAI 对该登录方式的要求。
 - 订阅登录只留在电脑上，不会同步到手机离线模式（见 [11 · 手机 App](11-phone-app.md)）。
 
 ## Claude 订阅

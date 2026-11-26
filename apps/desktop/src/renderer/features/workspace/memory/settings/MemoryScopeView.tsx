@@ -1,7 +1,10 @@
+// Shares the owner-scoped memory list between profile, project and About You views.
 import type { MemoryOwner } from "@pibot/protocol";
 import { SettingsSection, useSettings } from "@pibot/renderer-kit";
 import { Button, IconTile, SegmentedControl } from "@pibot/ui";
+import { MemoryMaintenanceNotice } from "../MemoryMaintenanceNotice.tsx";
 import { MemoryProposalReview } from "../MemoryProposalReview.tsx";
+import { useMemoryMaintenance } from "../use-memory-maintenance.ts";
 import { MemoryEditor } from "./MemoryEditor.tsx";
 import { MemoryEntry } from "./MemoryEntry.tsx";
 import { MemoryPagination } from "./MemoryPagination.tsx";
@@ -12,6 +15,7 @@ import { useMemoryScope } from "./use-memory-scope.ts";
 
 export function MemoryScopeView({ owner }: { owner: MemoryOwner }) {
   const { t, language } = useSettings();
+  const maintenance = useMemoryMaintenance(undefined, owner.scope === "user");
   const {
     peer,
     data,
@@ -47,12 +51,19 @@ export function MemoryScopeView({ owner }: { owner: MemoryOwner }) {
         {owner.scope !== "project" && (
           <p>
             {t(owner.scope === "user" ? "memorySettings.aboutYouLead" : "memorySettings.panelLead")}
+            {maintenance &&
+              !maintenance.issue &&
+              maintenance.lastSavedAt &&
+              ` ${t("memorySettings.maintenance.healthy", {
+                time: new Date(maintenance.lastSavedAt).toLocaleString(language),
+              })}`}
           </p>
         )}
         <Button variant="pill" disabled={disabled} onClick={() => setAdding(true)}>
           {t("memorySettings.add")}
         </Button>
       </div>
+      {maintenance?.issue && <MemoryMaintenanceNotice issue={maintenance.issue} />}
       {adding && (
         <MemoryEditor
           busy={disabled}

@@ -1,3 +1,4 @@
+// Keeps sidebar ordering and read state consistent with durable conversation activity.
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@pibot/protocol-base";
 import { transaction } from "../database/database.ts";
 import { defined } from "../database/paging.ts";
+import { visibleImportedRows } from "./conversations.ts";
 import { pendingPlanActionRows, pendingPlanRows } from "./plan-inbox.ts";
 
 const columns = `conversation_key AS conversationKey,pinned_at AS pinnedAt,group_id AS groupId,hidden_at AS hiddenAt,unread,last_read_at AS lastReadAt,EXISTS(SELECT 1 FROM (${pendingPlanRows} UNION ALL ${pendingPlanActionRows}) pending WHERE pending.groupId=chat_group_id) AS waitingForPlan`;
@@ -54,6 +56,28 @@ export class SidebarRepo {
       )
       .run(key, kind === "dm" ? (id as string) : null, kind === "group" ? (id as string) : null);
     return this.get(key) as SidebarEntry;
+  }
+  /**
+   * Active Bots and groups without a sidebar row (written straight into the database by an older
+   * path or a test fixture) never showed up anywhere. One idempotent statement each, keyed by the
+   * primary key; hidden rows keep their hidden state. Returns how many rows were added.
+   */
+  repairMissing(): number {
+    return transaction(this.db, () => {
+      const bots = this.db
+        .prepare(`INSERT INTO sidebar_entries(conversation_key,bot_id,chat_group_id)
+          SELECT 'dm:' || b.id, b.id, NULL FROM bots b WHERE b.archived_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM sidebar_entries e WHERE e.conversation_key='dm:' || b.id)
+          ON CONFLICT DO NOTHING`)
+        .run().changes;
+      const groups = this.db
+        .prepare(`INSERT INTO sidebar_entries(conversation_key,bot_id,chat_group_id)
+          SELECT 'group:' || g.id, NULL, g.id FROM groups g WHERE g.archived_at IS NULL
+          AND NOT EXISTS (SELECT 1 FROM sidebar_entries e WHERE e.conversation_key='group:' || g.id)
+          ON CONFLICT DO NOTHING`)
+        .run().changes;
+      return Number(bots) + Number(groups);
+    });
   }
   update(
     key: string,
@@ -100,8 +124,21 @@ export class SidebarRepo {
   }
   list(page: Page = {}, includeHidden = false): SidebarEntry[] {
     const { before, limit = 50 } = PageSchema.parse(page);
+    // Each topic can use the end of messages_conversation_created. Aggregating the join would
+    // visit old messages too, even though only one timestamp per topic can affect the order.
     const base = `WITH activity AS (
-      SELECT e.*,COALESCE((SELECT MAX(m.created_at) FROM conversations c JOIN messages m ON m.conversation_id=c.id WHERE c.internal_task_id IS NULL AND ((c.kind='dm' AND c.bot_id=e.bot_id) OR c.group_id=e.chat_group_id)),(SELECT created_at FROM bots WHERE id=e.bot_id),(SELECT created_at FROM groups WHERE id=e.chat_group_id),'') AS activityAt
+      SELECT e.*, COALESCE(
+        (SELECT MAX((
+          SELECT m.created_at FROM messages m WHERE m.conversation_id=c.id
+          ORDER BY m.created_at DESC LIMIT 1
+        )) FROM conversations c
+        WHERE c.internal_task_id IS NULL
+          AND ${visibleImportedRows("c.import_id")}
+          AND ((c.kind='dm' AND c.bot_id=e.bot_id) OR c.group_id=e.chat_group_id)),
+        (SELECT created_at FROM bots WHERE id=e.bot_id),
+        (SELECT created_at FROM groups WHERE id=e.chat_group_id),
+        ''
+      ) AS activityAt
       FROM sidebar_entries e WHERE (chat_group_id IS NULL OR EXISTS(SELECT 1 FROM groups g WHERE g.id=e.chat_group_id AND g.archived_at IS NULL)) AND (? OR hidden_at IS NULL) AND (bot_id IS NULL OR EXISTS(SELECT 1 FROM bots b WHERE b.id=e.bot_id AND b.archived_at IS NULL))
     ), ranked AS (SELECT *,ROW_NUMBER() OVER(ORDER BY (pinned_at IS NOT NULL) DESC,pinned_at DESC,activityAt DESC,conversation_key DESC) AS rank FROM activity)`;
     const cursor = before

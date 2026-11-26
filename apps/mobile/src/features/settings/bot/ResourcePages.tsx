@@ -48,10 +48,22 @@ export function MemoryPage({ state }: Props) {
   const bot = state.bot;
   const memories = state.data?.profile.memories ?? [];
   const mode = bot?.memoryMode ?? "auto";
+  const dream = state.data?.dream;
   return (
     <SettingsPage title={t("memory")} state={state}>
       {bot && (
         <>
+          {dream && !!(dream.merged || dream.retired || dream.proposed) && (
+            <Group title={shared("memorySettings.dream.title")}>
+              <Note
+                text={shared("memorySettings.dream.summary", {
+                  merged: dream.merged,
+                  retired: dream.retired,
+                  proposed: dream.proposed,
+                })}
+              />
+            </Group>
+          )}
           <Group title={t("memoryMode")}>
             <View style={{ paddingVertical: 10, paddingHorizontal: 16, gap: 10 }}>
               <Text style={{ fontSize: 12.5, lineHeight: 18, color: colors.text2 }}>

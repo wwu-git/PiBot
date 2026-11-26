@@ -167,6 +167,8 @@ export const workspaceZh = {
   "workspace.backgroundAlways": "后台运行中 · 任务临近时保持唤醒",
   "workspace.backgroundHint": "后台运行中，有任务时保持电脑唤醒",
   "workspace.brainUnavailable": "后台暂不可用",
+  "workspace.brainStarting":
+    "后台还在启动（第一次打开可能要一分钟左右）。可以先浏览记录；现在发出的消息会在准备好后开始。",
   "workspace.connectApps": "连接",
   "workspace.connectHint": "应用 · MCP · 技能 · 知识库",
   "workspace.describeJob": "说说它要做什么",
@@ -521,6 +523,8 @@ export const workspaceEn = {
   "workspace.backgroundAlways": "Running in background · keeps awake near tasks",
   "workspace.backgroundHint": "Running in background; keeps your computer awake while tasks run",
   "workspace.brainUnavailable": "Background service unavailable",
+  "workspace.brainStarting":
+    "The background service is still starting (the first launch may take about a minute). You can browse your history; messages sent now will start when it is ready.",
   "workspace.connectApps": "Connections",
   "workspace.connectHint": "Apps · MCP · skills · knowledge",
   "workspace.describeJob": "Tell it what to do",

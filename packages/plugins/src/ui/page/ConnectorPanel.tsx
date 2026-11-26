@@ -8,11 +8,14 @@ export function ConnectorPanel({
   children,
   close,
   busy = false,
+  footer,
 }: {
   title: string;
   children: ReactNode;
   close(): void;
   busy?: boolean;
+  /** Actions that stay visible below the scrolling body (取消 / 连接). */
+  footer?: ReactNode;
 }) {
   const t = useT();
   const id = useId();
@@ -37,6 +40,7 @@ export function ConnectorPanel({
         <CloseButton label={t("common.cancel")} disabled={busy} onClick={requestClose} />
       </header>
       <div className={styles.panelBody}>{children}</div>
+      {footer && <footer className={styles.panelFooter}>{footer}</footer>}
     </dialog>
   );
 }

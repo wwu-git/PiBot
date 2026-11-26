@@ -1731,3 +1731,388 @@ button.taskSource:focus-visible,
     box-shadow: 0 0 0 7px color-mix(in srgb, var(--ok) 6%, transparent);
   }
 }
+
+/* A plan step's brief: the step flow under the task head and one card per kind of fact. */
+.briefFlow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.briefFlowNode {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 40%;
+  padding: 8px 10px;
+  border: 1px solid var(--b1);
+  border-radius: 12px;
+  background: var(--card);
+}
+.briefFlowNode[data-current] {
+  flex: 1 1 0;
+  max-width: none;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+}
+.briefFlowNode:not([data-current]):not([data-done]) {
+  opacity: 0.7;
+}
+.briefFlowAvatars {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.briefFlowAvatars > :not(:first-child):not(.briefFlowBadge) {
+  margin-inline-start: -8px;
+}
+.briefFlowBadge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: var(--card);
+  box-shadow: 0 0 0 2px var(--card);
+}
+.briefFlowText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.briefFlowText > span {
+  font-size: 11.5px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.briefFlowText > strong {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.briefFlowArrow {
+  display: inline-flex;
+  flex: none;
+  color: var(--text2);
+}
+.briefCard {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--b1);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
+}
+.briefCardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.briefCardHead .briefTile {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+}
+.briefCardHead > h3 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.briefCardNote {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.briefCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-inline-start: 38px;
+  font-size: 13px;
+}
+.briefMarkdown {
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+.briefMarkdown > :first-child {
+  margin-top: 0;
+}
+.briefMarkdown > :last-child {
+  margin-bottom: 0;
+}
+.briefMarkdown p {
+  margin: 0 0 6px;
+}
+.briefMarkdown ul,
+.briefMarkdown ol {
+  margin: 0;
+  padding-inline-start: 18px;
+}
+.briefMarkdown ul {
+  list-style: disc;
+}
+.briefMarkdown ol {
+  list-style: decimal;
+}
+.briefMarkdown code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.briefMarkdown pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.briefState {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+.briefState[data-state="done"] {
+  background: var(--okBg);
+  color: var(--ok);
+}
+.briefState[data-state="fail"] {
+  background: var(--dangerBg);
+  color: var(--danger);
+}
+.briefState[data-state="wait"] {
+  background: var(--warnBg);
+  color: var(--warn);
+}
+.briefState[data-state="todo"] {
+  border: 2px dashed var(--b3);
+}
+.briefMuted {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.briefNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text2);
+}
+.briefInputFile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.briefFileChip,
+.briefFolder {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--b1);
+  border-radius: var(--radius-pill);
+  background: var(--side);
+}
+.briefFileChip > svg {
+  flex: none;
+  color: var(--avatar-green);
+}
+.briefFolder {
+  align-self: flex-start;
+  border-color: var(--b2);
+  background: transparent;
+}
+.briefFolder > svg {
+  flex: none;
+  color: var(--avatar-orange);
+}
+.briefFileChip > span,
+.briefFolder > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.briefInputs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.briefInputs > div {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+.briefInputs dt {
+  flex: none;
+  min-width: 44px;
+  max-width: 40%;
+  overflow-wrap: anywhere;
+  color: var(--text2);
+}
+.briefInputs dd {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+.briefInputs dd[data-kind="file"],
+.briefInputs dd[data-kind="folder"] {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.briefProgress {
+  height: 6px;
+  margin-bottom: 2px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--tert);
+}
+.briefProgress > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ok);
+  transition: width 240ms var(--ease-out);
+}
+.briefRows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.briefRowButton {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(100% + 8px);
+  min-width: 0;
+  margin: 0 0 0 -8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+}
+button.briefRowButton {
+  cursor: pointer;
+}
+button.briefRowButton:hover:not(:disabled) {
+  background: var(--hover);
+}
+button.briefRowButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.briefRows li:not([data-delivered]) .briefRowButton {
+  opacity: 0.75;
+}
+.briefRowButton > svg {
+  flex: none;
+  color: var(--text2);
+}
+.briefRows li[data-delivered] .briefRowButton > svg:first-child {
+  color: var(--avatar-blue);
+}
+.briefRowButton > code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.briefCheck {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.briefCheckText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.briefCheckText > small {
+  font-size: 11.5px;
+  color: var(--danger);
+}
+.briefTag {
+  flex: none;
+  max-width: 45%;
+  padding: 2px 8px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--tert);
+  color: var(--text2);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.briefNext {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.briefNextStep {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.briefNextStep > strong {
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.briefRaw {
+  min-width: 0;
+  margin: 2px 2px 0;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.briefRaw > summary {
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .briefProgress > span {
+    transition: none;
+  }
+}

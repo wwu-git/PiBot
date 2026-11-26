@@ -39,6 +39,7 @@ export const remotePageSchema = z.strictObject({
           .min(1)
           .max(4096)
           .refine((name) => name === name.trim() && !name.includes("\0")),
+        title: z.string().max(200).optional(),
         description: z.string().max(4096).optional(),
         inputSchema: ConnectorToolSchema.shape.schema,
         readOnlyHint: z.boolean().optional(),

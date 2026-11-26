@@ -114,7 +114,7 @@ try {
   syncBuiltinESMExports();
 
   const pi = await import("@earendil-works/pi-coding-agent");
-  assert.equal(pi.VERSION, "1.4.0");
+  assert.equal(pi.VERSION, "1.6.0");
   assert.equal("AuthStorage" in pi, false);
   assert.equal("inMemory" in pi.ModelRegistry, false);
   const piDist = dirname(fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent")));

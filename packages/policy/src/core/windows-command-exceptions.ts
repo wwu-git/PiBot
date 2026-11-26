@@ -40,6 +40,7 @@ export function windowsObfuscatedCommand(command: string) {
     parsed.tooLong ||
     parsed.unclosed ||
     command.includes("`") ||
+    /(?:^|[\s"'=;(])[a-z]:(?![\\/])/i.test(command) ||
     dynamicExecution.test(command) ||
     encodedShellArgument(command) ||
     cmdExpansion.test(command) ||
@@ -75,9 +76,10 @@ export function safeWindowsDeletePath(
   path: string,
   protectedRoots: readonly string[],
   scope: CommandPathScope,
+  ownRoots: readonly string[] = [],
 ) {
   return (
-    !windowsProtectedCommandPath(path, protectedRoots) &&
+    !windowsProtectedCommandPath(path, protectedRoots, ownRoots) &&
     isWritableCommandPath(path, "win32", scope) &&
     ![...scope.writeRoots, ...scope.denyWriteRoots, ...protectedRoots].some((root) =>
       containsPath(path, root, "win32"),

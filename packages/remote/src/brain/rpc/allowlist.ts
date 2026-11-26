@@ -48,6 +48,8 @@ export const phoneMethods = [
   "runs.retry",
   // The work receipt under a reply and in task detail (counts and labels, no content).
   "runs.receipt",
+  // The default Pi's hand-off receipts under its reply (names, status, a short excerpt).
+  "teams.dispatches",
   "approvals.pending",
   "approvals.resolve",
   "inbox.list",
@@ -152,6 +154,7 @@ const phoneReads = new Set<string>([
   "routines.history",
   "routines.summary",
   "runs.receipt",
+  "teams.dispatches",
   "approvals.pending",
   "inbox.list",
   "inbox.counts",
@@ -210,6 +213,7 @@ const phoneEvents = Object.freeze([
   "chat.tool",
   "approval.requested",
   "approval.resolved",
+  "teams.dispatch.changed",
   "execution.task.changed",
   "execution.todo.changed",
   "execution.changed",

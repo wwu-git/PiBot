@@ -1,3 +1,4 @@
+// Define the policy inputs and filesystem facts used at authorization boundaries.
 import type {
   ApprovalFact,
   BotPermissionOverrides,
@@ -61,6 +62,14 @@ export type PolicyRequest =
     }
   /** Hand one piece of work to an external agent Bot (`agent` = its display name). */
   | { category: "agent_delegation"; agent?: string }
+  /**
+   * The default Pi manages Bots and groups ("list" reads metadata only). `mainDirect` is set by
+   * the kernel, never by the capability or the model: true only in Pi's own direct chat typed by
+   * the person on this computer. Absent or false is refused.
+   */
+  | { category: "bot_management"; operation: "list" | "change"; mainDirect?: boolean }
+  /** The default Pi sends a message or task to another Bot or a group (`mainDirect` as above). */
+  | { category: "work_dispatch"; mainDirect?: boolean }
   | ({
       category: "memory";
       operation: "add" | "update" | "remove";
@@ -163,6 +172,8 @@ export interface FileSystem {
   windowsReadEntries?: typeof import("../paths/windows-read-tree.ts").windowsReadEntries;
 }
 export interface PathContext {
+  windowsSystemDrive?: string;
+  windowsSystemTrees?: readonly string[];
   platform: Platform;
   home: string;
   /** Host credentials/home protection is independent of the `~` expansion base. */
@@ -281,6 +292,11 @@ export interface EvaluationInput {
   /** Trusted provenance for already-merged settings; explanation only, never an authority input. */
   permissionSources?: Partial<Record<Category, PolicyStep["source"]>>;
   botOverrides?: BotPermissionOverrides;
+  /**
+   * Brain's fact from the Bot's own row (`confirmEverySend`), passed separately because a group
+   * run's settings come from the group and must not drop it. Only send_out reads it.
+   */
+  confirmEverySend?: boolean;
   grants?: Grant[];
   /**
    * In-memory grants of this run only (a folder allowed once outside the workplace is
@@ -376,6 +392,8 @@ export interface PolicyResult {
   editorSessionShape?: string;
 }
 export interface PolicyOptions {
+  windowsSystemDrive?: string;
+  windowsSystemTrees?: readonly string[];
   platform: Platform;
   userHome: string;
   fs?: FileSystem;

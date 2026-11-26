@@ -1,12 +1,18 @@
 import type { Peer } from "@pibot/renderer-kit";
-import { useRpcEvent, useT } from "@pibot/renderer-kit";
+import { SettingsLine, SettingsRow, SettingsSection, useRpcEvent, useT } from "@pibot/renderer-kit";
 import { Button } from "@pibot/ui";
 import { useCallback } from "react";
 import { useConnectorAction, useConnectorPage } from "../shell/remote.ts";
 import { ConnectorFeedback, ConnectorPagination } from "./ConnectorFeedback.tsx";
-import styles from "./connectors.module.css";
 
-export function DirectToolGrants({ id }: { id: string }) {
+export function DirectToolGrants({
+  id,
+  toolLabel = (tool) => tool,
+}: {
+  id: string;
+  /** The tool's name for people, as 能做什么 shows it. */
+  toolLabel?(tool: string): string;
+}) {
   const t = useT();
   const load = useCallback(
     async (peer: Peer, signal: AbortSignal, cursor?: string) => {
@@ -38,16 +44,18 @@ export function DirectToolGrants({ id }: { id: string }) {
   useRpcEvent("permissions.changed", page.refresh);
   useRpcEvent("approval.resolved", page.refresh);
   return (
-    <section className={styles.stack}>
-      <h3>{t("connectors.directGrants")}</h3>
+    <SettingsSection title={t("connections.drawer.direct")}>
       <ConnectorFeedback loading={page.loading} error={page.error} retry={page.refresh} />
       {page.value?.items.map(({ grant, name }) => (
-        <div className={styles.row} key={grant.id}>
-          <span>
-            {grant.scope.kind === "connector_tool" ? grant.scope.tool : ""} ·{" "}
-            {name ?? t(grant.groupId ? "connectors.unavailableGroup" : "connectors.unavailableBot")}{" "}
-            · {new Date(grant.createdAt).toLocaleString()}
-          </span>
+        <SettingsRow
+          key={grant.id}
+          icon="check"
+          tone="green"
+          label={grant.scope.kind === "connector_tool" ? toolLabel(grant.scope.tool) : ""}
+          note={`${
+            name ?? t(grant.groupId ? "connectors.unavailableGroup" : "connectors.unavailableBot")
+          } · ${new Date(grant.createdAt).toLocaleString()}`}
+        >
           <Button
             variant="ghost"
             disabled={action.disabled}
@@ -59,13 +67,13 @@ export function DirectToolGrants({ id }: { id: string }) {
           >
             {t("connectors.revokeDirect")}
           </Button>
-        </div>
+        </SettingsRow>
       ))}
       {page.value && !page.value.items.length && (
-        <p className={styles.note}>{t("connectors.noDirectGrants")}</p>
+        <SettingsLine>{t("connectors.noDirectGrants")}</SettingsLine>
       )}
       <ConnectorFeedback loading={false} error={action.error} retry={page.refresh} />
       <ConnectorPagination previous={page.previous} next={page.next} disabled={page.loading} />
-    </section>
+    </SettingsSection>
   );
 }

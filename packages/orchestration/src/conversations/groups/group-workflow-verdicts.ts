@@ -13,12 +13,13 @@ type Step = GroupPlan["steps"][number];
 export function verdictResolution(
   progress: WorkflowProgress,
   stepId: string,
-): { kind: "repaired" | "skipped"; stepId: string } | undefined {
+): { kind: "repaired" | "skipped" | "accepted"; stepId: string } | undefined {
   let id = stepId;
   const seen = new Set<string>();
   while (!seen.has(id)) {
     seen.add(id);
     if (progress.verdictSkips[id]) return { kind: "skipped", stepId: id };
+    if (progress.verdictAccepts?.[id]) return { kind: "accepted", stepId: id };
     if (id !== stepId && progress.verdicts[id]?.verdict === "pass")
       return { kind: "repaired", stepId: id };
     const next = progress.verdictRepairs[id];
@@ -31,6 +32,10 @@ export function verdictStepLabel(progress: WorkflowProgress, stepId: string, zh:
   const resolution = verdictResolution(progress, stepId);
   if (resolution?.kind === "skipped")
     return zh ? `已由你跳过（${resolution.stepId}）` : `Skipped by you (${resolution.stepId})`;
+  if (resolution?.kind === "accepted")
+    return zh
+      ? `不通过，已由你按现状接受（${resolution.stepId}）`
+      : `FAIL, accepted as is by you (${resolution.stepId})`;
   if (resolution?.kind === "repaired")
     return zh
       ? `已修复，复验通过（复验：${resolution.stepId}）`

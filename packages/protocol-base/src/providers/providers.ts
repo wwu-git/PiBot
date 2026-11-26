@@ -112,6 +112,8 @@ export const ModelInfoSchema = z.strictObject({
   reasoning: z.boolean(),
   maxTokens: count.positive().optional(),
   thinkingLevels: z.array(ThinkingLevelSchema).min(1).optional(),
+  /** Named by the user on a built-in provider, ahead of the pinned catalog. */
+  addedByUser: z.literal(true).optional(),
   cost: z.strictObject({
     // SDK router models use negative sentinels for prices that depend on the routed model.
     input: z.number().nonnegative().nullable(),
@@ -120,6 +122,14 @@ export const ModelInfoSchema = z.strictObject({
     cacheWrite: z.number().nonnegative().nullable(),
   }),
 });
+/** A model id typed by hand for a built-in provider; it is only ever sent as that provider's model. */
+export const AddedModelIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._:/@+-]*$/);
+export const ADDED_MODELS_LIMIT = 50;
 export const StoredProviderSchema = z.strictObject({
   id: name,
   kind: z.enum(["builtin", "custom"]),

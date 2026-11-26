@@ -310,6 +310,8 @@ export function createBrainHost(
           signal,
         ),
     },
+    memoryDreamActivity: (signal) =>
+      peer.call("host.memoryDreamActivity", undefined, { signal, timeoutMs: 2000 }),
     notify: (params, signal) => cancellable(() => peer.call("host.notify", params), signal),
     openPath: async (params, signal) => {
       await cancellable(() => peer.call("host.openPath", params), signal);

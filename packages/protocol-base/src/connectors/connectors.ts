@@ -240,6 +240,8 @@ export const ConnectorToolRefSchema = z.strictObject({
   tool: plain,
 });
 export const ConnectorToolSchema = ConnectorToolRefSchema.extend({
+  /** The server's name for people (MCP `title`); display only, never identity or authorization. */
+  title: z.string().max(200).optional(),
   description: z.string().max(4096),
   /** Display-only bundled translations; the catalog description still binds authorization. */
   displayDescription: z

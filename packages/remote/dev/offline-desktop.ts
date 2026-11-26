@@ -16,6 +16,7 @@ import { startBrain } from "../../brain-app/src/index.ts";
 import { createMemoryRemoteLink, memoryPorts } from "./transport/memory.ts";
 
 export const OFFLINE_MODEL = "offline-phone";
+const OFFLINE_ALT_MODEL = "offline-phone-alt";
 export const PERSONA_MARKER = "Sign every reply as Teal Fox";
 export const MEMORY_MARKER = "The user's cat is called Miso";
 
@@ -96,8 +97,16 @@ export async function startOfflineDesktop(script: Reply[]) {
     apiKey: "synthetic-offline-key",
     models: [
       { id: OFFLINE_MODEL, contextWindow: 65536, maxTokens: 1024, input: ["text", "image"] },
-      { id: "offline-phone-alt", contextWindow: 65536, maxTokens: 1024, input: ["text"] },
+      { id: OFFLINE_ALT_MODEL, contextWindow: 65536, maxTokens: 1024, input: ["text"] },
     ],
+  });
+  // The phone receives models used by active Bots. A catalog entry alone stays on the computer.
+  await desktop.call("bots.create", {
+    name: "Offline alternate Bot",
+    description: "Uses the alternate model for offline selection",
+    systemPrompt: "You are a synthetic test Bot.",
+    model: { provider: provider.id, id: OFFLINE_ALT_MODEL },
+    thinkingLevel: "off",
   });
   await desktop.call("bots.update", {
     botId: bot.id,

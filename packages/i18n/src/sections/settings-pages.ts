@@ -2,6 +2,7 @@
 export const settingsPagesZh = {
   "settings.languageTheme": "语言和外观",
   "settings.themeNote": "浅色、深色，或者跟着系统切换。",
+  "settings.chatFontNote": "只调整对话里的消息和输入框，其他界面不变。",
   "settings.versionLine": "Pi Bot {version} · pi 内核 {pi}",
   "network.localBypass":
     "所有模型厂商都走这个代理；只有本机地址（localhost、127.0.0.1）上的模型服务直接连接。",
@@ -79,6 +80,7 @@ export const settingsPagesZh = {
 export const settingsPagesEn = {
   "settings.languageTheme": "Language & appearance",
   "settings.themeNote": "Light, dark, or follow the system.",
+  "settings.chatFontNote": "Changes only the messages and message box in chats.",
   "settings.versionLine": "Pi Bot {version} · pi engine {pi}",
   "network.localBypass":
     "Every model provider uses this proxy; only model servers on this computer (localhost, 127.0.0.1) connect directly.",

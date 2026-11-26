@@ -112,9 +112,17 @@ export async function startTabStep(
   try {
     tab.contents.on("login", (event, _details, authInfo, callback) => {
       event.preventDefault();
-      const credentials = proxyCredentials(this.rules?.proxy ?? null);
+      const credentials =
+        this.privateTransport.credentialsFor(authInfo) ??
+        proxyCredentials(this.rules?.proxy ?? null);
       // Only our own proxy gets credentials; site HTTP auth is cancelled (logins via takeover).
-      if (authInfo.isProxy && credentials && authInfo.host === credentials.host)
+      if (
+        authInfo.isProxy &&
+        credentials &&
+        authInfo.host === credentials.host &&
+        authInfo.port ===
+          Number(credentials.port || (this.rules?.proxy?.url.startsWith("https:") ? 443 : 80))
+      )
         callback(credentials.username, credentials.password);
       else callback();
     });

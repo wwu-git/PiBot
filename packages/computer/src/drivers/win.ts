@@ -1,3 +1,4 @@
+// Keep Windows computer actions tied to the host’s Windows app identities.
 import type { AppInfo, ComputerDriver, SessionState } from "../core/types.ts";
 import { windowsPackagedAppId } from "../core/windows-app-id.ts";
 import type { Cua } from "../cua/loader.ts";
@@ -30,6 +31,7 @@ export function createWindowsDriver(options: {
   /** Idle seconds and lock state from the host (Electron powerMonitor). */
   session(signal?: AbortSignal): Promise<SessionState>;
   timeoutMs?: number;
+  windowsProgramFiles?: string;
 }): ComputerDriver {
   const cua = createCuaComputerDriver({
     platform: "win32",
@@ -42,7 +44,7 @@ export function createWindowsDriver(options: {
       // Cua's Windows tree reports password edits as plain Edit.
       secureTree: false,
     },
-    appId: windowsAppId,
+    appId: (app, apps) => windowsAppId(app, apps, options.windowsProgramFiles),
     enrichApps: createWindowsProcessPaths(),
     session: options.session,
   });
@@ -64,7 +66,7 @@ export function createWindowsDriver(options: {
     for (const frame of await frames.frames(signal)) {
       // Cua does not list the app's own process, so only the installed rows of the same list can
       // name it; passing the running rows never matched Calculator.
-      const id = packagedAppIdForImage(frame.appPath ?? "", installed);
+      const id = packagedAppIdForImage(frame.appPath ?? "", installed, options.windowsProgramFiles);
       if (!id || hostedPids.has(frame.appPid)) continue;
       hostedPids.add(frame.appPid);
       replaced.add(frame.hostPid);
@@ -136,13 +138,13 @@ export function createWindowsDriver(options: {
     },
     async resolveAppName(name, signal) {
       const result = await (await cua.cua()).listApps(signal);
-      return resolveWindowsAppName(name, result.apps);
+      return resolveWindowsAppName(name, result.apps, options.windowsProgramFiles);
     },
     async installedApps(limit, signal) {
       const result = await (await cua.cua()).listApps(signal);
       const apps = new Map<string, { id: string; name: string }>();
-      for (const app of uniqueWindowsApps(result.apps)) {
-        const id = windowsAppId(app, result.apps);
+      for (const app of uniqueWindowsApps(result.apps, options.windowsProgramFiles)) {
+        const id = windowsAppId(app, result.apps, options.windowsProgramFiles);
         const key = id.toLowerCase();
         // The installed (AppsFolder) row names a packaged app the way the Start menu does; its
         // running process row shares the id but may carry the bare exe name.
@@ -153,7 +155,7 @@ export function createWindowsDriver(options: {
     },
     async launchPath(id, signal) {
       const result = await (await cua.cua()).listApps(signal);
-      return windowsLaunchPath(id, result.apps);
+      return windowsLaunchPath(id, result.apps, options.windowsProgramFiles);
     },
   };
   return driver;

@@ -6,8 +6,11 @@ import { canonicalPath, ExecError, sameFile } from "@pibot/execution";
 import { containsPath } from "@pibot/policy";
 import {
   type Attachment,
+  attachmentContinuationOf,
   canPreviewSvg,
   FILE_LIMIT,
+  MAX_REPLY_ATTACHMENTS,
+  type Message,
   RpcError,
   RpcErrorCodes,
 } from "@pibot/protocol-base";
@@ -20,6 +23,11 @@ import { AttachmentService } from "./attachments.ts";
 
 /** What attaching needs from a prepared send_file call; an agent turn builds the same four. */
 export type SendFilesInput = Pick<PreparedTool, "roots" | "cwd" | "sendPaths" | "authorization">;
+
+/** Server-owned cursor for one automatic delivery pass. Never comes from a tool request. */
+export interface OutputAttachmentPages {
+  lastMessageId?: string;
+}
 
 async function readSource(
   local: LocalService,
@@ -89,6 +97,36 @@ function deliveryText(items: Attachment[]): string {
   return lines.join("\n");
 }
 
+function outputAttachmentPage(
+  messages: MessagesRepo,
+  anchor: Message,
+  incoming: number,
+  pages: OutputAttachmentPages,
+) {
+  if (pages.lastMessageId) {
+    const last = messages.get(pages.lastMessageId);
+    if (
+      !last ||
+      attachmentContinuationOf(last) !== anchor.id ||
+      last.runId !== anchor.runId ||
+      last.botId !== anchor.botId ||
+      last.conversationId !== anchor.conversationId
+    )
+      throw new ExecError("invalid_input");
+    if ((last.attachments?.length ?? 0) + incoming <= MAX_REPLY_ATTACHMENTS) return last.id;
+  }
+  return messages.create({
+    conversationId: anchor.conversationId,
+    botId: anchor.botId,
+    runId: anchor.runId,
+    role: "assistant",
+    content: "",
+    status: "done",
+    usage: { attachmentContinuationOf: anchor.id },
+    markUnread: false,
+  }).id;
+}
+
 export async function sendFiles(
   local: LocalService,
   context: ToolRunContext,
@@ -96,13 +134,17 @@ export async function sendFiles(
   parent: AbortSignal,
   /** Audit source: the send_file tool, or an external agent turn's created files. */
   toolName = "send_file",
+  pages?: OutputAttachmentPages,
 ) {
   const signal = AbortSignal.any([parent, AbortSignal.timeout(20_000)]);
   const repo = new AttachmentsRepo(local.deps.db);
   const paths = prepared.sendPaths;
   if (
     !paths?.length ||
-    (repo.forMessages([context.messageId]).get(context.messageId)?.length ?? 0) + paths.length > 10
+    paths.length > MAX_REPLY_ATTACHMENTS ||
+    (!pages &&
+      (repo.forMessages([context.messageId]).get(context.messageId)?.length ?? 0) + paths.length >
+        MAX_REPLY_ATTACHMENTS)
   )
     throw new RpcError(RpcErrorCodes.attachmentInvalid, "attachments_already_sent");
   const sources = [];
@@ -113,13 +155,15 @@ export async function sendFiles(
     local.deps.host.attachments,
   );
   const batch = await attachments.prepareOutput(context.botId, sources, signal);
+  const messages = new MessagesRepo(local.deps.db);
+  let messageId: string;
   try {
     signal.throwIfAborted();
     if (authorizationSnapshot(local, context.botId, context) !== prepared.authorization)
       throw new ExecError("outside_workplace");
-    transaction(local.deps.db, () => {
+    messageId = transaction(local.deps.db, () => {
       const run = new RunsRepo(local.deps.db).get(context.runId);
-      const message = new MessagesRepo(local.deps.db).get(context.messageId);
+      const message = messages.get(context.messageId);
       if (
         run?.status !== "running" ||
         run.botId !== context.botId ||
@@ -128,13 +172,26 @@ export async function sendFiles(
         message.status !== "streaming"
       )
         throw new ExecError("invalid_input");
-      if (
-        (repo.forMessages([context.messageId]).get(context.messageId)?.length ?? 0) +
-          batch.items.length >
-        10
-      )
-        throw new RpcError(RpcErrorCodes.attachmentInvalid, "attachments_already_sent");
-      attachments.persist(context.messageId, batch, context.botId);
+      let targetId = message.id;
+      if ((message.attachments?.length ?? 0) + batch.items.length > MAX_REPLY_ATTACHMENTS) {
+        if (!pages) throw new RpcError(RpcErrorCodes.attachmentInvalid, "attachments_already_sent");
+        // The current reply remains the authorization and receipt anchor. The additional
+        // message only owns this attachment batch, and rolls back with it if persistence fails.
+        if (
+          toolName !== "automatic_delivery" ||
+          run.kind !== "chat" ||
+          run.groupId ||
+          run.taskId ||
+          context.executionTaskId ||
+          run.conversationId !== context.conversationId ||
+          message.conversationId !== run.conversationId ||
+          message.runId !== run.id ||
+          message.botId !== run.botId
+        )
+          throw new ExecError("invalid_input");
+        targetId = outputAttachmentPage(messages, message, batch.items.length, pages);
+      }
+      attachments.persist(targetId, batch, context.botId);
       for (const item of batch.items)
         local.approvals.audit.append({
           botId: context.botId,
@@ -147,6 +204,7 @@ export async function sendFiles(
             bytes: item.metadata.size,
           },
         });
+      return targetId;
     });
   } catch (error) {
     await batch.discard();
@@ -154,16 +212,29 @@ export async function sendFiles(
   }
   context.sentFilePaths ??= new Set();
   for (const path of paths) context.sentFilePaths.add(path);
+  if (pages && messageId !== context.messageId) pages.lastMessageId = messageId;
   try {
-    local.deps.peer.emit("chat.attachments", {
-      botId: context.botId,
-      conversationId: context.conversationId,
-      ...(context.groupId ? { groupId: context.groupId } : {}),
-      ...(context.threadId ? { threadId: context.threadId } : {}),
-      runId: context.runId,
-      messageId: context.messageId,
-      attachments: repo.forMessages([context.messageId]).get(context.messageId) ?? [],
-    });
+    if (messageId !== context.messageId) {
+      const message = messages.get(messageId);
+      if (!message) throw new Error("Attachment continuation missing after delivery");
+      local.deps.peer.emit("chat.message", {
+        botId: context.botId,
+        conversationId: message.conversationId,
+        runId: context.runId,
+        messageId,
+        message,
+      });
+    } else {
+      local.deps.peer.emit("chat.attachments", {
+        botId: context.botId,
+        conversationId: context.conversationId,
+        ...(context.groupId ? { groupId: context.groupId } : {}),
+        ...(context.threadId ? { threadId: context.threadId } : {}),
+        runId: context.runId,
+        messageId,
+        attachments: repo.forMessages([messageId]).get(messageId) ?? [],
+      });
+    }
   } catch {
     local.deps.logger.warn("Attachment notification deferred; history retains committed metadata");
   }

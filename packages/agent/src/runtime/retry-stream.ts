@@ -1,3 +1,4 @@
+// Preserve streamed output and request accounting across bounded retries.
 import { setTimeout as wait } from "node:timers/promises";
 import type {
   Api,
@@ -137,13 +138,15 @@ export function retryStream(input: {
         let error: unknown;
         recovery.resetResponse();
         try {
-          const stream = await input.open({
-            hint: recovery.hint,
-            response: (response) => {
-              responseStatus = response.status;
-              recovery.response(response);
-            },
-          });
+          const stream = await receipt.send(() =>
+            input.open({
+              hint: recovery.hint,
+              response: (response) => {
+                responseStatus = response.status;
+                recovery.response(response);
+              },
+            }),
+          );
           for await (const event of stream) {
             // A provider may attach its last usage only to the terminal event, even when result rejects.
             if (event.type === "error" || event.type === "done") {

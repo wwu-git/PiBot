@@ -1,3 +1,4 @@
+// Keep filesystem authorization tied to canonical paths and roots.
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, posix, relative, resolve, sep, win32 } from "node:path";
 import { ExecError } from "./types.ts";
@@ -13,12 +14,22 @@ export function within(root: string, path: string): boolean {
   return !isAbsolute(rel) && rel !== ".." && !rel.startsWith(`..${sep}`);
 }
 
+function sameSpelling(left: string, right: string): boolean {
+  if (process.platform !== "win32") return left === right;
+  const driveSpelling = (path: string) =>
+    win32.normalize(path).replace(/^[a-z](?=:)/i, (letter) => letter.toUpperCase());
+  // Case-sensitive NTFS directories can contain separate names differing only by case.
+  return driveSpelling(left) === driveSpelling(right);
+}
+
 export function missing(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 /** Resolve the closest existing ancestor; a dangling link must never be treated as a new path. */
 export async function canonicalPath(path: string, cwd: string): Promise<string> {
+  if (process.platform === "win32" && /^[a-z]:(?![\\/])/i.test(path))
+    throw new ExecError("invalid_input");
   const absolute = resolve(cwd, path);
   try {
     return await realpath(absolute);
@@ -44,7 +55,7 @@ export async function writablePath(
 ): Promise<string> {
   const target = await canonicalPath(path, cwd);
   const lexical = resolve(cwd, path);
-  if (target !== lexical) throw new ExecError("outside_workplace", "write_path_alias");
+  if (!sameSpelling(target, lexical)) throw new ExecError("outside_workplace", "write_path_alias");
   if (denied.some((root) => within(root, target) || within(root, lexical)))
     throw new ExecError("outside_workplace", "write_path_protected");
   try {
@@ -91,7 +102,8 @@ export async function denyTargets(path: string): Promise<string[]> {
 /** Approval supplies canonical roots; replacing a root with a link cannot redefine that permission. */
 export async function checkedRoot(path: string): Promise<string> {
   const canonical = await realpath(path);
-  if (canonical !== resolve(path)) throw new ExecError("outside_workplace", "workspace_root_alias");
+  if (!sameSpelling(canonical, resolve(path)))
+    throw new ExecError("outside_workplace", "workspace_root_alias");
   return canonical;
 }
 

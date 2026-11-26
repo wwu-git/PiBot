@@ -1,3 +1,4 @@
+import { toolSummaryLabel } from "@pibot/client-core";
 import {
   createPeer,
   Methods,
@@ -46,7 +47,7 @@ export interface PhoneDataDesktop {
       },
     ): Promise<unknown>;
   };
-  chat(text: string): Promise<unknown>;
+  chat(text: string): Promise<{ assistantMessageId: string }>;
   disconnectPhone(): void;
   reconnectPhone(): void;
   /** Waits until the Bot has no run in progress. */
@@ -347,7 +348,9 @@ export async function runPhoneDataScenario(desktop: PhoneDataDesktop) {
     });
   }
   await new Promise((resolve) => setTimeout(resolve, 50));
-  seen = await run("Switches on");
+  const beforeAllowedRun = desktop.turns.length;
+  const allowedRun = await desktop.chat("Switches on");
+  seen = turnsSince(beforeAllowedRun);
   const marker = "以下是手机上的外部内容";
   check((seen.match(new RegExp(marker, "g")) ?? []).length >= 4, "untrusted_marked");
   check(
@@ -375,6 +378,22 @@ export async function runPhoneDataScenario(desktop: PhoneDataDesktop) {
     phone_media_get: `${new Set(images).size} distinct JPEGs to the model, EXIF/GPS stripped`,
     phone_sms_code: "code + sender last 4",
   };
+
+  const messages = await android.runtime.call("chat.history", {
+    botId: desktop.botId,
+    topicId: await currentTopic(android.runtime, desktop.botId),
+    limit: 2,
+  });
+  const steps = messages.find((message) => message.id === allowedRun.assistantMessageId)?.tools;
+  const label = (name: string) => {
+    const step = steps?.find((tool) => tool.tool === name && tool.status === "done");
+    return step ? toolSummaryLabel(step) : undefined;
+  };
+  check(
+    /^(?:读取了手机照片 3 张|Read 3 phone photos)$/.test(label("phone_media") ?? "") &&
+      /^(?:收到短信验证码|Received an SMS verification code)$/.test(label("phone_sms_code") ?? ""),
+    "run_card_summary",
+  );
 
   // 3. The owner declines the system consent sheet.
   seen = await run("Consent declined");
@@ -424,18 +443,6 @@ export async function runPhoneDataScenario(desktop: PhoneDataDesktop) {
     await desktop.desktop.call("chat.history", { botId: desktop.botId, limit: 10 }),
   );
   check(history.includes("notes.txt") && history.includes("From my phone"), "attachment_stored");
-  // Run cards: a finished phone read is labelled by its summary ("读取了手机照片 3 张").
-  const cards = [
-    "读取了手机照片 3 张",
-    "Read 3 phone photos",
-    "收到短信验证码",
-    "Received an SMS verification code",
-  ];
-  check(
-    cards.some((label) => history.includes(label)) ||
-      cards.some((label) => desktop.turns.some((t) => t.body.includes(label))),
-    "run_card_summary",
-  );
   await desktop.settled();
   report.share = {
     slices: Math.ceil(content.length / 589_824),

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "../database/database.ts";
+import { nonNegativeCost } from "./memory-dream.ts";
 
 /**
  * One memory owner's organization run. Unlike extraction a run is not bound to a topic, so
@@ -40,7 +41,7 @@ export interface OrganizationTarget {
 }
 
 const columns = `id, bot_id AS botId, scope, owner_id AS ownerId, status, reason, owner_initiated AS ownerInitiated,
-  model_provider AS modelProvider, model_id AS modelId, tokens, cost_usd AS costUsd, proposals,
+  model_provider AS modelProvider, model_id AS modelId, tokens, MAX(COALESCE(cost_usd,0),0) AS costUsd, proposals,
   memory_count AS memoryCount, error, created_at AS createdAt, started_at AS startedAt,
   finished_at AS finishedAt`;
 
@@ -187,7 +188,7 @@ export class MemoryOrganizationsRepo {
         patch.modelProvider ?? null,
         patch.modelId ?? null,
         patch.tokens ?? null,
-        patch.costUsd ?? null,
+        patch.costUsd === undefined ? null : nonNegativeCost(patch.costUsd),
         patch.proposals ?? 0,
         patch.memoryCount ?? 0,
         patch.error ?? null,
@@ -206,7 +207,7 @@ export class MemoryOrganizationsRepo {
         `UPDATE memory_organizations SET tokens=?, cost_usd=?, model_provider=?, model_id=?
          WHERE id=? AND status='running'`,
       )
-      .run(usage.tokens, usage.costUsd ?? 0, usage.modelProvider, usage.modelId, id);
+      .run(usage.tokens, nonNegativeCost(usage.costUsd), usage.modelProvider, usage.modelId, id);
   }
 
   /**
@@ -244,7 +245,7 @@ export class MemoryOrganizationsRepo {
     const value = this.db
       .prepare(
         `SELECT COUNT(*) AS runs, IFNULL(SUM(tokens),0) AS tokens,
-        IFNULL(SUM(cost_usd),0) AS costUsd, IFNULL(SUM(proposals),0) AS proposals
+        IFNULL(SUM(MAX(cost_usd,0)),0) AS costUsd, IFNULL(SUM(proposals),0) AS proposals
         FROM memory_organizations WHERE created_at>=? AND status='done'`,
       )
       .get(since);

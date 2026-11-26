@@ -16,16 +16,18 @@ export function CustomProviderForm({
   task,
   refresh,
   onDirtyChange,
+  addModelIds,
 }: {
   provider: Provider;
   testModelId?: string;
+  addModelIds?: string[];
   task: Task;
   refresh(): Promise<void>;
   onDirtyChange?(dirty: boolean): void;
 }) {
   const t = useT();
   const { peer } = useRpc();
-  const editor = useCustomProvider(provider, task, refresh, testModelId);
+  const editor = useCustomProvider(provider, task, refresh, testModelId, addModelIds);
   const { form, saved, setField } = editor;
   const preset = customPresets[provider.id];
   const [customAddress, setCustomAddress] = useState(false);

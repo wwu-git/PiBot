@@ -3,7 +3,11 @@ import { type KernelMethodResults, KernelMethods } from "@pibot/protocol-base";
 import { z } from "zod";
 import { BotsRepo } from "../bots/bots.ts";
 import { ChatSearchIndex } from "../conversations/chat-search-index.ts";
-import { type Conversation, ConversationsRepo } from "../conversations/conversations.ts";
+import {
+  type Conversation,
+  ConversationsRepo,
+  visibleImportedRows,
+} from "../conversations/conversations.ts";
 import { GroupsRepo } from "../groups/groups.ts";
 import { MessagesRepo } from "../workspace/repositories.ts";
 
@@ -13,7 +17,7 @@ const PAGE_BUDGET_MS = 120;
 const SCAN_CHUNK = 400;
 
 const visible = `c.archived_at IS NULL AND c.internal_task_id IS NULL
-  AND (c.import_id IS NULL OR c.import_id IN (SELECT id FROM import_jobs WHERE state='completed'))
+  AND ${visibleImportedRows("c.import_id")}
   AND (c.bot_id IS NULL OR EXISTS(SELECT 1 FROM bots b WHERE b.id=c.bot_id AND b.archived_at IS NULL))`;
 const order = "ORDER BY m.created_at DESC,m.rowid DESC";
 const seek = "AND (m.created_at,m.rowid)<($at,$row)";

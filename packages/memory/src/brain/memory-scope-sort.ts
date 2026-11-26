@@ -1,3 +1,4 @@
+// Classifies shared memories for an owner-initiated, proposal-only sort.
 import { type KernelMethodResults, MemorySchema } from "@pibot/protocol-base";
 import {
   AuditRepo,
@@ -7,6 +8,7 @@ import {
   SettingsRepo,
 } from "@pibot/storage";
 import { z } from "zod";
+import { logMemoryAttempt } from "./memory-maintenance-log.ts";
 import { organizationErrorDetails } from "./memory-organization-errors.ts";
 import { organizationModel } from "./memory-organization-model.ts";
 import type { OrganizationDeps } from "./memory-organization-queue.ts";
@@ -65,6 +67,7 @@ export async function sortUserMemories(
   const repo = new MemoryOrganizationsRepo(db);
   signal.throwIfAborted();
   const id = repo.beginOwner(botId, runId);
+  const started = performance.now();
   const model = organizationModel(db, botId);
   const total = memory.status(botId, "user", "user").activeCount;
   let processed = 0;
@@ -177,10 +180,6 @@ export async function sortUserMemories(
       : error === "budget_exhausted"
         ? "limited"
         : "failed";
-    if (status === "failed")
-      deps.logger.warn(
-        JSON.stringify({ module: "memory", reasonCode: "memory_scope_sort_failed", error }),
-      );
   } finally {
     repo.finish(id, {
       status: status === "done" ? "done" : "failed",
@@ -200,6 +199,7 @@ export async function sortUserMemories(
         revision: proposals,
       },
     });
+    logMemoryAttempt(deps, "organization", { id, botId }, started);
   }
   return { status, moves, processed, total };
 }

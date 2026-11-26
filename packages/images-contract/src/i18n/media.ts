@@ -38,6 +38,8 @@ export const mediaZh = {
   "errors.image_mode_mismatch": "当前图片模式与模型或参考附件不匹配。",
   "errors.image_steer_unsupported": "图片生成不支持中途补充，草稿已保留。",
   "errors.image_timeout": "图片服务 5 分钟没有返回，已停止等待。本次是否收费以服务商为准。",
+  "errors.image_url_unavailable":
+    "图片服务返回了一个图片链接，但无法下载或不是有效图片。本次是否收费以服务商为准。",
   "media.category": "Bot 类别",
   "media.category.chat": "文本 Bot",
   "media.category.image": "图片 Bot",
@@ -126,6 +128,8 @@ export const mediaEn: { [K in keyof typeof mediaZh]: string } = {
   "errors.image_steer_unsupported": "Image generation cannot be steered. Your draft is preserved.",
   "errors.image_timeout":
     "The image service did not respond within 5 minutes, so waiting stopped. Whether this attempt is billed is up to the provider.",
+  "errors.image_url_unavailable":
+    "The image service returned an image link that could not be downloaded or was not a valid image. Whether this attempt is billed is up to the provider.",
   "media.category": "Bot category",
   "media.category.chat": "Text Bot",
   "media.category.image": "Image Bot",

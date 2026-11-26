@@ -1,9 +1,14 @@
 import type { Peer } from "@pibot/renderer-kit";
-import { useRpcEvent, useSettings } from "@pibot/renderer-kit";
+import {
+  SettingsLine,
+  SettingsRow,
+  SettingsSection,
+  useRpcEvent,
+  useSettings,
+} from "@pibot/renderer-kit";
 import { useCallback, useEffect } from "react";
 import { useConnectorRead } from "../shell/remote.ts";
 import { ConnectorFeedback } from "./ConnectorFeedback.tsx";
-import styles from "./connectors.module.css";
 
 /** Where this connection's data goes, by destination and category; never content. */
 export function ConnectorDataDestinations({ id, snapshot }: { id: string; snapshot: number }) {
@@ -21,35 +26,34 @@ export function ConnectorDataDestinations({ id, snapshot }: { id: string; snapsh
   useRpcEvent("drafts.changed", refresh);
   const separator = language === "zh" ? "、" : ", ";
   return (
-    <section className={styles.stack}>
-      <h3>{t("connectors.destinations")}</h3>
-      <p className={styles.note}>{t("connectors.destinationsNote")}</p>
+    <SettingsSection title={t("connections.drawer.destinations")}>
+      <SettingsLine>{t("connectors.destinationsNote")}</SettingsLine>
       <ConnectorFeedback loading={read.loading} error={read.error} retry={refresh} />
       {read.value?.items.map((item) => (
-        <div
-          className={styles.row}
+        <SettingsRow
           key={item.destination.kind === "domain" ? item.destination.domain : "this_computer"}
-        >
-          <strong className={item.destination.kind === "domain" ? styles.mono : undefined}>
-            {item.destination.kind === "domain"
+          icon={item.destination.kind === "domain" ? "globe" : "laptop"}
+          tone={item.destination.kind === "domain" ? "blue" : "green"}
+          label={
+            item.destination.kind === "domain"
               ? item.destination.domain
-              : t("connectors.destination.this_computer")}
-          </strong>
-          <span className={styles.grow}>
-            {item.categories
+              : t("connectors.destination.this_computer")
+          }
+          note={[
+            item.categories
               .map((category) => t(`connectors.dataCategory.${category}`))
-              .join(separator)}
-          </span>
-          <span className={styles.note}>
-            {item.lastAt
+              .join(separator),
+            item.lastAt
               ? t("connectors.lastUsed", { time: new Date(item.lastAt).toLocaleString() })
-              : t("connectors.neverUsed")}
-          </span>
-        </div>
+              : t("connectors.neverUsed"),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        />
       ))}
       {read.value && !read.value.items.length && (
-        <p className={styles.note}>{t("connectors.noDestinations")}</p>
+        <SettingsLine>{t("connectors.noDestinations")}</SettingsLine>
       )}
-    </section>
+    </SettingsSection>
   );
 }

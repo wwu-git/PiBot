@@ -73,7 +73,7 @@ export function boundaryTopics(
       SELECT 1 FROM memory_extractions e WHERE e.conversation_id=t.conversationId AND (
         (e.status='queued' AND e.priority>=1)
         OR (e.status='running' AND e.source_message_id=t.sourceMessageId)
-        OR (e.status='done' AND e.coverage_message_id=t.sourceMessageId)
+        OR (e.status='done' AND e.reason<>'correction' AND e.coverage_message_id=t.sourceMessageId)
         OR (e.reason='boundary' AND e.created_at>?)
         OR (e.status IN ('failed','skipped') AND e.error IS NOT 'already_covered' AND e.finished_at>?)
       )
@@ -143,7 +143,7 @@ export function legacyDueTopics(
         AND (t.archivedAt IS NOT NULL OR t.lastAt<=?)
         AND NOT EXISTS (
           SELECT 1 FROM memory_extractions e WHERE e.conversation_id=t.conversationId
-            AND (((e.status='done' OR (e.status='skipped' AND e.error LIKE 'automation_%')) AND e.coverage_message_id=t.lastMessageId)
+            AND ((((e.status='done' AND e.reason<>'correction') OR (e.status='skipped' AND e.error LIKE 'automation_%')) AND e.coverage_message_id=t.lastMessageId)
               OR e.status IN ('queued','running')
               OR (e.status IN ('failed','skipped') AND e.error IS NOT 'already_covered' AND e.finished_at>?))
         )

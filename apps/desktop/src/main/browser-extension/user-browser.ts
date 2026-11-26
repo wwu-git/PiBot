@@ -1,4 +1,4 @@
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { access, readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createNavigationCheck, type UserBrowser } from "@pibot/browser/host";
@@ -8,6 +8,8 @@ import { startExtensionServer } from "./extension-server.ts";
 import {
   BROWSERS,
   browserProfileRoot,
+  type NativeBrowser,
+  nativeManifestLauncher,
   registerNativeManifest,
   revokeNativeManifest,
 } from "./native-registration.ts";
@@ -30,6 +32,12 @@ const DETECT_MS = 60_000;
  */
 export async function createUserBrowser(options: {
   dataDir: string;
+  /**
+   * The platform default data folder. Only that install registers the native host on its own;
+   * a test or second copy on its own folder registers only when the user asks it to, so it can
+   * never silently take the user's extension away from the main install.
+   */
+  defaultDataDir: boolean;
   executable: string;
   /** Development: the app's entry for the launcher; packaged builds start the app itself. */
   entry?: string;
@@ -128,6 +136,28 @@ export async function createUserBrowser(options: {
     return !!server?.host;
   };
   let registered = false;
+  let registration: "separate_data_dir" | "other_instance" | undefined;
+  const home = homedir();
+  const log = (event: string, browser: NativeBrowser, reason: string) =>
+    options.logger.info(JSON.stringify({ module: "browser-extension", event, browser, reason }));
+  // The manifest names one launcher; which Pi Bot it belongs to is that launcher's data folder.
+  const launcherFor = (browser: NativeBrowser) =>
+    nativeManifestLauncher({ platform: process.platform, home, browser });
+  const exists = (path: string) =>
+    access(path).then(
+      () => true,
+      () => false,
+    );
+  let ownLauncher: string | undefined;
+  /** Removes only manifests that start this instance's own launcher. */
+  const revokeOwn = async (reason: string) => {
+    if (!ownLauncher) return;
+    for (const browser of BROWSERS) {
+      if ((await launcherFor(browser)) !== ownLauncher) continue;
+      if (await revokeNativeManifest({ platform: process.platform, home, browser }))
+        log("revoked", browser, reason);
+    }
+  };
   return {
     extension: () => {
       const host = server?.host;
@@ -156,6 +186,7 @@ export async function createUserBrowser(options: {
       return {
         defaultBrowser: id ? { id, name: NAMES[id] } : null,
         supported: value.kind === "supported",
+        ...(registration && !server?.host ? { registration } : {}),
         extension: server?.host
           ? "connected"
           : registered && Object.keys(seen).length > 0
@@ -165,22 +196,31 @@ export async function createUserBrowser(options: {
               : "unsupported",
       };
     },
-    async register(enabled) {
-      const home = homedir();
-      if (!enabled) {
-        for (const browser of BROWSERS)
-          if (await revokeNativeManifest({ platform: process.platform, home, browser }))
-            options.logger.info(
-              JSON.stringify({ module: "browser-extension", event: "revoked", browser }),
-            );
-        registered = false;
-        return;
-      }
-      const launcher = await platform.createLauncher({
+    async register(enabled, request = {}) {
+      ownLauncher ??= await platform.createLauncher({
         dataDir: options.dataDir,
         executable: options.executable,
         ...(options.entry ? { entry: options.entry } : {}),
       });
+      if (!enabled) {
+        await revokeOwn("preference_off");
+        registered = false;
+        registration = undefined;
+        return;
+      }
+      if (!options.defaultDataDir && !request.explicit && !request.takeOver) {
+        registered = false;
+        registration = "separate_data_dir";
+        options.logger.info(
+          JSON.stringify({
+            module: "browser-extension",
+            event: "register_skipped",
+            reason: "separate_data_dir",
+          }),
+        );
+        return;
+      }
+      let other = false;
       for (const browser of BROWSERS) {
         // Only browsers this user has (their profile folder exists); Windows reads the registry.
         const root = browserProfileRoot(process.platform, home, browser);
@@ -192,14 +232,44 @@ export async function createUserBrowser(options: {
           ))
         )
           continue;
-        if (await registerNativeManifest({ platform: process.platform, home, browser, launcher }))
-          options.logger.info(
-            JSON.stringify({ module: "browser-extension", event: "registered", browser }),
+        const current = await launcherFor(browser);
+        // Another Pi Bot whose launcher still exists keeps its manifest unless the user confirms.
+        if (current && current !== ownLauncher && (await exists(current)) && !request.takeOver) {
+          other = true;
+          log("register_kept_other", browser, "other_instance");
+          continue;
+        }
+        if (
+          await registerNativeManifest({
+            platform: process.platform,
+            home,
+            browser,
+            launcher: ownLauncher,
+          })
+        )
+          log(
+            "registered",
+            browser,
+            request.takeOver
+              ? "user_takeover"
+              : current && current !== ownLauncher
+                ? "stale_manifest"
+                : request.explicit
+                  ? "user_enabled"
+                  : "default_install",
           );
       }
       registered = true;
+      registration = other ? "other_instance" : undefined;
     },
     close: async () => {
+      // A separate copy hands the extension back when it quits; the main install keeps it.
+      if (!options.defaultDataDir && registered)
+        await revokeOwn("instance_quit").catch(() =>
+          options.logger.warn(
+            JSON.stringify({ module: "browser-extension", event: "revoke_failed" }),
+          ),
+        );
       await server?.close();
     },
   };

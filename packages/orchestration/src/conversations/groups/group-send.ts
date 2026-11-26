@@ -112,7 +112,7 @@ export class GroupSender {
       !template &&
       !coordinatorOnly &&
       !confirmation &&
-      display?.inputOrigin === "user" &&
+      (display?.inputOrigin === "user" || display?.inputOrigin === "phone") &&
       !display.forward
     ) {
       const handled = await chatControl(this.service, params, display);

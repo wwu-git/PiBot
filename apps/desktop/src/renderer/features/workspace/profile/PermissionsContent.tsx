@@ -1,4 +1,4 @@
-import type { Category, Level } from "@pibot/protocol";
+import { type Category, type Level, PI_MANAGER_CATEGORIES } from "@pibot/protocol";
 import { PermissionRow, botPanelStyles as styles, useNavigation, useT } from "@pibot/renderer-kit";
 import { Button, Icon, IconTile } from "@pibot/ui";
 import type { ReactNode } from "react";
@@ -15,11 +15,13 @@ export function PermissionCategoryRow({
   category,
   soon = false,
   options = levels,
+  note,
 }: {
   state: PermissionState;
   category: Category;
   soon?: boolean;
   options?: readonly Level[];
+  note?: string;
 }) {
   const t = useT();
   const override = state.data?.overrides?.[category];
@@ -35,7 +37,7 @@ export function PermissionCategoryRow({
       }
       overridden={override !== undefined}
       disabled={state.busy || state.refreshing || !state.connected || state.error || soon}
-      note={soon ? t("common.comingSoon") : undefined}
+      note={soon ? t("common.comingSoon") : note}
       options={options.map((value) => ({ value, label: t(`permissions.level.${value}`) }))}
       change={(value) => void state.save({ levels: { [category]: value } })}
       restore={() => void state.save({ levels: { [category]: null } })}
@@ -52,10 +54,13 @@ export function PermissionsContent({
   grants,
   browser,
   activity,
+  piManager = false,
 }: {
   state: PermissionState;
   description: ReactNode;
   imageOnly?: boolean;
+  /** The default Pi's own page: its management and dispatch levels lead the list. */
+  piManager?: boolean;
   computer?: ReactNode;
   grants?: ReactNode;
   browser?: ReactNode;
@@ -90,6 +95,22 @@ export function PermissionsContent({
           </section>
         ) : (
           <>
+            {piManager && (
+              <section className={styles.section}>
+                <h2>{t("permissions.piSection")}</h2>
+                <div className={styles.card}>
+                  {PI_MANAGER_CATEGORIES.map((category) => (
+                    <PermissionCategoryRow
+                      key={category}
+                      state={state}
+                      category={category}
+                      note={t(`permissions.note.${category}`)}
+                    />
+                  ))}
+                </div>
+                <p className={styles.note}>{t("permissions.piNote")}</p>
+              </section>
+            )}
             <section className={styles.section}>
               <h2>{t("permissions.operations")}</h2>
               <div className={styles.card}>
@@ -135,6 +156,10 @@ export function PermissionsContent({
                   />
                 ))}
               </div>
+              {/* Read-only by owner decision 2026-11-24: the mark comes with the role. */}
+              {state.data.overrides?.confirmEverySend && (
+                <p className={styles.note}>{t("permissions.confirmEverySend")}</p>
+              )}
             </section>
           </>
         ))}

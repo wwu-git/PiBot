@@ -31,12 +31,14 @@ import {
   dialog,
   MessageChannelMain,
   type MessagePortMain,
+  powerMonitor,
   powerSaveBlocker,
   shell,
 } from "electron";
 import { createUserBrowser } from "../browser-extension/user-browser.ts";
 import { registerHostRpc } from "../host/host-rpc.ts";
 import { createLinkBridge } from "../link-bridge/index.ts";
+import { loginItemSyncEnabled } from "../window/login-item-scope.ts";
 import { createBackgroundControl } from "./background-control.ts";
 import { forkBrainProcess } from "./brain-process.ts";
 import { createBrainWakeBridge } from "./brain-wake-bridge.ts";
@@ -114,6 +116,8 @@ export function startBrainHost(options: BrainHostOptions) {
   let userBrowser: Awaited<ReturnType<typeof createUserBrowser>> | undefined;
   const userBrowserReady = createUserBrowser({
     dataDir: options.dataDir,
+    // Same rule as login items: only the platform default folder acts for the whole account.
+    defaultDataDir: loginItemSyncEnabled({ dev: options.dev, env: options.originalEnv }),
     executable: process.execPath,
     ...(app.isPackaged ? {} : { entry: app.getAppPath() }),
     logger: options.logger,
@@ -147,8 +151,8 @@ export function startBrainHost(options: BrainHostOptions) {
         supported: false,
         extension: "unsupported",
       },
-    register: async (enabled) => {
-      await (await userBrowserReady)?.register(enabled);
+    register: async (enabled, request) => {
+      await (await userBrowserReady)?.register(enabled, request);
     },
   };
   let policy = new RestartPolicy();
@@ -180,6 +184,7 @@ export function startBrainHost(options: BrainHostOptions) {
   const statuses = new EventBuffer(Events);
   let state: EventPayloads["brain.status"]["state"] = "starting";
   let activeRunCount = 0;
+  let liveActivity: EventPayloads["runtime.liveActivity"] = { items: [] };
   let child: Electron.UtilityProcess | undefined;
   let host: ReturnType<typeof registerHostRpc> | undefined;
   let pendingPort: MessagePortMain | undefined;
@@ -221,6 +226,7 @@ export function startBrainHost(options: BrainHostOptions) {
   const status = (next: typeof state, reason?: "database_newer_than_app") => {
     state = next;
     options.onActiveRuns?.(next === "ready" ? activeRunCount : 0);
+    options.onLiveActivity?.(next === "ready" ? liveActivity : { items: [] });
     options.onStatus?.(next, reason);
     if (rendererReady && options.window && !options.window.isDestroyed()) {
       options.window.webContents.send("pibot:status", statuses.append("brain.status", { state }));
@@ -249,6 +255,8 @@ export function startBrainHost(options: BrainHostOptions) {
   const disposePorts = () => {
     activeRunCount = 0;
     options.onActiveRuns?.(0);
+    liveActivity = { items: [] };
+    options.onLiveActivity?.(liveActivity);
     acpOff?.();
     acpOff = undefined;
     acpMainPort?.close();
@@ -308,6 +316,11 @@ export function startBrainHost(options: BrainHostOptions) {
       activeRunCount = count;
       if (state === "ready") options.onActiveRuns?.(count);
     });
+    mainPeer.on("runtime.liveActivity", (value) => {
+      if (stopped || replacing || owner !== epoch || state === "failed") return;
+      liveActivity = value;
+      if (state === "ready") options.onLiveActivity?.(value);
+    });
     pendingPort = business.port1;
     if (options.business) {
       const receive = (event: { data: unknown }) => options.business?.post(event.data);
@@ -322,6 +335,12 @@ export function startBrainHost(options: BrainHostOptions) {
     hostPort = hostChannel.port1;
     host = registerHostRpc(mainPort(hostChannel.port1), {
       storage,
+      memoryDreamActivity: () => {
+        const idleSeconds = powerMonitor.getSystemIdleTime();
+        return Number.isFinite(idleSeconds) && idleSeconds >= 0
+          ? { idleSeconds, supply: options.routines?.powerSupply() ?? "unknown" }
+          : null;
+      },
       remoteKeepAwake: (enabled) =>
         remotePower.request(owner, {
           mode: enabled ? "always" : "never",
@@ -710,6 +729,12 @@ export function startBrainHost(options: BrainHostOptions) {
         throw new Error("brain_unavailable");
       await mainPeer.call("routines.resumeAll", undefined);
     },
+    stageProviderImport(intent: import("@pibot/protocol").ProviderImportIntent) {
+      return requirePeer().call("providerImport.stage", intent, { timeoutMs: 8_000 });
+    },
+    resolveProviderImport(decision: import("@pibot/protocol").ProviderImportDecision) {
+      return requirePeer().call("providerImport.resolve", decision, { timeoutMs: 22_000 });
+    },
     async diagnostics(signal: AbortSignal) {
       return requirePeer().call("diagnostics.snapshot", undefined, { signal, timeoutMs: 5000 });
     },
@@ -752,7 +777,9 @@ export function startBrainHost(options: BrainHostOptions) {
         }
       }
       stopped = true;
-      void userBrowserReady.then((value) => value?.close());
+      // Started now, awaited last: a separate copy removes its own native host manifests before
+      // it exits, without holding up the brain's retirement.
+      const browserClosed = userBrowserReady.then((value) => value?.close()).catch(() => undefined);
       if (!options.storage) storage.dispose();
       remotePower.end();
       options.routines?.end();
@@ -774,6 +801,7 @@ export function startBrainHost(options: BrainHostOptions) {
       toolbars.dispose();
       await connectorImports.dispose();
       logins.clear();
+      await browserClosed;
     },
   };
 }

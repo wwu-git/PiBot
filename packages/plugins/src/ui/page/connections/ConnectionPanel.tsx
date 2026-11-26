@@ -11,6 +11,7 @@ import { ImportedSkillAssignment } from "../ImportedSkillAssignment.tsx";
 import { accessIsOn, toggleConnectionAccess } from "./access-grant.ts";
 import styles from "./connections.module.css";
 import { letterTone, monogram } from "./Faces.tsx";
+import { localText } from "./local-text.ts";
 
 import { WhoCanUse } from "./WhoCanUse.tsx";
 
@@ -69,7 +70,7 @@ export function ConnectionPanel({
     );
   };
   const missingKey = connectors.find(needsKey);
-  const name = summary.name[language];
+  const name = localText(summary.name[language], language);
   return (
     <ConnectorPanel title={name} close={close} busy={action.busy}>
       <div className={styles.panelHead}>
@@ -84,7 +85,7 @@ export function ConnectionPanel({
                   ? "connections.panel.kindPlugin"
                   : "connections.panel.kindMcp",
               ),
-              summary.description[language],
+              localText(summary.description[language], language),
               summary.originTool &&
                 t("connections.skill.from", {
                   tool: toolName[summary.originTool] ?? summary.originTool,

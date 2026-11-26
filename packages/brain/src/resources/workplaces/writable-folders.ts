@@ -1,4 +1,5 @@
-import { sensitiveReadBoundary } from "@pibot/execution";
+// Revalidate writable roots against the owning host’s protected locations.
+import { sensitiveReadBoundary, windowsSystemDrive, windowsSystemTrees } from "@pibot/execution";
 import { nodeFileSystem, protectedPaths } from "@pibot/policy";
 import { RpcError } from "@pibot/protocol-base";
 import { abortable } from "../../core/abort.ts";
@@ -18,6 +19,12 @@ export async function assertWritableFolders(
   const protection = await protectedPaths(
     {
       platform: deps.platform,
+      ...(deps.platform === "win32"
+        ? {
+            windowsSystemDrive: windowsSystemDrive(deps.env),
+            windowsSystemTrees: windowsSystemTrees(deps.env),
+          }
+        : {}),
       home: deps.userHome,
       cwd: home,
       roots: [...paths],

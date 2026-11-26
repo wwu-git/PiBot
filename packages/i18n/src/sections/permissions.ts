@@ -128,6 +128,7 @@ export const permissionsZh = {
   "permissions.windowsAlwaysUnavailable":
     "Windows 命令没有系统隔离，不能设为总是允许；YOLO 自动批准需单独开启",
   "permissions.connectionsAndSending": "连接与发送",
+  "permissions.confirmEverySend": "这个 Bot 每次对外发送都要你确认",
   "approval.connection": "插件",
   "approval.connectedTool": "本次操作",
   "approval.connectionId": "连接 ID",
@@ -339,7 +340,7 @@ export const permissionsZh = {
   "permissions.note.write_file":
     "工作位置内按这里的设置写入；位置外的写入逐次确认，受保护位置仍拒绝。执行端不允许位置外写入；可用的文件检查点可在改动页恢复",
   "permissions.note.web":
-    "每个网站第一次会问你；读取网页时选「一直允许」，这个 Bot 以后读公开网页都不再问（Bot 浏览器、登录、提交表单仍按网站询问）",
+    "访问和读取公开网页默认允许。设为「询问」会按权限提示。每个网站首次自动登录或提交表单仍会问你。",
   "permissions.level.never": "不允许",
   "permissions.level.ask": "询问",
   "permissions.level.always": "总是允许",
@@ -612,6 +613,7 @@ export const permissionsEn: { [K in keyof typeof permissionsZh]: string } = {
   "permissions.windowsAlwaysUnavailable":
     "Windows commands have no system isolation and cannot be set to Always; YOLO auto-approval must be enabled separately",
   "permissions.connectionsAndSending": "Connections and sending",
+  "permissions.confirmEverySend": "This Bot asks you before every send",
   "approval.connection": "Connected app",
   "approval.connectedTool": "This operation",
   "approval.connectionId": "Connection ID",
@@ -837,7 +839,7 @@ export const permissionsEn: { [K in keyof typeof permissionsZh]: string } = {
   "permissions.note.write_file":
     "Writes inside working folders follow this setting. Outside writes ask each time; protected locations remain blocked. Runners cannot write outside working folders. Available file checkpoints can be restored from the changes page",
   "permissions.note.web":
-    "Asks the first time for each site. “Always allow” on a page read lets this Bot read public pages without asking; the Bot browser, logins and form submissions still ask per site",
+    "Visiting and reading public pages are allowed by default. Choose Ask for prompts. The first automatic sign-in or form submission on each site still asks.",
   "permissions.level.never": "Never",
   "permissions.level.ask": "Ask",
   "permissions.level.always": "Always",

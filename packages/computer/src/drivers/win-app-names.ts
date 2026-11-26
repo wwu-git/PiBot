@@ -1,3 +1,4 @@
+// Prove packaged app identities using the host’s actual system package store.
 import { win32 } from "node:path";
 import { windowsPackagedAppId } from "../core/windows-app-id.ts";
 
@@ -19,9 +20,8 @@ interface WindowsAppIdentity {
  * unproven process stays unsupported instead of borrowing another app's grant.
  */
 
-// Only the system-drive package store. The folder is TrustedInstaller-owned, so a path inside it is
-// an OS fact; a lookalike `WindowsApps` folder elsewhere (user-writable drives) is not accepted.
-const PACKAGE_STORE = /^c:\\program files\\windowsapps\\([^\\]+)\\(?:[^\\]+\\)*[^\\]+\.exe$/i;
+// Only the host's Program Files package store. A lookalike `WindowsApps` folder elsewhere (user-writable drives) is not accepted.
+const STORE_IMAGE = /^([^\\]+)\\(?:[^\\]+\\)*[^\\]+\.exe$/i;
 // PackageFullName = Name_Version_Architecture_ResourceId_PublisherId (ResourceId may be empty).
 const PACKAGE_FULL_NAME =
   /^([A-Za-z0-9][A-Za-z0-9.-]{0,49})_\d+(?:\.\d+){3}_[A-Za-z0-9]+_[A-Za-z0-9.-]*_([a-z0-9]{13})$/i;
@@ -31,8 +31,12 @@ function executablePath(launchPath: string): string {
   const quoted = /^"([^"]+)"/.exec(launchPath);
   return quoted?.[1] ?? launchPath;
 }
-export function packageFamilyOfImage(imagePath: string): string | undefined {
-  const store = PACKAGE_STORE.exec(win32.normalize(executablePath(imagePath)));
+export function packageFamilyOfImage(imagePath: string, programFiles?: string): string | undefined {
+  if (!programFiles || !/^[a-z]:[\\/]/i.test(programFiles)) return undefined;
+  const storeRoot = win32.join(programFiles, "WindowsApps") + win32.sep;
+  const image = win32.normalize(executablePath(imagePath));
+  if (!image.toLowerCase().startsWith(storeRoot.toLowerCase())) return undefined;
+  const store = STORE_IMAGE.exec(image.slice(storeRoot.length));
   const parts = store?.[1] ? PACKAGE_FULL_NAME.exec(store[1]) : null;
   return parts ? `${parts[1]}_${parts[2]}`.toLowerCase() : undefined;
 }
@@ -47,8 +51,9 @@ export function packageFamilyOfImage(imagePath: string): string | undefined {
 export function packagedAppIdForImage(
   imagePath: string,
   apps: readonly WindowsAppIdentity[],
+  programFiles?: string,
 ): string | undefined {
-  const family = packageFamilyOfImage(imagePath);
+  const family = packageFamilyOfImage(imagePath, programFiles);
   if (!family) return undefined;
   const ids = packagedFamilyApps(apps, family);
   return ids.size === 1 ? [...ids][0] : undefined;
@@ -69,11 +74,12 @@ function packagedFamilyApps(apps: readonly WindowsAppIdentity[], family: string)
 export function windowsAppId(
   app: WindowsAppIdentity,
   apps: readonly WindowsAppIdentity[] = [],
+  programFiles?: string,
 ): string {
   if (!app.launchPath) return app.name;
   const packaged = windowsPackagedAppId(app.launchPath);
   if (packaged) return packaged;
-  const family = packageFamilyOfImage(app.launchPath);
+  const family = packageFamilyOfImage(app.launchPath, programFiles);
   if (family) {
     const candidates = packagedFamilyApps(apps, family);
     // A package with several apps (or none installed) cannot say which one this process is.
@@ -83,12 +89,15 @@ export function windowsAppId(
 }
 
 /** Exe-name grants cannot distinguish two installations with the same basename. */
-export function uniqueWindowsApps<T extends WindowsAppIdentity>(apps: readonly T[]): T[] {
+export function uniqueWindowsApps<T extends WindowsAppIdentity>(
+  apps: readonly T[],
+  programFiles?: string,
+): T[] {
   const paths = new Map<string, Set<string>>();
   const packaged = new Set<string>();
   for (const app of apps) {
     if (!app.launchPath) continue;
-    const id = windowsAppId(app, apps).toLowerCase();
+    const id = windowsAppId(app, apps, programFiles).toLowerCase();
     // An AUMID is the OS identity itself: its installed row and its running process share it
     // although their paths differ, so path uniqueness only applies to exe-basename ids.
     if (windowsPackagedAppId(id) === id) packaged.add(id);
@@ -98,7 +107,7 @@ export function uniqueWindowsApps<T extends WindowsAppIdentity>(apps: readonly T
   }
   return apps.filter((app) => {
     if (!app.launchPath) return false;
-    const id = windowsAppId(app, apps).toLowerCase();
+    const id = windowsAppId(app, apps, programFiles).toLowerCase();
     return packaged.has(id) || paths.get(id)?.size === 1;
   });
 }
@@ -106,10 +115,11 @@ export function uniqueWindowsApps<T extends WindowsAppIdentity>(apps: readonly T
 export function windowsLaunchPath(
   id: string,
   apps: readonly WindowsAppIdentity[],
+  programFiles?: string,
 ): string | undefined {
   const wanted = id.toLowerCase();
-  const rows = uniqueWindowsApps(apps).filter(
-    (app) => windowsAppId(app, apps).toLowerCase() === wanted,
+  const rows = uniqueWindowsApps(apps, programFiles).filter(
+    (app) => windowsAppId(app, apps, programFiles).toLowerCase() === wanted,
   );
   // A packaged app is launched through its AppsFolder activation, never its store executable.
   return (
@@ -133,11 +143,12 @@ function isPackagedNotepadAlias(name: string, launch: string): boolean {
 export function resolveWindowsAppName(
   name: string,
   apps: WindowsAppIdentity[],
+  programFiles?: string,
 ): string | undefined {
   const requested = name.toLowerCase();
   const absolute = win32.isAbsolute(name);
   const matches = new Set<string>();
-  for (const app of uniqueWindowsApps(apps)) {
+  for (const app of uniqueWindowsApps(apps, programFiles)) {
     const launch = app.launchPath;
     if (!launch) continue;
     const executable = win32.basename(launch).toLowerCase();
@@ -154,7 +165,7 @@ export function resolveWindowsAppName(
         ? isExecutable && win32.isAbsolute(launch) && win32.normalize(name).toLowerCase() === path
         : matchesName
     )
-      matches.add(windowsAppId(app, apps).toLowerCase());
+      matches.add(windowsAppId(app, apps, programFiles).toLowerCase());
   }
   // Rows already unique per id (uniqueWindowsApps); the installed and running rows of one packaged
   // app now agree on its AUMID instead of counting as two candidates.

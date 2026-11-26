@@ -115,6 +115,7 @@ export {
 export { workflowLimits, workflowPriced } from "./runtime/workflows/workflow-budget.ts";
 export {
   folderName,
+  planFolderName,
   resolveWorkflowFolder,
   workflowOutputRoots,
 } from "./runtime/workflows/workflow-folder.ts";

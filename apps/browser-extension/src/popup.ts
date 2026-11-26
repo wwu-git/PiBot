@@ -1,3 +1,4 @@
+// Explains the desktop connection and website access from the extension toolbar.
 interface PopupState {
   connected: boolean;
   siteAccess?: boolean;
@@ -15,7 +16,7 @@ const t = zh
       idle: "现在没有 Bot 在这个浏览器里工作。",
       missingTitle: "没有找到 Pi Bot",
       missingBody:
-        "请安装或更新 Pi Bot（0.0.3 及以上），在 设置 › 浏览器 里选「优先用你的浏览器」，然后重新加载这个扩展。",
+        "请将 Pi Bot 更新到 0.0.4 或更新版本并打开。若改过浏览器偏好，请在 设置 › 浏览器 选「优先用你的浏览器」。",
       closedTitle: "Pi Bot 没有打开",
       closedBody: "打开 Pi Bot 后，Bot 就能在这个浏览器里用你的登录状态工作。",
       bot: "Bot",
@@ -34,7 +35,7 @@ const t = zh
       idle: "No Bot is working in this browser right now.",
       missingTitle: "Pi Bot was not found",
       missingBody:
-        "Install or update Pi Bot (0.0.3 or later), choose “Prefer your browser” in Settings › Browser, then reload this extension.",
+        "Open Pi Bot 0.0.4 or later. If you changed the browser preference, choose “Prefer your browser” in Settings › Browser.",
       closedTitle: "Pi Bot is not open",
       closedBody: "Open Pi Bot and Bots can work in this browser with your sign-ins.",
       bot: "Bot",

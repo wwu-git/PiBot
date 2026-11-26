@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 export type LinuxIsolationFailure =
@@ -16,6 +17,7 @@ export type LinuxIsolationFailure =
 export async function linuxIsolationFailure(
   rg: string,
   diagnostic?: string,
+  searchPath?: string,
 ): Promise<LinuxIsolationFailure> {
   // Synchronous `which` lookups only; this runs once per failed initialization.
   const { SandboxManager } = await import("@anthropic-ai/sandbox-runtime");
@@ -43,7 +45,40 @@ export async function linuxIsolationFailure(
     // Missing on kernels without the Ubuntu AppArmor patch: the restriction cannot be the cause.
     () => false,
   );
-  return restricted ? "linux_userns_restricted" : "sandbox_dependencies_or_runtime_unavailable";
+  // The sysctl alone is not proof: with bubblewrap's own unconfined profile loaded (the remedy
+  // itself), a nested namespace inside bwrap works and the desktop's sandbox check passes, yet a
+  // runner on the same host reported this cause and asked for the profile it already had.
+  return restricted && !(await nestedUserNamespaceWorks(searchPath))
+    ? "linux_userns_restricted"
+    : "sandbox_dependencies_or_runtime_unavailable";
+}
+
+/**
+ * The step the restriction blocks: a user namespace created inside bubblewrap, where SRT's
+ * seccomp helper makes its own. Fixed arguments, no user input, a short deadline.
+ */
+function nestedUserNamespaceWorks(searchPath = "/usr/bin:/bin") {
+  return new Promise<boolean>((resolve) => {
+    execFile(
+      "bwrap",
+      [
+        "--unshare-user",
+        "--ro-bind",
+        "/",
+        "/",
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
+        "--",
+        "unshare",
+        "--user",
+        "true",
+      ],
+      { timeout: 5000, env: { PATH: searchPath, LC_ALL: "C" } },
+      (error) => resolve(!error),
+    );
+  });
 }
 
 /** Only fixed, recognized failure text survives; probe output may contain host paths or secrets. */

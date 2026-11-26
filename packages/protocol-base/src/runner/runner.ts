@@ -1,3 +1,4 @@
+// Define the validated runner RPC and transport contracts.
 import { z } from "zod";
 import { HostComputerMethods } from "../computer/host.ts";
 import { CapabilityManifestSchema, EndpointSessionEvents } from "../tools/endpoint-capabilities.ts";
@@ -569,7 +570,7 @@ export const runnerMethods = {
   },
   // One level of folder names for the desktop's folder chooser (never file contents).
   "runner.folders.list": {
-    params: z.strictObject({ path: AbsolutePathSchema.nullable() }),
+    params: z.strictObject({ path: AbsolutePathSchema.nullable().optional() }),
     result: z.strictObject({
       path: AbsolutePathSchema.nullable(),
       parent: AbsolutePathSchema.nullable(),

@@ -13,6 +13,8 @@
 内存表里，读取时写入临时文件再经真实的 `nodeFileSystem.readScript`（大小与普通文件检查是真的）；
 `routine/*` 的格子末尾是例行任务卡能给出的预授权（`none` / `pinned` / `programs`），
 `routine/script_changed` 是同一脚本内容不变与改动后，原预授权是否还匹配。
+`send_out/bot_*` 是以 Bot 身份发送：记住的发送对象或 YOLO 会放行；带 `confirmEverySend` 的 Bot（`send_out/*_confirm_every`）
+在 ask / always 档都必须是 `ask:bot_send_confirmation`，且不能提供「记住」。
 `script/c1_*`…`script/low_*`、`script/n1_*`、`script/n4_*` 和 `routine/m1_*` 是 2026-11-20 三轮安全审查的复现：在 ask 档必须是
 `ask`、预授权必须是 `none`；`script/c2_python_c_isolated` / `_clean` 是对照（`-I` 或干净的 cwd 仍可放行）。
 目录列表（Python 同名模块检查）也来自内存表。

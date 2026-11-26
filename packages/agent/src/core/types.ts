@@ -1,3 +1,4 @@
+// Define the SDK-neutral contracts used by the agent and its callers.
 import type {
   AgentErrorCode,
   CustomModel,
@@ -81,6 +82,15 @@ export interface OpenSessionOptions {
   };
 }
 
+export interface ModelRequestMetrics {
+  startedAt: number;
+  provider: string;
+  api: string;
+  usage?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  /** Omitted when the HTTP request body could not be observed. */
+  cacheFields?: string[];
+}
+
 /** One record for every provider stream, including SDK context compaction. No message content. */
 export interface AgentRequestObserver {
   beforeRequest(input: {
@@ -99,6 +109,7 @@ export interface AgentRequestObserver {
   }): void;
   /** One content-free prompt-cache line per settled conversation request. */
   cacheDiagnostic?(line: CacheDiagnostic): void;
+  metrics?(request: ModelRequestMetrics): void;
 }
 
 /**
@@ -313,10 +324,14 @@ export interface SkillDraftRequest {
 /** Conversation text or a note catalog, already redacted by brain. */
 export interface MemoryDraftRequest {
   text: string;
+  /** Explicit import distillation uses the local-only Ollama transport, with no model fallback. */
+  useLocalOllama?: true;
   /** Replaces the extraction instruction; both share the same model and cost path. */
   instruction?: string;
   model: { provider: string; id: string };
   signal: AbortSignal;
+  /** Dream can restrict the selected generation route to a literal loopback endpoint. */
+  localOnly?: true;
   /** Remaining shared background allowance; checked after selecting the actual model. */
   budget?: { tokens: number; costUsd: number };
   /** Includes failed/truncated responses; never contains model text. */
@@ -560,6 +575,11 @@ export interface ContextEstimate {
 export interface AgentRuntime {
   /** Loads the pi SDK ahead of the first model operation; safe to call repeatedly. */
   preloadSdk?(): Promise<void>;
+  /**
+   * Evaluates the SDK on this thread now (after the startup admission window), so the first model
+   * operation does not; "already_loaded" when something loaded it first.
+   */
+  loadSdkWhenIdle?(): Promise<"loaded" | "already_loaded">;
   /** Reserve a startup window for local RPCs before synchronous SDK evaluation. */
   deferSdk?(milliseconds: number): void;
   compactHistory?(
@@ -687,15 +707,31 @@ export type AuxiliaryPurpose =
   | "workflow"
   | "web_page";
 
+/**
+ * Downloads an image link an image service returned instead of bytes. The link is supplier
+ * output: the host refuses private, loopback and metadata destinations (also after DNS) and
+ * redirects, bounds size and time, and sends no credentials.
+ */
+export type ImageUrlFetch = (input: {
+  url: string;
+  signal: AbortSignal;
+}) => Promise<{ data: Uint8Array }>;
+
 export interface AgentRuntimeDeps {
   network?: AgentNetwork;
+  /** Without it, an image service's link results fail with `image_url_unavailable`. */
+  fetchImageUrl?: ImageUrlFetch;
   auth?: AgentAuthPorts;
   dataDir: string;
   hasApiKey(providerId: string): boolean;
   getApiKey(providerId: string): Promise<string | undefined>;
   customProviders(): CustomProviderConfig[];
+  /** Model ids the user added to built-in providers by hand, keyed by provider id. */
+  addedModels?(): Readonly<Record<string, readonly string[]>>;
   auxiliaryModel?(): { provider: string; id: string } | null | undefined;
   auxiliaryModelFallback?(purpose: AuxiliaryPurpose, code: AgentErrorCode): void;
+  /** A failed background compile-cache warm-up, as a fixed reason code. */
+  sdkWarmupFailed?(code: string): void;
   /** Persist a provider-advertised limit; never overrides a user-specified model field. */
   onCustomModelLimit?(
     providerId: string,

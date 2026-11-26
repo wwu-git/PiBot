@@ -1,4 +1,4 @@
-import { WINDOWS_ORDINARY_COMMAND } from "./confirmation-reasons.ts";
+import { BOT_SEND_CONFIRMATION_REASON, WINDOWS_ORDINARY_COMMAND } from "./confirmation-reasons.ts";
 import { yoloMustAsk } from "./connection-confirmation.ts";
 import { createPolicyTrace, explainPolicyResult } from "./explain.ts";
 import type { PolicyResult } from "./types.ts";
@@ -8,7 +8,8 @@ export const YOLO_REASON = "yolo";
 
 /**
  * Inside a conversation with YOLO on, a decision that would ask is allowed instead (except
- * sending as the user and paid image generation, which keep their card). A deny
+ * sending as the user, a Bot that confirms every send, and paid image generation, which keep their
+ * card). A deny
  * (never level, hard boundaries, blocklists, private addresses, read-only roots) stays a deny,
  * and nothing becomes rememberable: YOLO writes no grant and no routine preauthorization.
  * Dangerous calls keep asking, including when YOLO releases already pending cards; install,
@@ -28,6 +29,7 @@ export function applyYolo(
     result.decision !== "ask" ||
     result.risk === "danger" ||
     result.reason === "user_send_confirmation" ||
+    result.reason === BOT_SEND_CONFIRMATION_REASON ||
     (yoloMustAsk(result) && !explicitUnisolated) ||
     // Owner decision 2026-10-23: spending money is never implied by "stop asking"; only a
     // remembered paid_image grant or a routine pre-approval skips the paid card.

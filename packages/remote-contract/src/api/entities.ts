@@ -102,6 +102,8 @@ export const PairStatusSchema = z.strictObject({
     .string()
     .regex(/^\d{6}$/)
     .optional(),
+  /** While waiting: why this computer cannot reach the relay the code points to. */
+  relayProblem: z.enum(["unreachable", "tls", "certificate"]).optional(),
 });
 export const RemoteSessionUpdateSchema = z.strictObject({
   wake: z.boolean().optional(),

@@ -85,6 +85,10 @@ export interface CapabilityContext {
      * thinking fit, `bots.changed`), for capabilities that change a Bot on the user's request.
      */
     update(params: KernelMethodParams["bots.update"]): Promise<Bot>;
+    /** The same as the `bots.create`, `bots.archive` and `bots.restore` RPCs. */
+    create(params: KernelMethodParams["bots.create"]): Promise<Bot>;
+    archive(botId: string): Promise<{ ok: true }>;
+    restore(botId: string): Promise<Bot>;
     /** The same as the `topics.create` RPC (new private topic, made current). */
     newTopic(botId: string): Promise<{ id: string }>;
     /**
@@ -112,6 +116,21 @@ export interface CapabilityContext {
     ): Promise<void>;
     update(params: KernelMethodParams["groups.update"]): Promise<Group>;
     addMember(groupId: string, botId: string): Promise<Group>;
+    /** The same as the `groups.create` / `removeMember` / `archive` / `restore` RPCs. */
+    create(params: KernelMethodParams["groups.create"]): Group;
+    removeMember(groupId: string, botId: string): Promise<Group>;
+    archive(groupId: string): Promise<Group | { ok: true }>;
+    restore(groupId: string): Promise<Group | { ok: true }>;
+    /**
+     * A message into a group topic through the same admission as a person's group message;
+     * `display` labels it (a Pi dispatch), the text is what the coordinator reads.
+     */
+    send(
+      groupId: string,
+      conversationId: string,
+      text: string,
+      display: import("../conversations/chat/user-message-display.ts").UserMessageDisplay,
+    ): Promise<KernelMethodResults["chat.send"]>;
     /**
      * The same as `groups.topics.create` with the current folders kept; refused while the
      * group is busy (the caller then stays in the current topic).
@@ -197,6 +216,11 @@ export interface CapabilityContext {
   /** Executes a capability tool by name once policy allowed it. Kernel names are rejected. */
   readonly tools: {
     executor(tool: string, run: ToolExecutor): () => void;
+    /**
+     * What a capability tool's approval card says (title, one lead sentence and labelled rows)
+     * in each language. Display only: the decision stays with policy and the call itself.
+     */
+    card(tool: string, describe: ToolCardDescriber): () => void;
     /** Explicit, typed allowlist for kernel tools whose implementation moved to a capability. */
     delegateKernel(
       tool: import("../runtime/tools/tools.ts").DelegatedKernelToolName,
@@ -377,6 +401,23 @@ export interface UnattendedRunOwner {
 }
 
 /** Runs a tool call a capability owns; returns what the model sees. */
+/** Card text for one call; must not read files or the network (it runs while the card opens). */
+export type ToolCardDescriber = (
+  context: ToolRunContext,
+  input: Record<string, unknown>,
+  language: "zh" | "en",
+) => {
+  title: string;
+  lead?: string;
+  facts: import("@pibot/protocol-base").ApprovalFact[];
+  /**
+   * The call cannot succeed as written (an unknown Bot, a member that does not exist): no card is
+   * shown and the model gets this reason instead, so the person is never asked to approve a step
+   * that would only fail.
+   */
+  invalid?: { code: string; text: string };
+};
+
 export type ToolExecutor = (
   context: ToolRunContext,
   call: LocalToolCall,

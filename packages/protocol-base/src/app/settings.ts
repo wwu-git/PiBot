@@ -7,10 +7,14 @@ import {
   OutsideCommandPatternsSchema,
 } from "../execution/sandbox-block.ts";
 import { DefaultModelSchema } from "../providers/providers.ts";
+import { LiveIslandContentSchema, LiveIslandKindSchema } from "./live-island.ts";
 
 export { DesktopStateSchema } from "./desktop-state.ts";
 
 const name = z.string().min(1);
+/** Reading size of the conversation view only; the rest of the app keeps its own type scale. */
+export const ChatFontSizeSchema = z.enum(["small", "medium", "large"]);
+export type ChatFontSize = z.infer<typeof ChatFontSizeSchema>;
 export const SettingsSchema = z.strictObject({
   personalTodoView: z.enum(["list", "calendar"]).optional(),
   /** Open / Completed filter shared by the list and the calendar; at least one stays on. */
@@ -35,6 +39,9 @@ export const SettingsSchema = z.strictObject({
     .optional(),
   backgroundCommandLimitMinutes: z.number().int().min(30).max(1440).optional(),
   /** Hard daily budget for background memory extraction across all Bots. */
+  memoryDreamEnabled: z.boolean().optional(),
+  memoryDreamLocalOnly: z.boolean().optional(),
+  memoryDreamCostUsd: z.number().min(0).max(100).optional(),
   memoryExtractionDailyCostUsd: z.number().min(0).max(100).optional(),
   /**
    * The fallback budget for models without a catalog price (custom providers, local
@@ -43,6 +50,22 @@ export const SettingsSchema = z.strictObject({
   memoryExtractionDailyTokens: z.number().int().min(0).max(100_000_000).optional(),
   language: z.enum(["system", "zh", "en"]),
   theme: z.enum(["system", "light", "dark"]),
+  /** Optional so a brain or settings row written before the option still parses. */
+  chatFontSize: ChatFontSizeSchema.optional(),
+  /** Live island (desktop only). All optional so rows written before it still parse. */
+  liveIsland: z.boolean().optional(),
+  liveIslandContent: LiveIslandContentSchema.optional(),
+  /**
+   * Ignored: the island now shows only while Pi Bot is not in front. Kept so a row written by a
+   * development build that still offered "always" parses.
+   */
+  liveIslandWhen: z.enum(["always", "background"]).optional(),
+  /** Which kinds of work appear; an empty list shows nothing. */
+  liveIslandKinds: z
+    .array(LiveIslandKindSchema)
+    .max(4)
+    .refine((kinds) => new Set(kinds).size === kinds.length)
+    .optional(),
   onboardingCompleted: z.boolean(),
   openAtLogin: z.boolean(),
   showTrayIcon: z.boolean(),

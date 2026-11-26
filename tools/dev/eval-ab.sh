@@ -6,7 +6,7 @@
 #   bash tools/dev/eval-ab.sh --reinstall  # 改动前那份代码重新 pnpm install
 #   bash tools/dev/eval-ab.sh --skip-after # 只跑改动前
 #
-# 需要环境变量 PIBOT_EVAL_API_KEY（或 OPENROUTER_API_KEY）。密钥不进命令行、不进日志。
+# 需要环境变量 PIBOT_EVAL_API_KEY。密钥不进命令行、不进日志。
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -43,9 +43,9 @@ for arg in "$@"; do
   esac
 done
 
-KEY=${PIBOT_EVAL_API_KEY:-${OPENROUTER_API_KEY:-}}
+KEY=${PIBOT_EVAL_API_KEY:-}
 if [ -z "$KEY" ]; then
-  echo "缺少密钥：先 export PIBOT_EVAL_API_KEY=...（或 OPENROUTER_API_KEY）" >&2
+  echo "缺少密钥：先 export PIBOT_EVAL_API_KEY=..." >&2
   exit 1
 fi
 export PIBOT_EVAL_API_KEY="$KEY"
@@ -155,7 +155,7 @@ if [ "$SKIP_BEFORE" = 0 ]; then
     safe_rm "$BEFORE_DIR/apps/cli"
     cp -R "$ROOT/apps/cli" "$BEFORE_DIR/apps/cli"
     mkdir -p "$BEFORE_DIR/tools/dev"
-    cp "$ROOT/tools/dev/eval.ts" "$ROOT/tools/dev/eval-suite.json" "$ROOT/tools/dev/process.ts" \
+    cp "$ROOT/tools/dev/eval.ts" "$ROOT/tools/dev/eval-report.ts" "$ROOT/tools/dev/eval-suite.json" "$ROOT/tools/dev/process.ts" \
       "$BEFORE_DIR/tools/dev/"
     # The cleanup above keeps only the root node_modules; workspace packages lose theirs with the
     # rest of apps/ and packages/, so a missing package node_modules also means "install again".

@@ -107,6 +107,9 @@ Plugins made by Forge must declare `"pibotApp": true`. Pi Bot shows them as appl
 `userConfig` 支持 `options`（双语选择项）和 `visibleWhen`（按另一个字段的值显示）。互斥登录方式应使用条件显示，并让当前分支的凭据字段设为 `required`；所有字段都应提供用户可读的双语标题和补充说明。敏感字段只是由插件声明所需的凭据类型；`plugin_install` 只接受非敏感配置，实际密钥必须让用户到「连接 → 访问令牌」配置，不把内部环境变量名直接展示给用户。
 `userConfig` supports `options` (bilingual choices) and `visibleWhen` (show a field when another field has a value). For mutually exclusive login methods, use conditional visibility and make the active branch's credential fields `required`; every field should have a human-readable bilingual title and setup guidance. Sensitive fields declare what the plugin needs; `plugin_install` accepts only nonsensitive settings, while the user configures the actual credential under Connections → Access tokens. Do not expose internal environment names as user copy.
 
+`title`、`description` 和选项的 `label` 可以写成「中文 / English」，也可以写成 `{ "zh": "个人访问令牌", "en": "Personal access token" }`；Pi Bot 按界面语言只显示一种。工具可以在 MCP 的 `title`（或 `annotations.title`）里给出给人看的名字，同样支持「中文 / English」；没有时 Pi Bot 把工具名转成词组显示。
+`title`, `description` and option `label`s may be "中文 / English" or `{ "zh": "…", "en": "…" }`; Pi Bot shows the one matching the UI language. Give tools a human name in MCP `title` (or `annotations.title`), also "中文 / English" if you like; without one Pi Bot turns the tool name into words.
+
 `.mcp.json`:
 
 ```json

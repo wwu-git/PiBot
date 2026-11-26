@@ -73,6 +73,9 @@ async function previewResult(
             components: preview.plugin.components,
             config: preview.plugin.config,
             skillCount: preview.plugin.skills.length,
+            ...(preview.plugin.applicationCard
+              ? { application: preview.plugin.applicationCard }
+              : {}),
           },
         }
       : {}),

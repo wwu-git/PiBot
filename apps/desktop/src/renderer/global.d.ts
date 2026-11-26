@@ -4,6 +4,7 @@ import type {
   DesktopUpdateAction,
   DesktopUpdateState,
   IndependentBackgroundState,
+  ProviderImportDecision,
 } from "@pibot/protocol";
 
 declare global {
@@ -24,7 +25,10 @@ declare global {
     };
     readonly pibot: {
       readonly platform: NodeJS.Platform;
+      /** Whether this desktop session can show the live island (Wayland cannot place it). */
+      readonly liveIsland?: import("../shared/live-island.ts").IslandSupport;
       restartApp(): Promise<{ status: "requested" }>;
+      resolveProviderImport(decision: ProviderImportDecision): Promise<{ ok: true }>;
       readonly background: {
         state(): Promise<DesktopBackgroundResults["background.state"]>;
         restart(): Promise<DesktopBackgroundResults["background.restart"]>;

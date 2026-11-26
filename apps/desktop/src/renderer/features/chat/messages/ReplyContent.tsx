@@ -14,12 +14,15 @@ export function ReplyContent({
   botId,
   mentionNames,
   streaming,
+  paused = false,
   generating,
 }: {
   message: Message;
   botId?: string;
   mentionNames?: readonly string[];
   streaming: boolean;
+  /** The run waits for the person (a card): the text is complete for now, no caret. */
+  paused?: boolean;
   generating: string;
 }) {
   const t = useT();
@@ -71,7 +74,7 @@ export function ReplyContent({
       <div className={chatStyles.bubbleRow}>
         <div className={chatStyles.bubble}>
           {markdown(current, message.status !== "streaming")}
-          {streaming && (
+          {streaming && !paused && (
             <span className={chatStyles.cursor} role="status" aria-label={generating} />
           )}
         </div>

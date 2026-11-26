@@ -1,0 +1,15 @@
+/*
+ * The default Pi's cards (approved look 2026-11-24): lead, rows, the "don't ask again" box and the
+ * buttons share the facts' 16px inset, with no rule between the rows and the choices.
+ */
+.lead.lead {
+  margin: 0;
+  padding: 12px 16px 10px;
+}
+.choices.choices {
+  border-top: none;
+  padding-top: 2px;
+}
+.choices .check {
+  margin: 0;
+}

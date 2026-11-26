@@ -1,76 +1,81 @@
 import { chatReadCache } from "@pibot/client-core";
-import { useRpc, useT } from "@pibot/renderer-kit";
+import { ImportSourceSchema, type MethodResults } from "@pibot/protocol";
+import { type Peer, useRpc, useT } from "@pibot/renderer-kit";
 import { routineTopicTitle } from "@pibot/routines/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
-/** Topic metadata has no get method; page within the existing bounded lookup and cancel on leave. */
-export function useTopicTitle(botId: string, conversationId: string | undefined, draft: boolean) {
+type Metadata = NonNullable<MethodResults["topics.metadata"]>;
+const previewKey = (botId: string | undefined, topicId: string | undefined) =>
+  JSON.stringify(["topic-title", botId, topicId]);
+
+export function rememberTopicTitle(
+  peer: Peer,
+  botId: string,
+  topic: MethodResults["topics.switch"],
+) {
+  const { title, routineId, readOnly, importSource } = topic;
+  chatReadCache(peer).rememberPreview(previewKey(botId, topic.id), {
+    title,
+    routineId,
+    readOnly: !!readOnly,
+    importSource,
+  } satisfies Metadata);
+}
+
+export function importedTopicLabel(t: ReturnType<typeof useT>, value: string | undefined) {
+  const source = ImportSourceSchema.safeParse(value);
+  return source.success && source.data !== "fixture"
+    ? t("conversationImport.topicSource", { source: t(`conversationImport.source.${source.data}`) })
+    : t("conversationImport.topicReadOnly");
+}
+
+export function useTopicTitle(
+  botId: string | undefined,
+  conversationId: string | undefined,
+  draft: boolean,
+) {
   const { peer } = useRpc();
   const t = useT();
   const key = JSON.stringify([botId, conversationId, draft]);
   const reads = peer ? chatReadCache(peer) : undefined;
-  const previewKey = JSON.stringify(["topic-title", botId, conversationId]);
-  const [value, setValue] = useState<{ peer: typeof peer; key: string; title: string }>();
-  const [error, setError] = useState(false),
-    [revision, setRevision] = useState(0);
-  // A scheduled task's topic is shown under the task's name (「调度任务：xxxx」).
-  const shown = useCallback(
-    (topic: { title?: string | null; routineId?: string | null }) =>
-      topic.routineId ? routineTopicTitle(t, topic.title ?? "") : (topic.title ?? ""),
-    [t],
-  );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: revision retries or invalidates the same scoped metadata.
+  const [revision, setRevision] = useState(0);
+  const [value, setValue] = useState<{
+    peer: Peer;
+    key: string;
+    topic: MethodResults["topics.metadata"];
+  }>();
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: revisions refresh the same peer and topic.
   useEffect(() => {
-    if (!peer || draft || !conversationId) return;
+    if (!peer || !botId || draft || !conversationId) return;
     const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setError(true);
-      controller.abort();
-    }, 30000);
-    setError(false);
     const off = peer.on("sidebar.changed", (event) => {
       if (event.conversationKey === `dm:${botId}`) setRevision((value) => value + 1);
     });
-    void (async () => {
-      let before: string | undefined;
-      for (let pageNumber = 0; pageNumber < 25; pageNumber++) {
-        const page = await peer.call(
-          "topics.list",
-          { botId, before, limit: 200 },
-          { signal: controller.signal, timeoutMs: 10000 },
-        );
-        controller.signal.throwIfAborted();
-        for (const topic of page.slice(0, 8).toReversed())
-          if (topic.botId === botId && topic.kind === "dm")
-            reads?.rememberPreview(JSON.stringify(["topic-title", botId, topic.id]), shown(topic));
-        const found = page.find(
-          (topic) => topic.id === conversationId && topic.botId === botId && topic.kind === "dm",
-        );
-        if (found) {
-          reads?.rememberPreview(previewKey, shown(found));
-          setValue({ peer, key, title: shown(found) });
-          return;
-        }
-        const next = page.at(-1)?.id;
-        if (page.length < 200 || !next || next === before) break;
-        before = next;
-      }
-      throw new Error("Topic metadata unavailable");
-    })()
-      .catch(() => {
-        if (!controller.signal.aborted) setError(true);
-      })
-      .finally(() => clearTimeout(timer));
+    const accept = (topic: MethodResults["topics.metadata"]) => {
+      if (!controller.signal.aborted) setValue({ peer, key, topic });
+    };
+    void peer
+      .call("topics.metadata", { botId, topicId: conversationId }, { signal: controller.signal })
+      .then(accept, () => accept(null));
     return () => {
       controller.abort();
-      clearTimeout(timer);
       off();
     };
-  }, [peer, botId, conversationId, draft, key, revision, reads, previewKey, shown]);
+  }, [peer, botId, conversationId, draft, key, revision]);
+  const current = value?.peer === peer && value?.key === key ? value : undefined;
+  const metadata = current?.topic ?? (value?.key === key && !current ? value.topic : undefined);
+  const label = metadata ?? reads?.preview<Metadata>(previewKey(botId, conversationId));
   return {
-    title:
-      value?.peer === peer && value?.key === key ? value.title : reads?.preview<string>(previewKey),
-    error,
+    title: label
+      ? label.routineId
+        ? routineTopicTitle(t, label.title ?? "")
+        : (label.title ?? "")
+      : undefined,
+    readOnly: !!label?.readOnly,
+    importSource: label?.importSource,
+    locked: !!conversationId && !draft && current?.topic?.readOnly !== false,
+    error: current?.topic === null,
     retry: () => setRevision((value) => value + 1),
   };
 }

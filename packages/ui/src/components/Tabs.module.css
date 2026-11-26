@@ -1,0 +1,61 @@
+/* Equal tabs with a sliding selection block. */
+.tabs {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(max-content, 1fr);
+  gap: 3px;
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--hover);
+}
+.tabs::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px - (var(--seg-count) - 1) * 3px) / var(--seg-count));
+  border-radius: var(--radius-pill);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transform: translateX(calc(var(--seg-index) * (100% + 3px)));
+  transition: transform 280ms var(--ease-out);
+}
+.tab {
+  font: inherit;
+  font-size: 13.5px;
+  min-height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text2);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab:hover {
+  color: var(--text);
+}
+.tab[aria-selected="true"] {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+.tab:focus-visible {
+  outline: 2px solid var(--prim);
+  outline-offset: 2px;
+}
+.count {
+  font-size: 12.5px;
+  margin-inline-start: 5px;
+  color: var(--text2);
+  font-weight: 400;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs::before {
+    transition: none;
+  }
+}

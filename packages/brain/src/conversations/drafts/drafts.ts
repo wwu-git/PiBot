@@ -13,7 +13,7 @@ import {
 } from "../../runtime/tools/connectors/connector-tools.ts";
 import { routineOperationHash } from "../../runtime/unattended/operation.ts";
 import { CalendarDirectory } from "./calendar-directory.ts";
-import { evaluateDraft } from "./draft-authorization.ts";
+import { confirmsEverySend, evaluateDraft } from "./draft-authorization.ts";
 import { canonicalDraftValue, draftCallDigest, fail, makeDraft } from "./draft-content.ts";
 import { draftContext } from "./draft-context.ts";
 import { resolveDraft } from "./draft-resolution.ts";
@@ -227,8 +227,13 @@ export class DraftService {
       );
       if (name) payload.calendarPresentation.name = this.local.deps.redactor.redact(name);
     }
+    // A Bot that confirms every send offers nothing to remember on its card.
+    const confirmEvery = confirmsEverySend(this.local, context.botId);
+    if (confirmEvery) draft.canRememberTarget = false;
     draft.canRememberTool =
-      draft.identity === "bot" && connectionToolRememberable(this.local, prepared.connector.id);
+      !confirmEvery &&
+      draft.identity === "bot" &&
+      connectionToolRememberable(this.local, prepared.connector.id);
     if (gate?.capabilityConnector) {
       payload.capabilityId = gate.capabilityConnector.capabilityId;
       payload.capabilityImpl =
@@ -530,7 +535,9 @@ export class DraftService {
       this.local.shutdown.signal.throwIfAborted();
       const page = this.repo.list({ before, limit: 200 });
       for (const row of page) {
-        if (row.draft.identity !== "bot") continue;
+        // Turning YOLO on must not send for a Bot that confirms every send: leave its card
+        // waiting for the person (an automatic resolve would discard it instead).
+        if (row.draft.identity !== "bot" || confirmsEverySend(this.local, row.botId)) continue;
         const stored = this.repo.get(row.approvalId);
         if (!stored) continue;
         try {

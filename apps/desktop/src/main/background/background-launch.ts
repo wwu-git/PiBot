@@ -161,7 +161,7 @@ export async function launchBackground(options: {
   const ownerDead = (descriptor: { pid: number; utilityPid: number | null }) =>
     !processAlive(descriptor.pid) &&
     (descriptor.utilityPid === null || !processAlive(descriptor.utilityPid));
-  const missingWindowsListener = (error: unknown) =>
+  const missingWindowsListener = (error: unknown): error is WindowsSecurityError =>
     error instanceof WindowsSecurityError &&
     error.reason === "security_rejected" &&
     error.check === "listener_missing";
@@ -210,6 +210,7 @@ export async function launchBackground(options: {
   // process's PowerShell cold start (bounded on its own), which on a busy machine used up the
   // whole budget before an owner was even spawned (VM acceptance 2026-11-11).
   deadline = Date.now() + CONNECT_BUDGET_MS;
+  let lastListenerFailure: WindowsSecurityError | undefined;
   try {
     if (options.retiringPid !== undefined) await waitRetiring(options.retiringPid);
     for (;;) {
@@ -217,6 +218,7 @@ export async function launchBackground(options: {
       // fails on the plain budget.
       if (Date.now() >= deadline && !extendForLiveChild()) break;
       options.signal?.throwIfAborted();
+      lastListenerFailure = undefined;
       // Messages and close of a candidate reach the GUI only once it is handed over: a retiring
       // owner's connection is dropped here, and its close must not look like a GUI disconnect.
       let accepted = false;
@@ -329,6 +331,7 @@ export async function launchBackground(options: {
             () => undefined,
           );
           if (descriptor && !ownerDead(descriptor)) {
+            if (missingWindowsListener(error)) lastListenerFailure = error;
             previousOwner = descriptor.pid === child.pid ? undefined : descriptor.pid;
             options.progress?.("retry");
             await wake.wait(watcher ? 500 : 100, options.signal);
@@ -366,11 +369,14 @@ export async function launchBackground(options: {
         // While it swaps the claim file, the private-file check of a half-written descriptor can
         // fail too (seen as check "unknown" at 10:06:42 on the test machine): any Windows security
         // rejection is "still starting" while our own child lives, and nothing is trusted from it.
+        const liveClaimMissingListener =
+          windows && missingWindowsListener(error) && descriptor && !ownerDead(descriptor);
         if (
           windows &&
           ((child && childExit === undefined && error instanceof WindowsSecurityError) ||
-            (missingWindowsListener(error) && descriptor && !ownerDead(descriptor)))
+            liveClaimMissingListener)
         ) {
+          if (liveClaimMissingListener) lastListenerFailure = error;
           if (descriptor && descriptor.pid !== child?.pid) previousOwner = descriptor.pid;
           options.progress?.("retry");
           await wake.wait(watcher ? 500 : 100, options.signal);
@@ -437,7 +443,8 @@ export async function launchBackground(options: {
       connection.close();
       await waitRetiring(connection.descriptor.pid);
     }
-    throw new Error("background_launch_timeout");
+    // If the last attempt still refused a live claim, preserve the listener error for the GUI.
+    throw lastListenerFailure ?? new Error("background_launch_timeout");
   } finally {
     watcher?.close();
   }

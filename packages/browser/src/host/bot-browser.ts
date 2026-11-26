@@ -86,6 +86,7 @@ import { firefoxUserAgent, type UserAgentMetadata } from "./login/google-compat.
 import type { Keyframes } from "./page/keyframes.ts";
 import { Recording } from "./page/recording.ts";
 import type { BrowserWindow, Rectangle, Session } from "./platform.ts";
+import { PrivateNetworkTransport } from "./private-network/transport.ts";
 import { readSleep, type Sleep } from "./sleep.ts";
 import type { BotTab, TabEvents } from "./tab.ts";
 import type { BotBrowserOptions, BrowserFrame, BrowserIdentity } from "./types.ts";
@@ -132,6 +133,7 @@ export class BotBrowser {
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private queue: Promise<unknown> = Promise.resolve();
   private proxyKey: string | undefined;
+  private readonly privateTransport: PrivateNetworkTransport;
   private readonly removeRules: () => void;
   private readonly removeHeaders: () => void;
   /** The Firefox identity used on Google's hosts while the Bot's switch is on. */
@@ -172,6 +174,7 @@ export class BotBrowser {
     this.sleep = readSleep(dir);
     this.session = options.platform.sessionFromPath(dir);
     this.session.setUserAgent(identity.userAgent, identity.acceptLanguages);
+    this.privateTransport = new PrivateNetworkTransport(this.session, options.privateNetworkDial);
     this.recording = new Recording(
       (event) => options.onRecord?.(botId, event),
       (index) => this.keyframes?.note(index),
@@ -745,6 +748,9 @@ export class BotBrowser {
         owner.running = value;
       },
       serial: owner.serial.bind(owner),
+      get privateTransport() {
+        return owner.privateTransport;
+      },
       get session() {
         return owner.session;
       },

@@ -43,6 +43,7 @@ import {
 } from "./group-workflow-snapshot.ts";
 import { GroupWorkflowStarter } from "./group-workflow-start.ts";
 import { GroupWorkflowStatus } from "./group-workflow-status.ts";
+import { closeStepTasks } from "./group-workflow-step-tasks.ts";
 import { archiveCompletedPlan, clearCompletedPlanPause } from "./group-workflow-todo.ts";
 import {
   unresolvedVerdicts,
@@ -292,6 +293,14 @@ export class GroupWorkflowScheduler implements WorkflowEngine {
       if (definition) this.createDecision(record, definition, state.attempt);
     }
     const verdictProgress = progressOf(record);
+    // The plan waits for the user's answer on its card: nothing is dispatched or replanned.
+    if (verdictProgress.hold) return;
+    // A recheck the program skipped with its repair is fine once the user accepted its review.
+    const accepted = new Set(
+      Object.entries(verdictProgress.verdictRepairs)
+        .filter(([failed]) => verdictProgress.verdictAccepts?.[failed])
+        .map(([, recheck]) => recheck),
+    );
     if (
       this.repo
         .steps(id)
@@ -299,7 +308,8 @@ export class GroupWorkflowScheduler implements WorkflowEngine {
           (state) =>
             state.status === "skipped" &&
             Object.values(verdictProgress.verdictRepairs).includes(state.stepId) &&
-            !verdictProgress.verdictSkips[state.stepId],
+            !verdictProgress.verdictSkips[state.stepId] &&
+            !accepted.has(state.stepId),
         )
     ) {
       this.progress.stop(record, "verdict_recheck_skipped");
@@ -509,6 +519,14 @@ export class GroupWorkflowScheduler implements WorkflowEngine {
       const source = new MessagesRepo(this.service.deps.db).get(record.sourceMessageId);
       if (source) this.service.deps.local.memoryExtraction?.boundary(source.conversationId);
       this.merges.ended(record);
+      // A finished plan leaves no attempt's task open (a skipped step's retry once stayed open).
+      closeStepTasks(
+        this.service,
+        record,
+        states.map((state) => state.stepId),
+        "plan_completed",
+        "system",
+      );
       const completedTodo = completed.todo;
       if (completedTodo) {
         this.service.deps.peer.emit("execution.todo.changed", completedTodo);

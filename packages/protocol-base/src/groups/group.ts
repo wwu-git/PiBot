@@ -117,6 +117,21 @@ export const GroupTaskSchema = z.strictObject({
       waitingForChildren: z.boolean().optional(),
       waitingForTasks: z.boolean().optional(),
       failure: z.strictObject({ runId: IdSchema, code: AgentErrorCodeSchema }).optional(),
+      /**
+       * The latest run stopped because what it read no longer fit its context: `reading` names
+       * the redacted files, and a blocked plan step is named so the task can offer its retry.
+       */
+      stop: z
+        .strictObject({
+          code: z.literal("context_full"),
+          reading: z.string().max(300).optional(),
+          workflowRunId: IdSchema.optional(),
+          stepId: z
+            .string()
+            .regex(/^[A-Za-z0-9_-]{1,40}$/)
+            .optional(),
+        })
+        .optional(),
     })
     .optional(),
   source: z

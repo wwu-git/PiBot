@@ -49,6 +49,9 @@ function utilityPort(port: MessagePortMain): Port {
   };
 }
 
+/** The compile-cache flush waits for this much quiet after the last user request. */
+const CACHE_FLUSH_QUIET_MS = 5_000;
+const CACHE_FLUSH_MAX_WAIT_MS = 10 * 60_000;
 const parent = process.parentPort;
 if (!parent) throw new Error("Brain entry requires a utilityProcess parent");
 export function startBrainProcess(
@@ -110,7 +113,7 @@ export function startBrainProcess(
       value.type === "ui-active" || value.type === "power-snapshot" ? value.type : undefined,
     () => failControl(),
   );
-  const source = new AsyncLocalStorage<"acp" | undefined>();
+  const source = new AsyncLocalStorage<"acp" | "desktop-main" | undefined>();
   const acp = createDesktopAcp(
     utilityPort(acpPort),
     version,
@@ -384,10 +387,33 @@ export function startBrainProcess(
       }),
     );
     parent.postMessage({ type: "ready" });
-    cacheTimer = setTimeout(() => {
+    // Writing the compile cache is one synchronous native call. After a fresh install or update it
+    // writes every module this thread compiled and held the brain for about two seconds, 30 s after
+    // ready, often while the user was typing. It now waits until nobody has used the app for a
+    // few seconds (or flushes anyway after ten minutes; the process also flushes on exit).
+    const flushStarted = performance.now();
+    const flushWhenQuiet = () => {
       if (stopping) return;
+      const quiet = brain?.quietForMs() ?? Number.POSITIVE_INFINITY;
+      if (
+        quiet < CACHE_FLUSH_QUIET_MS &&
+        performance.now() - flushStarted < CACHE_FLUSH_MAX_WAIT_MS
+      ) {
+        cacheTimer = setTimeout(flushWhenQuiet, CACHE_FLUSH_QUIET_MS - quiet + 250);
+        cacheTimer.unref();
+        return;
+      }
+      brain?.markPhase("compile_cache.flush");
+      const began = performance.now();
       try {
         flushCompileCache();
+        logger.info(
+          JSON.stringify({
+            module: "startup",
+            event: "compile_cache_flushed",
+            durationMs: Math.round(performance.now() - began),
+          }),
+        );
       } catch {
         logger.warn(JSON.stringify({ module: "startup", event: "compile_cache_flush_failed" }));
       }
@@ -398,7 +424,8 @@ export function startBrainProcess(
               JSON.stringify({ module: "startup", event: "compile_cache_cleanup_failed" }),
             );
         });
-    }, 30_000);
+    };
+    cacheTimer = setTimeout(flushWhenQuiet, 30_000);
     cacheTimer.unref();
   })().catch((error: unknown) => {
     if (error instanceof Error && error.message === "database_newer_than_app") {

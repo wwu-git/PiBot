@@ -7,6 +7,8 @@ export const AgentErrorCodeSchema = z.enum([
   "image_unsupported",
   // The image service sent nothing back before the generation cap; distinct from a user stop.
   "image_timeout",
+  // The image service answered with a link whose image could not be downloaded or was not an image.
+  "image_url_unavailable",
   "no_model",
   "auth_failed",
   "claude_subscription_unsupported",

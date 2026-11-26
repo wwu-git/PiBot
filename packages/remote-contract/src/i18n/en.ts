@@ -82,6 +82,12 @@ export const remoteEn = {
   "remote.runner.addedNamed": "✓ Added “{name}”",
   "remote.runner.expired": "The code expired. Choose New code to generate another",
   "remote.runner.waiting": "Waiting for runner…",
+  "remote.runner.relayUnreachable":
+    "This computer cannot reach the relay. Check the relay address, port and network; the runner must reach the same relay.",
+  "remote.runner.relayTls":
+    "The encrypted connection to the relay failed (TLS). Check the relay's HTTPS setup.",
+  "remote.runner.relayCertificate":
+    "The relay's certificate is not trusted. If your relay uses its own internal certificate, install its root certificate on this computer.",
   "remote.runner.useLegacy": "Runner already has a code? Enter it",
   "remote.runner.useGenerated": "Use a code from this computer",
   "remote.runner.closeCode": "Close",

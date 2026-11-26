@@ -23,6 +23,22 @@ export async function imageJson(response: Response, signal: AbortSignal): Promis
     await response.body?.cancel();
     throw new AgentError("provider_error");
   }
+  const body = await boundedBody(response, BODY_LIMIT, signal);
+  // Once EOF arrived, validation may preserve a complete paid output for managed retention.
+  // Partial/cancelled bodies still fail JSON/image validation; reads above remain abortable.
+  try {
+    return JSON.parse(body.toString("utf8"));
+  } catch {
+    throw new AgentError("provider_error");
+  }
+}
+
+/** Reads a response body up to `limit` bytes, including chunked bodies with no Content-Length. */
+export async function boundedBody(
+  response: Response,
+  limit: number,
+  signal: AbortSignal,
+): Promise<Buffer> {
   if (!response.body) throw new AgentError("provider_error");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -40,19 +56,13 @@ export async function imageJson(response: Response, signal: AbortSignal): Promis
       const part = await reader.read();
       if (part.done) break;
       bytes += part.value.byteLength;
-      if (bytes > BODY_LIMIT) {
+      if (bytes > limit) {
         await reader.cancel();
         throw new AgentError("provider_error");
       }
       chunks.push(part.value);
     }
-    // Once EOF arrived, validation may preserve a complete paid output for managed retention.
-    // Partial/cancelled bodies still fail JSON/image validation; reads above remain abortable.
-    try {
-      return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-    } catch {
-      throw new AgentError("provider_error");
-    }
+    return Buffer.concat(chunks);
   } finally {
     signal.removeEventListener("abort", stop);
     await cancelling;
@@ -101,17 +111,27 @@ export function checkedImage(data: string, mimeType?: string): ImageContent {
   if (!parsed.success) throw new AgentError("provider_error");
   return parsed.data;
 }
-const item = z.object({ b64_json: z.string(), media_type: z.string().optional() });
+// Some OpenAI-compatible services answer with a link instead of bytes; the caller downloads it.
+const item = z.union([
+  z.object({ b64_json: z.string(), media_type: z.string().optional() }),
+  z.object({ url: z.string().min(1).max(8192) }),
+]);
 const envelope = z.object({
   data: z.array(item).min(1).max(MAX_ATTACHMENTS),
   usage: z.unknown().optional(),
 });
-export function standardImages(value: unknown) {
+export async function standardImages(
+  value: unknown,
+  download: (url: string) => Promise<ImageContent>,
+) {
   const parsed = envelope.safeParse(value);
   if (!parsed.success) throw new AgentError("provider_error");
-  return {
-    images: parsed.data.data.map((entry) => checkedImage(entry.b64_json, entry.media_type)),
-    text: "",
-    usage: imageUsage(parsed.data.usage),
-  };
+  const images: ImageContent[] = [];
+  for (const entry of parsed.data.data)
+    images.push(
+      "b64_json" in entry
+        ? checkedImage(entry.b64_json, entry.media_type)
+        : await download(entry.url),
+    );
+  return { images, text: "", usage: imageUsage(parsed.data.usage) };
 }

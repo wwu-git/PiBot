@@ -23,7 +23,10 @@ export function MemoryEntry({
   const t = useT();
   const [editing, setEditing] = useState<Memory>();
   const [details, setDetails] = useState(false);
-  const unused = Date.parse(memory.lastUsedAt ?? memory.createdAt) < Date.now() - 90 * 86400_000;
+  const metrics = presentation?.recallMetrics;
+  const unused =
+    metrics &&
+    Date.parse(metrics.lastUsedAt ?? metrics.measuredSince) < Date.now() - 90 * 86400_000;
   return (
     <article className={styles.entry} data-memory-entry={memory.id}>
       {editing ? (
@@ -51,6 +54,17 @@ export function MemoryEntry({
               · {new Date(memory.createdAt).toLocaleDateString()}
               {!!presentation?.edits &&
                 ` · ${t("memorySettings.edits", { count: presentation.edits })}`}
+              {` · ${
+                metrics?.lastUsedAt
+                  ? t("memorySettings.recallUsed", {
+                      date: new Date(metrics.lastUsedAt).toLocaleDateString(),
+                      used: metrics.usedCount,
+                      injected: metrics.injectedCount,
+                    })
+                  : metrics
+                    ? t("memorySettings.recallUnused", { injected: metrics.injectedCount })
+                    : t("memorySettings.recallUnavailable")
+              }`}
               {unused && ` · ${t("memorySettings.unused")}`}
               {memory.archivedAt && ` · ${t("memorySettings.archived")}`}
             </small>

@@ -1,3 +1,4 @@
+// Hosts the desktop settings navigation and selected settings page.
 import { ComputerUseSettings } from "@pibot/computer-use/ui";
 import { ModelsSettings } from "@pibot/models/ui";
 import { RemoteSettingsPage } from "@pibot/remote/ui";
@@ -44,11 +45,6 @@ const LOOK: Record<SettingsSectionId, [IconName, Tone]> = {
   remote: ["phone", "teal"],
   browser: ["globe", "blue"],
 };
-/**
- * v0.0.3 (maintainers 2026-11-20): the Browser page waits for the Chrome / Firefox store reviews; Bots
- * use the Bot browser meanwhile. Only the entry is hidden, so showing it again is this one line.
- */
-const HIDDEN_SECTIONS = new Set<SettingsSectionId>(["browser"]);
 const pageStyle = (id: SettingsSectionId) =>
   ({
     "--page-c": `var(--avatar-${LOOK[id][1]})`,
@@ -102,7 +98,7 @@ export function SettingsScreen({
       <div className={styles.root}>
         <nav className={styles.nav} aria-label={t("settings.title")}>
           <strong className={dialogStyles.navTitle}>{t("settings.title")}</strong>
-          {SETTINGS_SECTIONS.filter((item) => !HIDDEN_SECTIONS.has(item)).map((item) => (
+          {SETTINGS_SECTIONS.map((item) => (
             <Button
               key={item}
               variant="ghost"
@@ -139,13 +135,14 @@ export function SettingsScreen({
               {section === "computer" && <ComputerUseSettings />}
               {section === "routines" && <ScheduleSettings />}
               {section === "remote" && <RemoteSettingsPage />}
-              {section === "browser" && !HIDDEN_SECTIONS.has("browser") && <BrowserSettings />}
+              {section === "browser" && <BrowserSettings />}
               {section === "permissions" && (
                 <PermissionsSettings target={target === "passwords" ? target : undefined} />
               )}
               {(modelsVisited || section === "models") && (
                 <div hidden={section !== "models"}>
                   <ModelsSettings
+                    active={section === "models"}
                     searchSettings={<SearchSettings />}
                     target={section === "models" && target === "pi-model" ? target : undefined}
                     onDirtyChange={setDirty}

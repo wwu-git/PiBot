@@ -1,6 +1,8 @@
+// Run bounded local-network diagnostics using the platform’s system utilities.
 import { execFile } from "node:child_process";
 import { networkInterfaces } from "node:os";
 import { win32 } from "node:path";
+import { windowsSystemRoot } from "../core/windows-environment.ts";
 
 /**
  * Maintainers 2026-11-14: a Bot debugging the user's network must see its state. Inside the command
@@ -69,15 +71,15 @@ const UNIX_SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
 /** System PATH and root only; nothing of the user's environment is passed on. */
 function minimalEnv(source: Env, platform: NodeJS.Platform): Record<string, string> {
   if (platform !== "win32") return { PATH: UNIX_SYSTEM_PATH };
-  const env: Record<string, string> = {};
-  for (const name of ["PATH", "Path", "SystemRoot", "SYSTEMROOT", "windir"]) {
+  const env: Record<string, string> = { SystemRoot: windowsSystemRoot(source) };
+  for (const name of ["PATH", "Path"]) {
     const value = source[name];
     if (value) env[name] = value;
   }
   return env;
 }
 
-function stateSteps(platform: NodeJS.Platform, systemRoot: string | undefined): Step[] {
+function stateSteps(platform: NodeJS.Platform, env: Env): Step[] {
   if (platform === "darwin")
     return [
       { title: "Routes (netstat -rn)", program: "/usr/sbin/netstat", args: ["-rn"] },
@@ -107,7 +109,7 @@ function stateSteps(platform: NodeJS.Platform, systemRoot: string | undefined): 
       },
     ];
   if (platform === "win32") {
-    const system32 = win32.join(systemRoot ?? "C:\\Windows", "System32");
+    const system32 = win32.join(windowsSystemRoot(env), "System32");
     return [
       {
         title: "Configuration (ipconfig /all)",
@@ -148,7 +150,7 @@ export async function readLocalNetworkState(options: {
   signal: AbortSignal;
 }): Promise<string> {
   options.signal.throwIfAborted();
-  const steps = stateSteps(options.platform, options.env.SystemRoot ?? options.env.SYSTEMROOT);
+  const steps = stateSteps(options.platform, options.env);
   const outputs = await Promise.all(
     steps.map((step) => run(step, options.env, options.platform, options.signal)),
   );
@@ -168,14 +170,13 @@ export async function pingLocalHost(options: {
   host: string;
   signal: AbortSignal;
 }): Promise<string> {
-  const systemRoot = options.env.SystemRoot ?? options.env.SYSTEMROOT;
   // Defence in depth: policy already accepted only a local-network host; never an option.
   if (!/^[0-9a-z][0-9a-z.:-]*$/i.test(options.host)) throw new Error("invalid_host");
   const step: Step =
     options.platform === "win32"
       ? {
           title: "ping",
-          program: win32.join(systemRoot ?? "C:\\Windows", "System32", "PING.EXE"),
+          program: win32.join(windowsSystemRoot(options.env), "System32", "PING.EXE"),
           args: ["-n", "4", "-w", "2000", options.host],
         }
       : options.platform === "darwin"

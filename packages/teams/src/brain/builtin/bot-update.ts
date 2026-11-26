@@ -3,6 +3,7 @@ import {
   type Bot,
   type Category,
   CategorySchema,
+  isPiManagerCategory,
   type Level,
   type ModelInfo,
   type PermissionLevels,
@@ -265,6 +266,8 @@ export function planBotUpdate(input: BotPlanInput): BotPlan {
   const permissions: BotPlan["permissions"] = {};
   const permissionOverrides: BotPlan["target"]["permissionOverrides"] = {};
   for (const category of CategorySchema.options) {
+    // The default Pi's own management levels are the person's switch; roles never carry them.
+    if (isPiManagerCategory(category)) continue;
     const next = builtinPermission(global, category, target.permissionOverrides[category]);
     if (next) permissionOverrides[category] = next;
     const current = bot.permissionOverrides?.[category];

@@ -1,3 +1,5 @@
+/** Composes the app runtime and the root navigation stack. */
+
 import { Stack, useRootNavigationState, useRouter } from "expo-router";
 import { ShareIntentProvider } from "expo-share-intent";
 import { useEffect } from "react";
@@ -9,6 +11,7 @@ import { ShareIntentGate } from "../src/features/share/ShareIntentGate.tsx";
 import { BackgroundSync } from "../src/features/sync/BackgroundSync.tsx";
 import { TasksProvider } from "../src/features/tasks/tasks-context.tsx";
 import { TodosProvider } from "../src/features/todos/todos-context.tsx";
+import { AndroidUpdateProvider } from "../src/features/updates/AndroidUpdateProvider.tsx";
 import { OfflineProvider } from "../src/offline/OfflineProvider.tsx";
 import { NotificationsProvider } from "../src/push/NotificationsProvider.tsx";
 import { MobileProvider, useMobileSelector } from "../src/runtime/context.tsx";
@@ -82,7 +85,9 @@ export default function Layout() {
                       <TodosProvider>
                         <RecordsProvider>
                           <NotificationsProvider>
-                            <Routes />
+                            <AndroidUpdateProvider>
+                              <Routes />
+                            </AndroidUpdateProvider>
                           </NotificationsProvider>
                         </RecordsProvider>
                       </TodosProvider>

@@ -4,7 +4,7 @@ import {
   CHATGPT_CODEX_PROVIDER,
   CHATGPT_PLAN_PROVIDER,
 } from "@pibot/protocol-base/provider-catalog";
-import type { CustomProviderConfig } from "../core/types.ts";
+import type { CustomProviderConfig, ImageUrlFetch } from "../core/types.ts";
 import { type ImageWire, imageAdapter } from "./image-adapters.ts";
 
 function models(
@@ -28,7 +28,11 @@ function models(
     cost: { input: -1, output: -1, cacheRead: -1, cacheWrite: -1 },
   }));
 }
-export function imageProvider(provider: Provider, config?: CustomProviderConfig): Provider {
+export function imageProvider(
+  provider: Provider,
+  config?: CustomProviderConfig,
+  ports: { fetchImageUrl?: ImageUrlFetch } = {},
+): Provider {
   let extra: ImageModel<ImageApi>[] = [];
   let wire: ImageWire | undefined;
   if (config?.imageApi && config.imageModels?.length) {
@@ -87,12 +91,21 @@ export function imageProvider(provider: Provider, config?: CustomProviderConfig)
       "gpt-image-2",
       "gpt-image-2.5-sunburst",
       "gpt-image-2.5-flare",
+      "gpt-image-2.6-sunburst",
+      "gpt-image-2.6-flare",
       "gpt-image-1-mini",
       "gpt-image-1.5",
     ]);
   } else if (provider.id === "openai-codex" || provider.id === CHATGPT_CODEX_PROVIDER) {
     wire = "codex-images";
-    extra = models(provider.id, "https://chatgpt.com/backend-api/codex", wire, ["gpt-image-2"]);
+    // Built-in role installs take the first available image model, so gpt-image-2 stays first.
+    extra = models(provider.id, "https://chatgpt.com/backend-api/codex", wire, [
+      "gpt-image-2",
+      "gpt-image-2.5-sunburst",
+      "gpt-image-2.5-flare",
+      "gpt-image-2.6-sunburst",
+      "gpt-image-2.6-flare",
+    ]);
   } else if (provider.id === "openrouter") wire = "openrouter-images";
   if (!wire || (wire === "vertex-images" && !provider.generateImages)) return provider;
   const all = provider.getAllModels?.() ?? provider.getModels();
@@ -109,7 +122,7 @@ export function imageProvider(provider: Provider, config?: CustomProviderConfig)
   return {
     ...provider,
     getAllModels: () => [...all.filter((entry) => entry.type !== "image"), ...supported],
-    generateImages: wire === "vertex-images" ? provider.generateImages : imageAdapter(wire),
+    generateImages: wire === "vertex-images" ? provider.generateImages : imageAdapter(wire, ports),
   };
 }
 export function imageInfo(

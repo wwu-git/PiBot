@@ -8,6 +8,12 @@ const ok = z.strictObject({ ok: z.literal(true) });
 const botId = z.strictObject({ botId: IdSchema });
 const page = PageSchema;
 export const TopicMethods = {
+  "topics.metadata": {
+    params: botId.extend({ topicId: IdSchema }),
+    result: ConversationSchema.pick({ title: true, routineId: true, importSource: true })
+      .extend({ readOnly: z.boolean() })
+      .nullable(),
+  },
   "topics.list": {
     params: botId.extend(page.shape).extend({
       query: z.string().trim().max(200).optional(),

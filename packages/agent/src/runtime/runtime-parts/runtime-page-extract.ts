@@ -1,3 +1,4 @@
+// Run bounded page extraction on the configured auxiliary model.
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/models";
 import { AgentError, mapAgentError } from "../../core/errors.ts";
 import type { AgentRuntime } from "../../core/types.ts";
@@ -35,6 +36,7 @@ function fitted(request: Parameters<typeof pageExtractInput>[0], room: number) {
 export function createPageExtractOperation({
   auxiliaryModel,
   buildRuntime,
+  deps,
 }: RuntimeContext): Pick<AgentRuntime, "extractPage"> {
   const acquire = createPageExtractLimit();
   return {
@@ -69,23 +71,25 @@ export function createPageExtractOperation({
         const reasoning = supported.includes("off")
           ? undefined
           : supported.find((level) => level !== "off");
-        const accounting = new RequestAccounting(request.observer);
+        const accounting = new RequestAccounting(request.observer, deps.network?.observeRequest);
         // Throws when the run's budget is spent; nothing has been sent yet.
         const receipt = accounting.begin(model, "auxiliary");
-        const pending = runtime.completeSimple(
-          model,
-          {
-            systemPrompt: PAGE_EXTRACT_INSTRUCTION,
-            messages: [{ role: "user", content: input.content, timestamp: Date.now() }],
-          },
-          {
-            signal,
-            maxTokens: Math.min(EXTRACT_MAX_TOKENS, model.maxTokens),
-            ...(reasoning ? { reasoning } : {}),
-            maxRetries: 0,
-            timeoutMs: EXTRACT_TIMEOUT_MS,
-            cacheRetention: "none",
-          },
+        const pending = receipt.send(() =>
+          runtime.completeSimple(
+            model,
+            {
+              systemPrompt: PAGE_EXTRACT_INSTRUCTION,
+              messages: [{ role: "user", content: input.content, timestamp: Date.now() }],
+            },
+            {
+              signal,
+              maxTokens: Math.min(EXTRACT_MAX_TOKENS, model.maxTokens),
+              ...(reasoning ? { reasoning } : {}),
+              maxRetries: 0,
+              timeoutMs: EXTRACT_TIMEOUT_MS,
+              cacheRetention: "none",
+            },
+          ),
         );
         accounting.observe(receipt, pending);
         const result = await pending;

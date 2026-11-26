@@ -26,7 +26,7 @@ export async function readBotSettings(
   page?: string,
 ) {
   const profile = await c.call("bots.profile", { botId }, signal);
-  const [models, skills, routines, scoped, global, grants, connectors] = await Promise.all([
+  const [models, skills, routines, scoped, global, grants, connectors, dream] = await Promise.all([
     page === "model"
       ? optional(c.call("models.list", { availableOnly: true }, signal), signal)
       : undefined,
@@ -46,6 +46,7 @@ export async function readBotSettings(
       ? optional(c.call("grants.list", { botId, limit: 50 }, signal), signal)
       : undefined,
     page === "connectors" ? optional(readConnectors(c, botId, signal), signal) : undefined,
+    page === "memory" ? optional(c.call("memory.dream.last", {}, signal), signal) : undefined,
   ] as const);
   const resourcesUnavailable =
     (page === "model" && !models) ||
@@ -62,6 +63,7 @@ export async function readBotSettings(
     permissions: scoped && global ? { scoped, global } : undefined,
     grants: grants?.filter((grant) => !grant.revokedAt),
     connectors,
+    dream,
   };
 }
 export type BotSettings = Awaited<ReturnType<typeof readBotSettings>>;

@@ -1,4 +1,8 @@
-import type { BrowserBlocked, BrowserBlockedReason } from "@pibot/protocol-base";
+import {
+  type BrowserBlocked,
+  type BrowserBlockedReason,
+  privateNetworkOrigin,
+} from "@pibot/protocol-base";
 import type { BrowserToolPort, ToolCallView } from "../runtime/tool-runtime.ts";
 import { safeHost } from "./browser-actions.ts";
 
@@ -40,7 +44,12 @@ export async function handleBlocked(
   let approved = false;
   const seen = new Set<string>();
   for (const entry of blocked) {
-    const key = `${entry.kind}:${entry.domain ?? safeHost(entry.url)}`;
+    // Private consent is per origin, including port and scheme, rather than per hostname.
+    const target =
+      entry.kind === "private"
+        ? (privateNetworkOrigin(entry.url) ?? entry.url)
+        : (entry.domain ?? safeHost(entry.url));
+    const key = `${entry.kind}:${target}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const answer = await browser.authorizeBlocked(call, entry, writeRoot, signal);

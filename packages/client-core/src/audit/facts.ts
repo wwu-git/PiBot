@@ -271,6 +271,7 @@ const imageReasonKeys: Record<string, TranslationKey> = {
   image_input_required: "errors.image_input_required",
   image_mode_mismatch: "errors.image_mode_mismatch",
   image_unsupported: "errors.image_unsupported",
+  image_url_unavailable: "errors.image_url_unavailable",
   no_model: "errors.no_model",
   auth_failed: "errors.auth_failed",
   billing: "errors.billing",

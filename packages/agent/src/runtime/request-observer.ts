@@ -1,3 +1,4 @@
+// Keep accounting attached to the provider attempt independently of reply segmentation.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { type AgentError, mapAgentError, transientRequestError } from "../core/errors.ts";
@@ -8,15 +9,20 @@ import type {
   ToolSetSnapshot,
 } from "../core/types.ts";
 
+import type { AgentNetwork } from "../network/network.ts";
+import { knownRate } from "./memory-draft.ts";
+
 const amount = z.number().finite().nonnegative();
-const usageSchema = z.object({
+const tokenUsageSchema = z.object({
   input: amount,
   output: amount,
   cacheRead: amount,
   cacheWrite: amount,
+});
+const usageSchema = tokenUsageSchema.extend({
   totalTokens: amount.optional(),
-  // `reported`: the provider billed this total itself (patched pi-ai, OpenRouter's usage.cost).
-  cost: z.object({ total: amount, reported: z.boolean().optional() }).optional(),
+  // `totalFromProvider` distinguishes the provider's billed total from a catalog estimate.
+  cost: z.object({ total: amount, totalFromProvider: z.boolean().optional() }).optional(),
 });
 /** result() is the SDK's shared final promise; observing it does not consume streaming events. */
 export class RequestAccounting {
@@ -34,10 +40,14 @@ export class RequestAccounting {
   private readonly pending = new Set<Promise<void>>();
   private failure?: unknown;
   blocked?: AgentErrorCode;
-  constructor(private readonly observer?: AgentRequestObserver) {}
+  constructor(
+    private readonly observer?: AgentRequestObserver,
+    private readonly observeRequest?: AgentNetwork["observeRequest"],
+  ) {}
   begin(
     model: {
       provider: string;
+      api?: string;
       id: string;
       cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
     },
@@ -63,8 +73,17 @@ export class RequestAccounting {
       this.blocked = mapAgentError(error);
       throw error;
     }
+    const startedAt = performance.now();
     let settled = false;
+    let cacheFields: Set<string> | undefined;
     return {
+      send: <T>(request: () => T): T => {
+        if (!this.observer?.metrics || !this.observeRequest) return request();
+        return this.observeRequest((fields) => {
+          cacheFields ??= new Set();
+          for (const field of fields) cacheFields.add(field);
+        }, request);
+      },
       settle: (
         result?: { stopReason: string; usage?: unknown },
         failure?: { error: unknown; outputObserved: boolean },
@@ -81,13 +100,13 @@ export class RequestAccounting {
         // Aborted/error SDK messages can carry billed partial usage, or merely default zeroes.
         const knownTokens = tokens !== undefined && (complete || tokens > 0);
         const reportedCost =
-          pricingKnown || usage?.cost?.reported === true ? usage?.cost?.total : undefined;
+          pricingKnown || usage?.cost?.totalFromProvider === true ? usage?.cost?.total : undefined;
         const partialCost =
           !complete && knownTokens && usage && pricingKnown
-            ? (usage.input * model.cost.input +
-                usage.output * model.cost.output +
-                usage.cacheRead * model.cost.cacheRead +
-                usage.cacheWrite * model.cost.cacheWrite) /
+            ? (usage.input * knownRate(model.cost.input) +
+                usage.output * knownRate(model.cost.output) +
+                usage.cacheRead * knownRate(model.cost.cacheRead) +
+                usage.cacheWrite * knownRate(model.cost.cacheWrite)) /
               1_000_000
             : undefined;
         // Count only tokens the provider actually reported, never estimate unobserved streaming text.
@@ -125,6 +144,22 @@ export class RequestAccounting {
                 }
               : {}),
         });
+        if (this.observer?.metrics) {
+          // Custom endpoints can have an unknown (negative) price with valid token counters.
+          const parsed = tokenUsageSchema.safeParse(result?.usage);
+          const reported = parsed.success ? parsed.data : undefined;
+          const tokenUsage =
+            reported && (complete || Object.values(reported).some((value) => value > 0))
+              ? reported
+              : undefined;
+          this.observer.metrics({
+            startedAt,
+            provider: model.provider,
+            api: model.api ?? "unknown",
+            ...(tokenUsage && { usage: tokenUsage }),
+            ...(cacheFields && { cacheFields: [...cacheFields].sort() }),
+          });
+        }
         return unbilled;
       },
     };

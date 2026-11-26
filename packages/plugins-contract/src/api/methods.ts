@@ -1,6 +1,7 @@
 import {
   BuiltinAppConnectSchema,
   BuiltinAppSchema,
+  ClaudePluginBundleSchema,
   ClaudePluginComponentSchema,
   ClaudePluginConfigFieldSchema,
   CONNECTOR_IMPORT_MAX_BYTES,
@@ -195,6 +196,8 @@ export const ConnectorMethods = {
           components: z.array(ClaudePluginComponentSchema).max(300),
           config: z.array(ClaudePluginConfigFieldSchema).max(100),
           skillCount: count,
+          /** A Pi Bot application package's card: its 准备工作 help and documentation link. */
+          application: ClaudePluginBundleSchema.shape.applicationCard,
         })
         .optional(),
       expiresAt: time,

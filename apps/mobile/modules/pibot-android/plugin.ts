@@ -2,6 +2,7 @@ import { AndroidConfig, type ConfigPlugin, withAndroidManifest } from "expo/conf
 
 const NOTIFICATIONS_SERVICE = "space.pibot.android.PhoneNotifications";
 const LINK_SERVICE = "space.pibot.android.RemoteLinkService";
+const FILE_PROVIDER = "androidx.core.content.FileProvider";
 
 /**
  * Config plugin of the Android local module. The module's own manifest declares nothing;
@@ -23,6 +24,7 @@ export const withPibotAndroid: ConfigPlugin<{ readSms: boolean }> = (config, { r
       "android.permission.FOREGROUND_SERVICE",
       "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE",
       "android.permission.WAKE_LOCK",
+      "android.permission.REQUEST_INSTALL_PACKAGES",
     ])
       AndroidConfig.Permissions.addPermission(manifest, permission);
     if (readSms)
@@ -61,5 +63,28 @@ export const withPibotAndroid: ConfigPlugin<{ readSms: boolean }> = (config, { r
         ],
       });
     app.service = services;
+    const application = app as typeof app & {
+      provider?: Array<Record<string, unknown>>;
+    };
+    application.provider = (application.provider ?? []).filter((provider) => {
+      const attributes = provider.$ as Record<string, string> | undefined;
+      return attributes?.["android:name"] !== FILE_PROVIDER;
+    });
+    application.provider.push({
+      $: {
+        "android:name": FILE_PROVIDER,
+        "android:authorities": `\${applicationId}.pibot.files`,
+        "android:exported": "false",
+        "android:grantUriPermissions": "true",
+      },
+      "meta-data": [
+        {
+          $: {
+            "android:name": "android.support.FILE_PROVIDER_PATHS",
+            "android:resource": "@xml/pibot_file_paths",
+          },
+        },
+      ],
+    });
     return next;
   });

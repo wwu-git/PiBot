@@ -64,6 +64,8 @@ export function createComputerGuard(options: {
     onAction(raw: unknown): void;
   }): GuardWindow;
   platform?: NodeJS.Platform;
+  /** The indicator appeared or went away (other top-of-screen UI steps aside while it shows). */
+  visibilityChanged?(visible: boolean): void;
 }) {
   const platform = options.platform ?? process.platform;
   const shortcut = shortcutFor(platform);
@@ -75,6 +77,12 @@ export function createComputerGuard(options: {
   const waiters = new Set<() => void>();
   const children = new Set<ChildProcess>();
   let window: GuardWindow | undefined;
+  let visible = false;
+  const setVisible = (next: boolean) => {
+    if (next === visible) return;
+    visible = next;
+    options.visibilityChanged?.(next);
+  };
 
   const push = (action: ComputerGuardAction) => {
     if (actions.length >= MAX_QUEUED_ACTIONS) actions.shift();
@@ -165,6 +173,7 @@ export function createComputerGuard(options: {
     registerShortcut(entries.length > 0);
     if (!entries.length) {
       window?.hide();
+      setVisible(false);
       return null;
     }
     window ??= options.createWindow({
@@ -173,6 +182,7 @@ export function createComputerGuard(options: {
       onAction: accept,
     });
     window.show(render());
+    setVisible(true);
     return null;
   }
 
@@ -255,6 +265,7 @@ export function createComputerGuard(options: {
     actions.length = 0;
     registerShortcut(false);
     window?.hide();
+    setVisible(false);
     for (const wake of [...waiters]) wake();
   }
 

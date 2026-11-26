@@ -26,11 +26,18 @@ export const ApprovalFactSchema = z.strictObject({
   kind: z.enum(["program", "read", "write", "network", "cwd", "warning"]),
   value: text,
   risk: RiskSchema.optional(),
+  /**
+   * Row name in the card's own language, for cards that list a change field by field (the
+   * default Pi's management and dispatch cards); absent rows are named by `kind`.
+   */
+  label: z.string().min(1).max(80).optional(),
 });
 // The card's title and facts in each UI language, so a language switch also changes
 // cards created before it. Optional: older approvals only have `title` / `facts`.
 export const ApprovalTextSchema = z.strictObject({
   title: text,
+  /** One sentence under the title that says what happens after "allow". */
+  lead: z.string().max(1000).optional(),
   facts: z.array(ApprovalFactSchema),
 });
 export const ApprovalSchema = z

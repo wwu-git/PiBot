@@ -10,6 +10,7 @@ import type { StartupSnapshot } from "../../shared/startup-snapshot.ts";
 import { AboutYouDialog } from "../features/app-menu/AboutYouDialog.tsx";
 import { AppDialog } from "../features/app-menu/AppDialog.tsx";
 import { AboutPanel } from "../features/app-menu/AppPanels.tsx";
+import { ProviderImportDialog } from "../features/app-menu/ProviderImportDialog.tsx";
 import { UpdateNotice, UpdatesPanel } from "../features/app-menu/UpdatesPanel.tsx";
 import { UpdatesProvider } from "../features/app-menu/updates.tsx";
 import { ComposerDraftProvider } from "../features/chat/composer/composer-drafts.tsx";
@@ -99,7 +100,12 @@ function Routes() {
     return () => clearTimeout(timer);
   }, [screenReady]);
   useEffect(() => {
-    if (state !== "ready" || !settings?.onboardingCompleted || !navigation) return;
+    if (state !== "ready" || settings?.onboardingCompleted === undefined || !navigation) return;
+    if (
+      !settings.onboardingCompleted &&
+      !("view" in navigation && navigation.view === "provider-import")
+    )
+      return;
     const owner = new AbortController();
     setNavigationFailed(false);
     if ("view" in navigation) {
@@ -110,7 +116,14 @@ function Routes() {
       else if (navigation.view === "settings") openSettings("general");
       else if (navigation.view === "about" || navigation.view === "updates")
         setAppPanel(navigation.view);
-      else if (navigation.view === "role-import")
+      else if (navigation.view === "provider-import") {
+        setAppPanel(undefined);
+        showDialog(() => ({
+          owner: "provider-import",
+          key: crypto.randomUUID(),
+          state: navigation.preview,
+        }));
+      } else if (navigation.view === "role-import")
         showDialog(() =>
           newChatDialog(navigation.kind === "group" ? "group" : "bot", {
             kind: navigation.kind,
@@ -118,6 +131,13 @@ function Routes() {
             version: navigation.version,
           }),
         );
+      else if (navigation.view === "group")
+        // The live island: a busy group, opened on the task thread the step runs in.
+        navigate({
+          name: "chat",
+          groupId: navigation.groupId,
+          ...(navigation.threadId ? { threadId: navigation.threadId } : {}),
+        });
       else if ("botId" in navigation && navigation.botId)
         navigate({ name: "chat", botId: navigation.botId, draftId: crypto.randomUUID() });
       else showDialog(() => newChatDialog("bot"));
@@ -213,6 +233,7 @@ function Routes() {
         {settings.onboardingCompleted && <AboutYouDialog />}
         {settings.onboardingCompleted && <ProjectMemoryDialog />}
         {settings.onboardingCompleted && <NewChatDialogs />}
+        <ProviderImportDialog />
         {settings.onboardingCompleted && <UpdateNotice />}
       </div>
     </>

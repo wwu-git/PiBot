@@ -1,0 +1,290 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -8506,10 +8506,21 @@
+                         const eventString = buffer.substring(0, delimiterIndex);
+                         buffer = buffer.substring(delimiterIndex + delimiterLength);
+                         const trimmedEvent = eventString.trim();
++                        // Gateways may send an explicit SSE error event, with a nested or flat JSON payload.
++                        if (/^event: ?error[ \t]*\r?$/m.test(eventString)) {
++                            const data = eventString.split(/\r\n|[\r\n]/).filter(line => line.startsWith(dataPrefix))
++                                .map(line => line.slice(dataPrefix.length).replace(/^ /, '')).join('\n');
++                            let payload;
++                            try { payload = JSON.parse(data); } catch { /* Keep malformed error payloads out of diagnostics. */ }
++                            throw googleStreamError(response.status, payload?.error ?? payload);
++                        }
+                         if (trimmedEvent.startsWith(dataPrefix)) {
+                             const processedChunkString = trimmedEvent
+                                 .substring(dataPrefix.length)
+                                 .trim();
++                            // Prefer the real HTTP status and a bounded error envelope.
++                            const error = readGoogleStreamError(processedChunkString);
++                            if (error) throw googleStreamError(response.status, error);
+                             throwIfStreamErrorChunk(processedChunkString);
+                             try {
+                                 const partialResponse = new Response(processedChunkString, {
+@@ -8758,6 +8769,20 @@
+             throw e;
+         }
+     }
++}
++function readGoogleStreamError(data) {
++    try {
++        return JSON.parse(data)?.error;
++    }
++    catch {
++        // Let the SDK handle non-JSON chunks as before.
++        return undefined;
++    }
++}
++// Preserve the HTTP status of the stream rather than treating a provider's application code as HTTP.
++function googleStreamError(status, error) {
++    const message = typeof error?.message === 'string' ? error.message : 'Provider stream error';
++    return new ApiError({ status, message: `HTTP ${status}: ${message}` });
+ }
+ async function throwErrorIfNotOK(response) {
+     var _a;
+@@ -25272,7 +25297,10 @@
+                             _c = apiResponse_2_1.value;
+                             _d = false;
+                             const chunk = _c;
+-                            const resp = generateContentResponseFromMldev((yield __await(chunk.json())), params);
++                            const data = yield __await(chunk.json());
++                            // The generated model-response converter drops error envelopes as unknown fields.
++                            if (data?.error) throw googleStreamError(chunk.responseInternal.status, data.error);
++                            const resp = generateContentResponseFromMldev(data, params);
+                             resp['sdkHttpResponse'] = {
+                                 headers: chunk.headers,
+                             };
+diff --git a/dist/index.mjs b/dist/index.mjs
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -8504,10 +8504,21 @@
+                         const eventString = buffer.substring(0, delimiterIndex);
+                         buffer = buffer.substring(delimiterIndex + delimiterLength);
+                         const trimmedEvent = eventString.trim();
++                        // Gateways may send an explicit SSE error event, with a nested or flat JSON payload.
++                        if (/^event: ?error[ \t]*\r?$/m.test(eventString)) {
++                            const data = eventString.split(/\r\n|[\r\n]/).filter(line => line.startsWith(dataPrefix))
++                                .map(line => line.slice(dataPrefix.length).replace(/^ /, '')).join('\n');
++                            let payload;
++                            try { payload = JSON.parse(data); } catch { /* Keep malformed error payloads out of diagnostics. */ }
++                            throw googleStreamError(response.status, payload?.error ?? payload);
++                        }
+                         if (trimmedEvent.startsWith(dataPrefix)) {
+                             const processedChunkString = trimmedEvent
+                                 .substring(dataPrefix.length)
+                                 .trim();
++                            // Prefer the real HTTP status and a bounded error envelope.
++                            const error = readGoogleStreamError(processedChunkString);
++                            if (error) throw googleStreamError(response.status, error);
+                             throwIfStreamErrorChunk(processedChunkString);
+                             try {
+                                 const partialResponse = new Response(processedChunkString, {
+@@ -8756,6 +8767,20 @@
+             throw e;
+         }
+     }
++}
++function readGoogleStreamError(data) {
++    try {
++        return JSON.parse(data)?.error;
++    }
++    catch {
++        // Let the SDK handle non-JSON chunks as before.
++        return undefined;
++    }
++}
++// Preserve the HTTP status of the stream rather than treating a provider's application code as HTTP.
++function googleStreamError(status, error) {
++    const message = typeof error?.message === 'string' ? error.message : 'Provider stream error';
++    return new ApiError({ status, message: `HTTP ${status}: ${message}` });
+ }
+ async function throwErrorIfNotOK(response) {
+     var _a;
+@@ -25270,7 +25295,10 @@
+                             _c = apiResponse_2_1.value;
+                             _d = false;
+                             const chunk = _c;
+-                            const resp = generateContentResponseFromMldev((yield __await(chunk.json())), params);
++                            const data = yield __await(chunk.json());
++                            // The generated model-response converter drops error envelopes as unknown fields.
++                            if (data?.error) throw googleStreamError(chunk.responseInternal.status, data.error);
++                            const resp = generateContentResponseFromMldev(data, params);
+                             resp['sdkHttpResponse'] = {
+                                 headers: chunk.headers,
+                             };
+diff --git a/dist/node/index.cjs b/dist/node/index.cjs
+--- a/dist/node/index.cjs
++++ b/dist/node/index.cjs
+@@ -14062,10 +14062,21 @@
+                         const eventString = buffer.substring(0, delimiterIndex);
+                         buffer = buffer.substring(delimiterIndex + delimiterLength);
+                         const trimmedEvent = eventString.trim();
++                        // Gateways may send an explicit SSE error event, with a nested or flat JSON payload.
++                        if (/^event: ?error[ \t]*\r?$/m.test(eventString)) {
++                            const data = eventString.split(/\r\n|[\r\n]/).filter(line => line.startsWith(dataPrefix))
++                                .map(line => line.slice(dataPrefix.length).replace(/^ /, '')).join('\n');
++                            let payload;
++                            try { payload = JSON.parse(data); } catch { /* Keep malformed error payloads out of diagnostics. */ }
++                            throw googleStreamError(response.status, payload?.error ?? payload);
++                        }
+                         if (trimmedEvent.startsWith(dataPrefix)) {
+                             const processedChunkString = trimmedEvent
+                                 .substring(dataPrefix.length)
+                                 .trim();
++                            // Prefer the real HTTP status and a bounded error envelope.
++                            const error = readGoogleStreamError(processedChunkString);
++                            if (error) throw googleStreamError(response.status, error);
+                             throwIfStreamErrorChunk(processedChunkString);
+                             try {
+                                 const partialResponse = new Response(processedChunkString, {
+@@ -14314,6 +14325,20 @@
+             throw e;
+         }
+     }
++}
++function readGoogleStreamError(data) {
++    try {
++        return JSON.parse(data)?.error;
++    }
++    catch {
++        // Let the SDK handle non-JSON chunks as before.
++        return undefined;
++    }
++}
++// Preserve the HTTP status of the stream rather than treating a provider's application code as HTTP.
++function googleStreamError(status, error) {
++    const message = typeof error?.message === 'string' ? error.message : 'Provider stream error';
++    return new ApiError({ status, message: `HTTP ${status}: ${message}` });
+ }
+ async function throwErrorIfNotOK(response) {
+     var _a;
+@@ -16754,7 +16779,10 @@
+                             _c = apiResponse_2_1.value;
+                             _d = false;
+                             const chunk = _c;
+-                            const resp = generateContentResponseFromMldev((yield __await(chunk.json())), params);
++                            const data = yield __await(chunk.json());
++                            // The generated model-response converter drops error envelopes as unknown fields.
++                            if (data?.error) throw googleStreamError(chunk.responseInternal.status, data.error);
++                            const resp = generateContentResponseFromMldev(data, params);
+                             resp['sdkHttpResponse'] = {
+                                 headers: chunk.headers,
+                             };
+diff --git a/dist/node/index.mjs b/dist/node/index.mjs
+--- a/dist/node/index.mjs
++++ b/dist/node/index.mjs
+@@ -14040,10 +14040,21 @@
+                         const eventString = buffer.substring(0, delimiterIndex);
+                         buffer = buffer.substring(delimiterIndex + delimiterLength);
+                         const trimmedEvent = eventString.trim();
++                        // Gateways may send an explicit SSE error event, with a nested or flat JSON payload.
++                        if (/^event: ?error[ \t]*\r?$/m.test(eventString)) {
++                            const data = eventString.split(/\r\n|[\r\n]/).filter(line => line.startsWith(dataPrefix))
++                                .map(line => line.slice(dataPrefix.length).replace(/^ /, '')).join('\n');
++                            let payload;
++                            try { payload = JSON.parse(data); } catch { /* Keep malformed error payloads out of diagnostics. */ }
++                            throw googleStreamError(response.status, payload?.error ?? payload);
++                        }
+                         if (trimmedEvent.startsWith(dataPrefix)) {
+                             const processedChunkString = trimmedEvent
+                                 .substring(dataPrefix.length)
+                                 .trim();
++                            // Prefer the real HTTP status and a bounded error envelope.
++                            const error = readGoogleStreamError(processedChunkString);
++                            if (error) throw googleStreamError(response.status, error);
+                             throwIfStreamErrorChunk(processedChunkString);
+                             try {
+                                 const partialResponse = new Response(processedChunkString, {
+@@ -14292,6 +14303,20 @@
+             throw e;
+         }
+     }
++}
++function readGoogleStreamError(data) {
++    try {
++        return JSON.parse(data)?.error;
++    }
++    catch {
++        // Let the SDK handle non-JSON chunks as before.
++        return undefined;
++    }
++}
++// Preserve the HTTP status of the stream rather than treating a provider's application code as HTTP.
++function googleStreamError(status, error) {
++    const message = typeof error?.message === 'string' ? error.message : 'Provider stream error';
++    return new ApiError({ status, message: `HTTP ${status}: ${message}` });
+ }
+ async function throwErrorIfNotOK(response) {
+     var _a;
+@@ -16732,7 +16757,10 @@
+                             _c = apiResponse_2_1.value;
+                             _d = false;
+                             const chunk = _c;
+-                            const resp = generateContentResponseFromMldev((yield __await(chunk.json())), params);
++                            const data = yield __await(chunk.json());
++                            // The generated model-response converter drops error envelopes as unknown fields.
++                            if (data?.error) throw googleStreamError(chunk.responseInternal.status, data.error);
++                            const resp = generateContentResponseFromMldev(data, params);
+                             resp['sdkHttpResponse'] = {
+                                 headers: chunk.headers,
+                             };
+diff --git a/dist/web/index.mjs b/dist/web/index.mjs
+--- a/dist/web/index.mjs
++++ b/dist/web/index.mjs
+@@ -14032,10 +14032,21 @@
+                         const eventString = buffer.substring(0, delimiterIndex);
+                         buffer = buffer.substring(delimiterIndex + delimiterLength);
+                         const trimmedEvent = eventString.trim();
++                        // Gateways may send an explicit SSE error event, with a nested or flat JSON payload.
++                        if (/^event: ?error[ \t]*\r?$/m.test(eventString)) {
++                            const data = eventString.split(/\r\n|[\r\n]/).filter(line => line.startsWith(dataPrefix))
++                                .map(line => line.slice(dataPrefix.length).replace(/^ /, '')).join('\n');
++                            let payload;
++                            try { payload = JSON.parse(data); } catch { /* Keep malformed error payloads out of diagnostics. */ }
++                            throw googleStreamError(response.status, payload?.error ?? payload);
++                        }
+                         if (trimmedEvent.startsWith(dataPrefix)) {
+                             const processedChunkString = trimmedEvent
+                                 .substring(dataPrefix.length)
+                                 .trim();
++                            // Prefer the real HTTP status and a bounded error envelope.
++                            const error = readGoogleStreamError(processedChunkString);
++                            if (error) throw googleStreamError(response.status, error);
+                             throwIfStreamErrorChunk(processedChunkString);
+                             try {
+                                 const partialResponse = new Response(processedChunkString, {
+@@ -14284,6 +14295,20 @@
+             throw e;
+         }
+     }
++}
++function readGoogleStreamError(data) {
++    try {
++        return JSON.parse(data)?.error;
++    }
++    catch {
++        // Let the SDK handle non-JSON chunks as before.
++        return undefined;
++    }
++}
++// Preserve the HTTP status of the stream rather than treating a provider's application code as HTTP.
++function googleStreamError(status, error) {
++    const message = typeof error?.message === 'string' ? error.message : 'Provider stream error';
++    return new ApiError({ status, message: `HTTP ${status}: ${message}` });
+ }
+ async function throwErrorIfNotOK(response) {
+     var _a;
+@@ -16724,7 +16749,10 @@
+                             _c = apiResponse_2_1.value;
+                             _d = false;
+                             const chunk = _c;
+-                            const resp = generateContentResponseFromMldev((yield __await(chunk.json())), params);
++                            const data = yield __await(chunk.json());
++                            // The generated model-response converter drops error envelopes as unknown fields.
++                            if (data?.error) throw googleStreamError(chunk.responseInternal.status, data.error);
++                            const resp = generateContentResponseFromMldev(data, params);
+                             resp['sdkHttpResponse'] = {
+                                 headers: chunk.headers,
+                             };
