@@ -32,9 +32,11 @@ const keywords = new Set([
 ]);
 const unsignedFormats = new Map([
   ["uint16", 65_535],
+  ["uint32", 4_294_967_295],
   ["uint64", Number.MAX_SAFE_INTEGER],
   ["uint", Number.MAX_SAFE_INTEGER],
 ]);
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const types = new Set(["object", "array", "string", "number", "integer", "boolean", "null"]);
 function unsupported(): never {
   throw new ConnectorSchemaError("connector_schema_unsupported");
@@ -78,17 +80,24 @@ export function validateConnectorArgs(schema: unknown, args: Record<string, unkn
         continue;
       }
       if (key === "$ref") {
-        if (Object.keys(value).length !== 1) unsupported();
+        if (
+          Object.keys(value).some(
+            (name) => name !== "$ref" && !annotations.has(name) && !name.startsWith("x-"),
+          )
+        )
+          unsupported();
         check(resolveRef(entry), depth + 1);
         continue;
       }
       if (key === "format") {
         const kinds = Array.isArray(value.type) ? value.type : [value.type];
+        if (typeof entry !== "string") unsupported();
+        const formattedType =
+          entry === "uuid" ? "string" : unsignedFormats.has(entry) ? "integer" : null;
         if (
-          typeof entry !== "string" ||
-          !unsignedFormats.has(entry) ||
-          !kinds.includes("integer") ||
-          kinds.some((kind) => kind !== "integer" && kind !== "null")
+          formattedType === null ||
+          !kinds.includes(formattedType) ||
+          kinds.some((kind) => kind !== formattedType && kind !== "null")
         )
           unsupported();
         continue;
@@ -159,6 +168,7 @@ export function validateConnectorArgs(schema: unknown, args: Record<string, unkn
     if (s.oneOf && (s.oneOf as Schema[]).filter(test).length !== 1) return false;
     if (s.not !== undefined && test(s.not as Schema)) return false;
     if (typeof value === "string") {
+      if (s.format === "uuid" && (value.length !== 36 || !uuid.test(value))) return false;
       const length = [...value].length;
       if (s.minLength !== undefined && length < Number(s.minLength)) return false;
       if (s.maxLength !== undefined && length > Number(s.maxLength)) return false;
