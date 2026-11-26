@@ -5,7 +5,7 @@ export interface TabOption<T extends string> {
   value: T;
   label: string;
   /** A count after the label ("项目 3"); absent hides it. */
-  count?: number;
+  count?: number | string;
 }
 
 export interface TabsProps<T extends string> {

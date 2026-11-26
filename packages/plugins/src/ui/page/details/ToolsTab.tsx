@@ -48,6 +48,8 @@ export function ToolsTab({
     if (!tool.enabled) return undefined;
     if (!tool.readOnly && mode === "read_only")
       return <Chip>{t("connections.drawer.chipOff")}</Chip>;
+    if (!tool.readOnly && mode === "direct_read_write")
+      return <Chip tone="ok">{t("connections.drawer.chipDirect")}</Chip>;
     if (!tool.readOnly || mode === "always_ask")
       return <Chip tone="orange">{t("connections.drawer.chipAsk")}</Chip>;
     return undefined;

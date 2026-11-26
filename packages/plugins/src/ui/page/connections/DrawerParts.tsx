@@ -1,7 +1,6 @@
 import { useSettings } from "@pibot/renderer-kit";
-import { Icon, type IconName } from "@pibot/ui";
-import { type CSSProperties, type ReactNode, useState } from "react";
-import pageStyles from "./connections.module.css";
+import { Icon, type IconName, type TabOption, Tabs } from "@pibot/ui";
+import { type ReactNode, useState } from "react";
 import styles from "./drawer.module.css";
 import { letterTone, monogram } from "./Faces.tsx";
 
@@ -44,12 +43,6 @@ export function DrawerHero({
   );
 }
 
-export interface DrawerTab<T extends string> {
-  value: T;
-  label: string;
-  count?: number | string;
-}
-
 /** The Connections page's segmented tabs, sized for the drawer. */
 export function DrawerTabs<T extends string>({
   label,
@@ -58,49 +51,18 @@ export function DrawerTabs<T extends string>({
   onChange,
 }: {
   label: string;
-  tabs: readonly DrawerTab<T>[];
+  tabs: readonly TabOption<T>[];
   value: T;
   onChange(value: T): void;
 }) {
-  const index = Math.max(
-    0,
-    tabs.findIndex((tab) => tab.value === value),
-  );
   return (
-    <div
-      className={`${pageStyles.tabs} ${styles.tabs}`}
-      role="tablist"
-      aria-label={label}
-      style={{ "--seg-count": tabs.length, "--seg-index": index } as CSSProperties}
-      onKeyDown={(event) => {
-        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-        event.preventDefault();
-        const next =
-          event.key === "Home"
-            ? 0
-            : event.key === "End"
-              ? tabs.length - 1
-              : (index + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
-        const tab = tabs[next];
-        if (tab) onChange(tab.value);
-        event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=tab]")[next]?.focus();
-      }}
-    >
-      {tabs.map((tab) => (
-        <button
-          key={tab.value}
-          type="button"
-          role="tab"
-          aria-selected={tab.value === value}
-          tabIndex={tab.value === value ? 0 : -1}
-          className={pageStyles.tab}
-          onClick={() => onChange(tab.value)}
-        >
-          {tab.label}
-          {tab.count !== undefined && <span className={pageStyles.count}>{tab.count}</span>}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      label={label}
+      tabs={tabs}
+      value={value}
+      onValueChange={onChange}
+      className={styles.tabs}
+    />
   );
 }
 
